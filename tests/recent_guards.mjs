@@ -114,7 +114,7 @@ export default async (p) => {
   await ok(`[...document.querySelectorAll(".recent__main .result__text")].some((e) => e.textContent.startsWith("Saved"))`, "Saved while asking");
   await pause(2500);
   await ok(`!document.querySelector(".changes__title")`, "no suggestion after a Save while asking");
-  await ok(`document.querySelector("#recent-ask").closest(".card").textContent.includes("so its answer was not used")`, "the dropped answer says so");
+  await answered(`document.querySelector("#recent-ask").closest(".card").textContent.includes("so its answer was not used")`, "the dropped answer says so");
   await noKeys("after the late answer");
 
   // a second question while one is asked says so; the note shown is not sent
@@ -160,8 +160,8 @@ export default async (p) => {
   await p.click("button", "Accept");
   await ok(`[...document.querySelectorAll(".recent__main .result__text")].some((e) => e.textContent.startsWith("Accepted."))`, "Accepted while asking again");
   await pause(2500);
-  await ok(`!document.querySelector(".changes__title") && [...document.querySelectorAll(".recent__main .result__text")].some((e) => e.textContent.startsWith("Accepted."))`, "the second answer is dropped, the Accepted stays");
-  await ok(`document.querySelector("#recent-ask").closest(".card").textContent.includes("so its answer was not used")`, "the second answer says it was dropped");
+  await answered(`!document.querySelector(".changes__title") && [...document.querySelectorAll(".recent__main .result__text")].some((e) => e.textContent.startsWith("Accepted."))`, "the second answer is dropped, the Accepted stays");
+  await answered(`document.querySelector("#recent-ask").closest(".card").textContent.includes("so its answer was not used")`, "the second answer says it was dropped");
 
   await p.go("#recent");
   await p.go("#recent/" + ids.local);
@@ -170,7 +170,7 @@ export default async (p) => {
   await p.eval(`[...document.querySelectorAll("button")].find((b) => b.textContent.trim().startsWith("Undo revision")).click()`);
   await ok(`[...document.querySelectorAll(".revisions .result__text")].some((e) => e.textContent.includes("undone."))`, "Undone while asking");
   await pause(2500);
-  await ok(`!document.querySelector(".changes__title") && document.querySelector("#recent-ask").closest(".card").textContent.includes("so its answer was not used")`, "the answer is dropped by an Undo, and says so");
+  await answered(`!document.querySelector(".changes__title") && document.querySelector("#recent-ask").closest(".card").textContent.includes("so its answer was not used")`, "the answer is dropped by an Undo, and says so");
 
   await p.go("#recent");
   await p.go("#recent/" + ids.cloud);
@@ -178,7 +178,7 @@ export default async (p) => {
   await p.click("button", "Ask the Label Reader");
   await p.click(".segmented__option", "Item 2");
   await pause(2500);
-  await ok(`!document.querySelector(".changes__title") && document.querySelector("#recent-ask").closest(".card").textContent.includes("so its answer was not used")`, "the answer is dropped by an item change, and says so");
+  await answered(`!document.querySelector(".changes__title") && document.querySelector("#recent-ask").closest(".card").textContent.includes("so its answer was not used")`, "the answer is dropped by an item change, and says so");
 
   // an Ask sent while a Save is on its way (its reply is slow) is asked of the changed record: its answer is shown
   await p.go("#recent");
@@ -239,8 +239,8 @@ export default async (p) => {
   await p.eval(`[...document.querySelectorAll("button")].find((b) => b.textContent.trim().startsWith("Undo revision")).click()`);
   await ok(`[...document.querySelectorAll(".revisions .result__text")].some((e) => e.textContent.includes("undone."))`, "Undone while the Save is out");
   await pause(3200);
-  await ok(`!document.querySelector(".changes__title") && !([...document.querySelectorAll("button")].some((b) => b.textContent.trim() === "Accept"))`, "no suggestion and no Accept after a failed Save and an Undo");
-  await ok(`document.querySelector("#recent-ask").closest(".card").textContent.includes("so its answer was not used")`, "the answer says it was dropped");
+  await answered(`!document.querySelector(".changes__title") && !([...document.querySelectorAll("button")].some((b) => b.textContent.trim() === "Accept"))`, "no suggestion and no Accept after a failed Save and an Undo");
+  await answered(`document.querySelector("#recent-ask").closest(".card").textContent.includes("so its answer was not used")`, "the answer says it was dropped");
 
   // the Hub cleared its proposals behind the page: Accept is refused (404), the refusal is in words and the suggestion leaves
   await net({});
@@ -269,7 +269,7 @@ export default async (p) => {
   await pause(1900);
   await ok(`[...document.querySelectorAll(".result__text")].some((e) => e.textContent.includes("Saving"))`, "the Accept still says Saving while the second answer has come");
   await ok(`[...document.querySelectorAll(".recent__main .result__text")].some((e) => e.textContent.startsWith("Accepted."))`, "Accepted");
-  await ok(`document.querySelector("#recent-ask").closest(".card").textContent.includes("so its answer was not used") && !document.querySelector(".changes__title")`, "the second answer is dropped and says so");
+  await answered(`document.querySelector("#recent-ask").closest(".card").textContent.includes("so its answer was not used") && !document.querySelector(".changes__title")`, "the second answer is dropped and says so");
 
   // an answer held back by a write is released after a newer question was asked: it never replaces the newer suggestion (the Save fails) ...
   // the typed values differ from every value saved before (a Save of the same value says "Nothing changed." and shows no "Saved"):
