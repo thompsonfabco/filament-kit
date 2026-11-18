@@ -571,12 +571,14 @@ READY = {
       if (b.material === 'Nylonish') return reply({ error: 'That entry is not valid.', problems: [{ field: 'material', text: 'Material is not one the catalog can use.' }] }, 400);
       list.push({ id: 'e' + (list.length + 1), brand: b.brand, name: b.name, material: b.material, added: 1700000100 }); return reply({ entry: list[list.length - 1] }, 201);
     }
-    return reply({ entries: list });
+    return reply({ entries: list, materials: ['PLA', 'PETG', 'Wood PLA'] });
   });
   const g = catalogGroup(); document.body.append(g);
   const f = (label) => $$('.field', g).find((x) => x.textContent.includes(label));
   const addBtn = button('Add', g);
   need('the form is Brand, Name, Material and Add, the rest closed under More (optional)', !!f('Brand') && !!f('Name') && !!f('Material') && !!addBtn && !$('details[open]', g) && $('details summary', g).textContent.includes('More (optional)'));
+  await until('the Hub\'s own materials', () => $$('option', f('Material').querySelector('select')).some((o) => o.value === 'Wood PLA'));
+  need('the list is the Hub\'s, with Other last', $$('option', f('Material').querySelector('select')).map((o) => o.textContent).join('|') === 'PLA|PETG|Wood PLA|Other');
   addBtn.click();
   await until('the required errors', () => g.textContent.includes('Brand is required.') && g.textContent.includes('Name is required.'));
   need('nothing was posted', posted.length === 0);

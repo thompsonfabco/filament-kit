@@ -1065,13 +1065,23 @@ function hubSheet(opener, reuse) {
   });
 }
 // The own entries of the Filament Catalog (R83 4): one form (Brand, Name, Material; the rest under "More (optional)") and the list with Remove.
-const CATALOG_MATERIALS = ["PLA", "PLA+", "PETG", "ABS", "ASA", "TPU", "PC", "PA", "PA-CF", "PVA", "HIPS"];   // until the Hub lists the materials it knows (contract request)
+const CATALOG_MATERIALS = ["PLA", "PLA+", "PETG", "ABS", "ASA", "TPU", "PC", "PA", "PA-CF", "PVA", "HIPS"];   // the fallback until the Hub lists the materials it knows
 function catalogGroup() {
   const res = resultLine(), listBox = h("div", { class: "catalog__list" });
   const brand = SW.field({ label: tt("catalog_brand"), name: "brand" }), name = SW.field({ label: tt("catalog_name"), name: "name" });
   const known = [...CATALOG_MATERIALS, tt("catalog_material_other")];
   const material = SW.field({ type: "select", label: tt("catalog_material"), options: known.map((m, i) => ({ value: i === known.length - 1 ? "" : m, label: m })) });
   const other = SW.field({ label: tt("catalog_material_other_text"), name: "material_other" });
+  // the Hub lists the materials its catalog knows (GET library/local -> {entries, materials}, ev1a-kit-side 599e2c18); the fixed list is the fallback
+  (async () => {
+    try {
+      const r = await api("library/local"), list = r && Array.isArray(r.materials) ? r.materials.filter((m) => typeof m === "string" && m) : [];
+      if (!list.length) return;
+      const sel = material._control, cur = sel.value;
+      sel.replaceChildren(...[...list, tt("catalog_material_other")].map((m, i, all) => new Option(m, i === all.length - 1 ? "" : m)));
+      sel.value = list.includes(cur) ? cur : list[0];
+    } catch (e) { /* the fixed list stays */ }
+  })();
   other.hidden = true;
   material._control.addEventListener("change", () => { other.hidden = material._control.value !== ""; if (!other.hidden) other._control.focus(); });
   const num = (label, key) => ({ key, field: SW.field({ type: "number", decimal: true, label: tt(label), optional: true, hint: "" }) });
