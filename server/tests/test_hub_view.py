@@ -200,3 +200,22 @@ def test_older(a, b, late):
                                    (None, None), ("", None), ("x", None), (True, None), (float("inf"), None)])
 def test_iso(v, out):
     assert hub_view.iso(v) == out
+
+
+def test_spoolman_url_is_given_as_it_is_and_absent_when_it_cannot_be_reached():
+    cfg = config.load()
+    cfg["modules"] = {**cfg["modules"], "spoolman": True}
+    assert hub_view.build(cfg, host="hub.local", paired=[], readers=[])["spoolman_url"] == "http://hub.local:7912"
+    assert "spoolman_url" not in hub_view.build(cfg, host=None, paired=[], readers=[])
+
+
+def test_every_time_is_iso_8601_with_an_offset_and_null_stays_null(monkeypatch):
+    import re
+    monkeypatch.setattr(updates, "summary", lambda: {"installed": "0.5.0", "latest": "0.7.0", "newer": True,
+                                                     "checked_at": 1_800_000_000.7, "half_install": False})
+    paired = [{"id": "d", "name": "P", "paired": 1, "last_seen": 1_800_000_000, "type": None},
+              {"id": "e", "name": "Q", "paired": 1, "last_seen": None, "type": None}]
+    r = get(paired=paired)
+    times = [r["newest"]["checked_at"], r["devices"][0]["last_seen"]]
+    assert all(re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d", t) for t in times)
+    assert r["devices"][1]["last_seen"] is None
