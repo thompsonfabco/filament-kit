@@ -123,7 +123,7 @@ def test_alerts_list_order_age_and_empty_text(site, tmp_path):
     assert titles == ["Storage on the Hub is full", "Running low: Polymaker PLA Teal", "Filament ran out on Workshop X1",
                       "Print stopped on Study A1 mini", "Workshop X1 reports a problem", "Print finished on Garage P1S"]
     assert lay["rows"][1]["text"] == "Spool 214 has 92 g left. 2 more in stock."
-    assert lay["rows"][0]["text"] == "3.2 GB free of 64.0 GB. Backups and new photos may fail."
+    assert lay["rows"][0]["text"] == "3.2 GB free of 64 GB. Backups and new photos may fail."
     assert [r["action"] for r in lay["rows"]] == ["Show storage use", "Show running low", "Open the printer", "Open the printer", "Open the printer", "Open the printer"]
     assert [r["time"] for r in lay["rows"]][3:] == ["3 minutes ago", "8 minutes ago", "5 hours ago"]
     assert out["closed"] and out["focusBack"]
@@ -146,7 +146,7 @@ def test_poller_cursor_dedupe_rhythm_and_failure(site, tmp_path):
 def test_arrival_toast_once_per_alert(site, tmp_path):
     out = _drive(site, "arrivals", tmp_path)
     assert out["historyToasts"] == 0
-    assert out["arrived"] == ["Print stopped on Study A1 mini"] and out["toastAction"] == "Open the printer"
+    assert out["arrived"] == ["Print stopped on Study A1 mini"] and out["toastAction"] == "Show"
     assert out["raised"] == 2 and out["againWhileLasting"] == 2              # a condition: when raised, not again while it lasts
     assert out["clearedAndOff"] == 2                                          # clearing, or an alert type that is off: nothing
     assert out["raisedAfterClear"] == 3

@@ -109,7 +109,7 @@ $("#set-alerts [type=submit]").click();
 await until(() => $("#set-alerts .group__foot .result[data-state=bad]"), "the refusal");
 out.hub = { low: err("running_low_g"), warn: err("storage_warn_percent"), result: text($("#set-alerts .group__foot .result")), dirty: dirty().form, value: sw("running_low_g").value };
 """)
-    assert page["client"] == {"low": "Enter a whole number from 10 to 2000.", "warn": "Enter a whole number from 1 to 94.", "sent": 0}
+    assert page["client"] == {"low": T("alerts_error_whole", low=10, high=2000), "warn": T("alerts_error_whole", low=1, high=94), "sent": 0}
     assert page["hub"]["low"] == "Must be at most 1500." and page["hub"]["warn"] is None
     assert "Must be at most 1500." in page["hub"]["result"] and page["hub"]["dirty"] == "dirty" and page["hub"]["value"] == "2000"
 
@@ -140,7 +140,7 @@ out.start = { on: notifySwitch().checked, note: devNote() };
 notifySwitch().click();
 await sleep(500);
 out.after = { on: notifySwitch().checked, note: devNote(), flag: localStorage.getItem("spoolwarden.alerts.notifications"), dialog: !!$("dialog[open]") };
-""", query=f"?notif={notif}")
+""", notif=notif)
     assert page["start"] == {"on": False, "note": f"{say} {hint}"}
     assert page["after"] == {"on": False, "note": f"{say} {hint}", "flag": None, "dialog": False}
 
@@ -163,7 +163,7 @@ out.on = { word: text($(".toggle__word", device())), flag: localStorage.getItem(
 notifySwitch().click();
 await until(() => !notifySwitch().checked && (text($(".result__text", device())) || "").includes("off"), "the switch off");
 out.off = { flag: localStorage.getItem("spoolwarden.alerts.notifications"), result: text($(".result__text", device())) };
-""", query="?notif=default")
+""", notif="default")
     assert page["locked"] == "locked"
     assert page["denied"] == {"on": False, "flag": None, "note": "Blocked in this browser's settings Allow notifications for this address in the browser's site settings, then switch this on again."}
     assert page["on"] == {"word": "On", "flag": "1", "result": "Notifications are on in this browser.", "note": "", "dialog": False, "posts": 0, "dirty": None}
@@ -185,9 +185,9 @@ out.test = { body: posts.map((c) => c.body), id: localStorage.getItem("spoolward
 $('[data-action="alerts-recent"]', device()).click();
 const dlg = await until(() => $("dialog[open] .alert-list"), "the Alerts list");
 out.recent = { title: text($(".dialog__title", $("dialog[open]"))), empty: text($(".alert-list__empty", dlg)) };
-""", query="?notif=granted")
+""", notif="granted")
     t = page["test"]
-    assert t["body"] == [{"client": t["id"]}] and t["id"] and t["result"] == "Test alert sent. It arrives here in a moment."
+    assert t["body"] == [{"client": t["id"]}] and t["id"] and t["result"] == T("settings_alerts_sent")
     assert t["note"] == [["Test alert", "This is a test from the Hub."]] and t["toast"] == "Test alert"
     assert page["recent"] == {"title": "Alerts", "empty": "No alerts in the last 7 days."}
 

@@ -10,6 +10,7 @@ const SET_GROUPS = [
   ["appearance", "settings_group_appearance", "half-circle", groupAppearance, null],
   ["general", "settings_group_general", "settings", groupGeneral, "general"],
   ["storage", "settings_group_storage", "spool", (d) => storageGroup(d), "storage"],
+  ALERTS_GROUP,                                                  // setup_alerts.js: fourth (03 10.1)
   ["label-reader", "settings_group_label_reader", "camera", groupLabelReader, "general"],
   ["backups", "settings_group_backups", "download", (d) => backupsGroup(d), null],
   ["network", "settings_group_network", "plug", groupNetwork, "general"],
@@ -22,7 +23,7 @@ const SET_ICON = Object.fromEntries(SET_GROUPS.map((g) => [g[0], g[2]]));
 
 let setEl = null;                 // the section's region, kept while Settings stays open
 let setGeneral = null;            // the one read of settings/general
-const setSeen = { g: null, lib: null, st: null };
+const setSeen = { g: null, lib: null, st: null, al: null };
 let setHashMove = false;          // the address moved inside Settings: the groups are not read again
 let setScrollOn = false;
 const FRESH_MS = 5000;
@@ -182,7 +183,7 @@ function settingsTab() {
     return setEl;
   }
   setGeneral = null;
-  setSeen.g = setSeen.lib = setSeen.st = null;
+  setSeen.g = setSeen.lib = setSeen.st = setSeen.al = null;
   const link = ([id, key]) => h("li", {}, h("a", { class: "subnav__link", href: "#settings/" + id, "data-id": id, on: { click: jump } },
     SW.t(key), SW.status("needs_look", { small: true, cls: "subnav__dirty", text: SW.t("common_unsaved") })));
   const row = ([id, key]) => h("li", {}, h("a", { class: "settings__row", href: "#settings/" + id, "data-id": id },
@@ -218,6 +219,7 @@ function loadGroup(id, o = {}) {
       if (def[4] === "general") data.g = setSeen.g = await readGeneral(o.fresh);
       if (def[4] === "library") data.lib = setSeen.lib = await api("library");
       if (def[4] === "storage") data.st = setSeen.st = await loadStorage();       // setup_storage.js
+      if (def[4] === "alerts") data.al = setSeen.al = await loadAlerts();         // setup_alerts.js
       if (o.quiet && (dirtyIn(wrap) || wrap._hold || !wrap.isConnected)) { paintList(); return; }
       wrap._readAt = Date.now();
       const had = wrap.contains(document.activeElement), keep = o.quiet && !o.result ? capture(wrap) : null, el = def[3](data, o);
@@ -260,6 +262,7 @@ function listState(id) {
   if (id === "network") return S.web.public_set ? SW.t("status_set") : SW.t("settings_state_no_public");
   if (id === "backups") return S.backup && S.backup.last ? SW.t("settings_state_backups", { time: S.backup.last })
     : SW.lock.state === "locked" ? SW.t("common_unlock_to_show") : SW.t("common_none");
+  if (id === "alerts") return setSeen.al ? alertsState(setSeen.al) : "";
   if (id === "storage") return setSeen.st ? SW.t("settings_state_storage", { count: setSeen.st.locations.length }) : "";
   if (id === "catalog") return lib ? (lib.source === "none" ? SW.t("settings_state_catalog_none") : String(lib.version)) : "";
   if (!g) return "";

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from hub_alerts_stub import drive, hub_app, hub_stub, spool, storage_state  # noqa: F401
+from hub_alerts_stub import drive, full_disk, hub_app, hub_stub, spool, storage_state  # noqa: F401
 
 LOOKS = ["console", "workbench", "palette", "panes"]
 
@@ -124,34 +124,23 @@ out.rows = $$("dialog[open] .low__row").length;
     assert page["rows"] == 2
 
 
-def test_the_storage_row_says_how_full_the_hub_is_and_the_fix_opens_the_panel(hub_stub, tmp_path):
-    app, _ = hub_stub
-    app.state["storage"] = storage_state("warn", 91.0)
+def test_the_storage_row_says_how_full_the_hub_is_and_the_fix_opens_the_panel(hub_stub, tmp_path, monkeypatch):
+    """The row is the Hub's own check row (status key hub.storage, action storage_use) from the disk alerts.py measures."""
+    full_disk(monkeypatch, 91)
     page = drive(hub_stub, tmp_path, HELPERS + r"""
-const row = storageRow();
-out.warn = { text: text($(".coll__cell[data-col=title]", row)), state: row.dataset.state, status: text($('[data-col="status"]', row)), fix: text($('[data-col="fix"] .btn', row)) };
-// a Hub that is fine: the row is an OK row (folded away with the other OK rows)
-await stub({ storage: JSON.parse(JSON.stringify({ filesystems: [{ path_label: "Hub state", total: 100e9, free: 58e9, percent_used: 42, state: "ok" },
-  { path_label: "Backups folder", total: 500e9, free: 400e9, percent_used: 20, state: "ok" }], items: [] })) });
-await again();
-const rows = $$(".coll--checks .coll__item").filter((i) => titleOf(i).startsWith("Storage"));
-out.ok = rows.map((r) => [titleOf(r), r.dataset.state]);
-// the Hub does not answer: no Storage row at all (03 4.3)
-await stub({ fail: { "storage-use": 500 } });
-await again();
-out.left = !storageRow();
+const row = await until(() => storageRow(), "the Storage row");
+out.warn = { text: titleOf(row), state: row.dataset.state, status: text($('[data-col="status"]', row)), fix: text($('[data-col="fix"] .btn', row)) };
 """)
-    w = page["warn"]
-    assert w == {"text": "Storage: 9.0 GB free of 100.0 GB (91 % used)", "state": "fail", "status": "State: Needs a look", "fix": "Show storage use"}
-    assert page["ok"] == [["Storage: 58.0 GB free of 100.0 GB (42 % used)", "ok"], ["Storage, Backups folder: 400.0 GB free of 500.0 GB (20 % used)", "ok"]]
-    assert page["left"] is True
+    assert page["warn"] == {"text": "Storage: 9.0 GB free of 100 GB (91 % used)", "state": "fail", "status": "State: Needs a look", "fix": "Show storage use"}
 
 
-def test_the_storage_use_panel_loads_shows_each_part_and_says_when_it_cannot_read(hub_stub, tmp_path):
+def test_the_storage_use_panel_loads_shows_each_part_and_says_when_it_cannot_read(hub_stub, tmp_path, monkeypatch):
+    full_disk(monkeypatch, 91)
     app, _ = hub_stub
     app.state["storage"] = storage_state("warn", 91.0)
     app.state["delay"] = {"storage-use": 0}
     page = drive(hub_stub, tmp_path, HELPERS + r"""
+await until(() => storageRow(), "the Storage row");
 const keep = (await (await fetch("/setup/api/settings/general")).json()).values["intake.history_keep"] ?? 20;
 out.keep = keep;
 // the panel loads: the skeleton first
@@ -188,7 +177,7 @@ await until(() => $("dialog[open] .stuse__item"), "the parts after Try again");
 out.retry = $$("dialog[open] .stuse__item").length;
 """)
     assert page["skeleton"] == "Loading Storage use…" and page["hash"] == "#overview/storage-use" and page["title"] == "Storage use"
-    assert page["bar"] == {"label": "Hub state", "now": "91", "line": "9.0 GB free of 100.0 GB (91 % used)"}
+    assert page["bar"] == {"label": "Hub state", "now": "91", "line": "9.0 GB free of 100 GB (91 % used)"}
     keep = page["keep"]
     assert page["items"] == [
         {"title": "Backups", "size": "4.2 GB", "where": "Open Backups", "link": "#settings/backups"},
@@ -225,7 +214,8 @@ out.low = { hash: location.hash, rows: $$("dialog[open] .low__row").length };
 
 @pytest.mark.parametrize("width", [1280, 390])
 @pytest.mark.parametrize("look", LOOKS)
-def test_the_card_the_row_and_the_panel_read_in_each_look(hub_stub, tmp_path, look, width):
+def test_the_card_the_row_and_the_panel_read_in_each_look(hub_stub, tmp_path, monkeypatch, look, width):
+    full_disk(monkeypatch, 91)
     app, _ = hub_stub
     app.state["storage"] = storage_state("warn", 91.0)
     long = "A very long filament name for the widest spools that anyone ever put on a shelf in the workshop"
@@ -241,6 +231,7 @@ const measure = (root, label) => {
   return out1;
 };
 await cardIn();
+await until(() => storageRow(), "the Storage row");
 out.card = measure(card(), "card");
 const c = card().getBoundingClientRect();
 out.cardBox = [Math.round(c.left), Math.round(c.right), innerWidth];

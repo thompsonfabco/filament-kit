@@ -1,23 +1,17 @@
-"""A stub Hub for the Hub page's alert places (EA6 phase A): the real test Hub of test_hub_page_audit.py, with the routes of
-docs 03 section 15 that the server step (EA3) has not made yet answered here (events, alerts, settings/alerts, alerts/test, spools/low,
-storage-use), and with the new page modules loaded into the page the way phase B will load them (scripts, stylesheets, and a
-page-side stand-in for the registry edits: server/tests/hub_alerts/harness.js). Everything else goes to the real Hub.
-
+"""Test Hub for the Hub page's alert places (EA6): the real test Hub of test_hub_page_audit.py behind a wrapper that can answer
+some of the alert routes itself (events, alerts, settings/alerts, alerts/test, spools/low, storage-use) so a test can set a state the
+real Hub cannot be put in from the page (a full disk, a refusal, a slow or failing answer, events with chosen times). A route is
+stubbed only when its name is in `state["stubbed"]` (all six by default); a test that wants the real route sets `stubbed` to [].
 The browser steers the stub through POST /stub/set (a JSON patch of the state) and reads GET /stub/calls (what the page sent)."""
 from __future__ import annotations
 
 import asyncio
 import json
 import time
-from pathlib import Path
 from urllib.parse import parse_qs
 
-from filament_kit.setup_page import STATIC
 from test_setup_page import CODE
 
-SHARED = STATIC.parent / "shared_static"
-HARNESS = Path(__file__).with_name("hub_alerts") / "harness.js"
-SCRIPTS = ["setup_alertbar.js", "setup_overview_alerts.js", "setup_alerts.js"]
 KEYS = ["runout", "paused", "failed", "printer_error", "finished", "storage", "running_low", "device_down"]
 DEFAULT_ON = {"runout", "paused", "failed", "printer_error", "storage", "running_low"}
 
@@ -41,7 +35,7 @@ def storage_state(state="ok", percent=42.0):
 
 def fresh():
     return {"events": [], "conditions": [], "test": None, "alerts": alerts_state(), "low": {"threshold_g": 150, "spools": []},
-            "storage": storage_state(), "fail": {}, "delay": {}, "refuse": None, "calls": []}
+            "storage": storage_state(), "fail": {}, "delay": {}, "refuse": None, "calls": [], "stubbed": list(ROUTES)}
 
 
 ROUTES = {"events": "GET", "alerts": "GET", "settings/alerts": "POST", "alerts/test": "POST", "spools/low": "GET", "storage-use": "GET"}
@@ -64,16 +58,11 @@ class StubHub:
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
         path, method = scope["path"], scope["method"]
-        if path.startswith("/setup/_new/"):
-            name = path.rsplit("/", 1)[-1]
-            src = HARNESS if name == "harness.js" else (STATIC / name) if (STATIC / name).exists() else SHARED / name
-            return await self.reply(send, 200, None, b"text/css" if name.endswith(".css") else b"text/javascript", src.read_bytes())
         if path.startswith("/stub/"):
             return await self.stub(path, receive, send)
-        if path.startswith("/setup/api/") and ROUTES.get(path[len("/setup/api/"):]) == method:
-            return await self.route(path[len("/setup/api/"):], method, scope, receive, send)
-        if path == "/setup" and method == "GET":
-            return await self.page(scope, receive, send)
+        name = path[len("/setup/api/"):]
+        if path.startswith("/setup/api/") and ROUTES.get(name) == method and name in self.state["stubbed"]:
+            return await self.route(name, method, scope, receive, send)
         await self.app(scope, receive, send)
 
     async def body(self, receive):
@@ -123,26 +112,6 @@ class StubHub:
             return await self.reply(send, 200, {"ok": True})
         return await self.reply(send, 200, st["low"] if name == "spools/low" else st["storage"])
 
-    async def page(self, scope, receive, send):
-        """The real page, with the new modules loaded after its own scripts (phase B adds them to setup_page.py)."""
-        chunks, start = [], []
-
-        async def grab(message):
-            if message["type"] == "http.response.start":
-                start.append(message)
-            else:
-                chunks.append(message.get("body", b""))
-        await self.app(scope, receive, grab)
-        html = b"".join(chunks).decode("utf-8")
-        links = "<link rel=stylesheet href='/setup/_new/alerts.css'><link rel=stylesheet href='/setup/_new/setup_alerts.css'>"
-        scripts = "<script defer src='/setup/_new/alerts.js'></script>" + "".join(f"<script src='/setup/_new/{n}'></script>" for n in [*SCRIPTS, "harness.js"])
-        html = html.replace("<body>", links + "<body>", 1).replace("</body>", scripts + "</body>", 1)
-        raw = html.encode("utf-8")
-        head = start[0]
-        head["headers"] = [(k, v) for k, v in head["headers"] if k.lower() != b"content-length"] + [(b"content-length", str(len(raw)).encode())]
-        await send(head)
-        await send({"type": "http.response.body", "body": raw})
-
 
 # ----- what the three test files share: the fixture, the driver and the page-side helpers -----
 import pytest  # noqa: E402
@@ -182,8 +151,34 @@ def hub_stub(hub_app):  # noqa: F811
         running.stop()
 
 
-def drive(hub_stub, tmp_path, body, width=1280, query="", look="console"):
-    """Runs `body` in the page (async, `return out`); the look is set once the page stands."""
+def notification_stub(notif):
+    """The browser's notifications for a test: "none" = the browser has no Notification; "granted" | "denied" | "default"
+    (asking answers `window.__notifAnswer`, "granted" unless the test changes it). Shown ones are collected in `window.__notes`."""
+    if notif is None:
+        return "window.__notes = [];\n"
+    if notif == "none":
+        return 'window.__notes = [];\nObject.defineProperty(window, "Notification", { value: undefined, configurable: true });\n'
+    return ("window.__notes = [];\nwindow.__notifAnswer = 'granted';\n"
+            "class FakeNotification {\n"
+            "  constructor(title, o) { window.__notes.push({ title, body: o && o.body, tag: o && o.tag }); this.close = () => {}; }\n"
+            "  static get permission() { return window.__perm; }\n"
+            "  static async requestPermission() { window.__perm = window.__notifAnswer; return window.__perm; }\n"
+            "}\n"
+            f"window.__perm = {json.dumps(notif)};\n"
+            'Object.defineProperty(window, "Notification", { value: FakeNotification, configurable: true });\n')
+
+
+def drive(hub_stub, tmp_path, body, width=1280, query="", look="console", notif=None):
+    """Runs `body` in the page (async, `return out`); the look is set once the page stands. `notif` sets the browser's notifications."""
     app, url = hub_stub
-    script = PRELUDE + f'\nawait ready();\nawait look("{look}");\nconst out = {{}};\n' + body + "\nreturn out;\n"
-    return _drive(url + query, tmp_path, script, width=width)
+    script = PRELUDE + notification_stub(notif) + f'\nawait ready();\nawait look("{look}");\nconst out = {{}};\n' + body + "\nreturn out;\n"
+    return _drive(url, tmp_path, script, width=width)
+
+
+def full_disk(monkeypatch, used=96):
+    """The Hub's disk `used` per cent full for the code of alerts.py (the Storage row of the Checks is measured there)."""
+    from collections import namedtuple
+
+    from filament_kit import alerts
+    usage = namedtuple("usage", "total used free")
+    monkeypatch.setattr(alerts.shutil, "disk_usage", lambda path: usage(100_000_000_000, used * 1_000_000_000, (100 - used) * 1_000_000_000))
