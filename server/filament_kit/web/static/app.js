@@ -1025,7 +1025,9 @@ async function hubInfo(fresh) {
 }
 // a time from the Hub: seconds since 1970 (as every kit route gives one), or text
 function whenText(v) {
+  // a time of the Hub is ISO 8601 with an offset (R83 10); whole seconds since 1970 (a number or its text) are read too
   if (v == null || v === "") return "";
+  if (typeof v === "string" && /^\d+(\.\d+)?$/.test(v.trim())) v = Number(v);
   const d = typeof v === "number" ? new Date(v < 1e12 ? v * 1000 : v) : new Date(v);
   return isNaN(d) ? String(v) : d.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 }

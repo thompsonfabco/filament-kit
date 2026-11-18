@@ -1340,3 +1340,27 @@ def test_the_twins_pass_the_hub_overview_and_the_own_catalog_entries_on(sm):
         assert c.post("/intake/api/library/local", json=form).status_code == 403          # a change needs the page's own origin
     assert kit.calls == [("GET", "/api/hub", None), ("GET", "/api/library/local", None),
                          ("POST", "/api/library/local/form", form), ("DELETE", "/api/library/local/a%201", None)]
+
+
+def test_the_web_app_reads_the_hubs_iso_times_and_whole_seconds(tmp_path):
+    """R83 10: a time of the Hub is ISO 8601 with an offset (also Z); whole seconds since 1970 are read too, as a number or as text;
+    nothing readable is shown as it came, an empty value as nothing."""
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("needs Node")
+    js = (STATIC / "app.js").read_text(encoding="utf-8")
+    start = js.index("function whenText")
+    end = js.index("const gettingStartedText")
+    harness = "Date.prototype.toLocaleString = function () { return this.toISOString(); };\n" + js[start:end] + r"""
+const at = [whenText("2026-11-17T22:05:00-05:00"), whenText("2026-11-18T03:05:00Z"), whenText("2026-11-18T03:05:00+00:00"), whenText(1794971100), whenText("1794971100"),
+            whenText(1794971100000), whenText(null), whenText(""), whenText("last Tuesday")];
+console.log(JSON.stringify(at));
+"""
+    (tmp_path / "h.js").write_text(harness, encoding="utf-8")
+    run = subprocess.run([node, str(tmp_path / "h.js")], capture_output=True, encoding="utf-8", timeout=60)
+    assert run.returncode == 0, run.stderr
+    out = json.loads(run.stdout)
+    same = "2026-11-18T03:05:00.000Z"      # the moment in all forms (the harness shows a time as its ISO text)
+    assert out[:6] == [same] * 6 and out[6] == "" and out[7] == "" and out[8] == "last Tuesday", out
