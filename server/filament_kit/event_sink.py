@@ -89,6 +89,35 @@ def sink():
     return _sink
 
 
+_held: contextvars.ContextVar = contextvars.ContextVar("event_held", default=None)
+
+
+@contextlib.contextmanager
+def held():
+    """Events emitted inside this block are kept and written, in order, when the OUTERMOST block ends: the code that
+    reports from under a lock (inventory's `_LOCK`) takes the lock INSIDE this block, so the store's write (it costs
+    O(month)) never lengthens the time the lock is held (R475 LOW 4). Actor and batch are taken when `emit` is called."""
+    if _held.get() is not None:
+        yield
+        return
+    queue: list = []
+    token = _held.set(queue)
+    try:
+        yield
+    finally:
+        _held.reset(token)
+        for kind, subject, actor, data, kw in queue:
+            _write(kind, subject, actor, data, kw)
+
+
+def _write(kind, subject, actor, data, kw):
+    try:
+        return _sink.write(kind, subject, actor, data, **kw)
+    except Exception:  # noqa: BLE001
+        log.exception("event %s not written", kind)
+        return None
+
+
 _weight_hook = None
 
 
@@ -148,11 +177,11 @@ def current_batch() -> str:
 def emit(kind: str, subject, data: dict | None = None, *, actor=None, **kw):
     """Report an event to the sink in force; returns the event or None. `actor` defaults to the one `acting` set.
     Never raises: whatever the sink does, the change that reported goes on."""
-    try:
-        return _sink.write(kind, subject, actor or current_actor(), data, **kw)
-    except Exception:  # noqa: BLE001
-        log.exception("event %s not written", kind)
+    actor = actor or current_actor()
+    if _held.get() is not None:                         # under a lock: written when the lock is released (`held`)
+        _held.get().append((kind, subject, actor, data, kw))
         return None
+    return _write(kind, subject, actor, data, kw)
 
 
 def spool_subject(spool: dict | None, spool_id=None) -> dict:

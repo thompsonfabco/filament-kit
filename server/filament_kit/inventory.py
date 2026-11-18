@@ -226,7 +226,7 @@ def add_spools(sm: Spoolman, items: list[dict], rules: dict, dry: bool, *, paren
     if not parents_checked:
         _check_parents(items)                   # before _LOCK: it may wait on the build's live.lock
     result = AddResult(dry=dry)
-    with _LOCK:
+    with event_sink.held(), _LOCK:
         try:
             placed = placement.place([{**it, "_i": i} for i, it in enumerate(items)], _used_locations(sm), rules)
         except placement.NoFreeContainer as e:        # a set named as the location, every container taken
@@ -412,7 +412,7 @@ def link_tag(sm: Spoolman, spool_id: int, uid: str, force: bool, dry: bool, keep
     `keep_sealed` (the intake station's sealed spool with its tag already on the bag). A spool that was sealed and is
     opened by it is reported as spool.opened (`_events` False: the caller, open_spool, reports its own)."""
     uid = tags.normalize_uid(uid)
-    with _LOCK:
+    with event_sink.held(), _LOCK:
         target = sm.get(f"spool/{spool_id}")
         if tags.stored(target) == uid:
             return LinkResult(spool_id, uid, noop=True, dry=dry)
@@ -461,7 +461,7 @@ def add_and_link(sm: Spoolman, items: list[dict], rules: dict, dry: bool, uid: s
     _check_parents(items)
     record: list[dict] = []
     try:
-        with _LOCK:
+        with event_sink.held(), _LOCK:
             if uid is not None and single_opened:
                 other = by_tag(sm, uid)
                 if other is not None:  # refuse before writing, so a retry cannot duplicate the spool
@@ -538,7 +538,7 @@ def open_spool(sm: Spoolman, spool_id: int, uid: str, rules: dict, *, gross: flo
         raise ValueError("gross must be a number of grams")
     if humidity is not None and (not _is_num(humidity) or not 0 <= humidity <= 100):
         raise ValueError("humidity must be a percentage (0-100)")
-    with _LOCK:
+    with event_sink.held(), _LOCK:
         spool = sm.get(f"spool/{spool_id}")
         if spool.get("archived"):
             raise ValueError(f"spool {spool_id} is marked empty (archived): it cannot be opened")
@@ -854,7 +854,7 @@ def rename_locations(sm: Spoolman, items: list, *, step=None) -> dict:
     still at their recorded old text move, so a swap or a chain of renames never moves a spool twice. Another
     rename while one is unfinished raises RenamePending. More than RENAME_BATCH spools: `step(text)` is called
     once per batch (the sentence holds no name). Returns {"updated": n, "text": "Renamed A to B. 18 spools updated."}."""
-    with _LOCK:
+    with event_sink.held(), _LOCK:
         plan = pending_rename()
         if plan is None:
             if not items:
