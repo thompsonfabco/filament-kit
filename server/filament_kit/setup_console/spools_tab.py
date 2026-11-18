@@ -6,8 +6,8 @@ changes the page makes to one (weight, place, tag, empty), each as a dry run fir
                                          number, tag) and one `filter` (sealed | opened | loaded | low); 50 rows by default.
                                          No code
     GET  spools/{id}                     {spool: view, last_use: {at, printer, grams}?}. No code
-    POST spools/{id} {code, gross | remaining | location | empty, dry_run}   a new weight, a place ("auto": where the
-                                         Hub's storage rules put it), or empty; answers {spool, before, dry}. dry_run is
+    POST spools/{id} {code, gross | remaining | location | auto_location | empty, dry_run}   a new weight, a place
+                                         (`auto_location: true`: where the Hub's storage rules put it), or empty; answers {spool, before, dry}. dry_run is
                                          true unless it is sent as false. 400 with `field` for a refusal, 404 for no such spool
     GET  spools/last-tag                 {tag: {uid, read_at, source}?}: the newest tag any reader knows. No code
     POST spools/{id}/link {code, tag, dry_run}   link the tag to the spool; answers {spool, before, dry}. 409 when the
@@ -145,8 +145,13 @@ def routes(page) -> list[tuple]:
         for key in ("empty", "dry_run"):
             if b.get(key) is not None and not isinstance(b[key], bool):
                 raise inventory.SpoolEditError(f"{key} must be true or false", key)
+        auto = b.get("auto_location")
+        if auto is not None and not isinstance(auto, bool):
+            raise inventory.SpoolEditError("auto_location must be true or false", "auto_location")
+        if auto and location is not None:
+            raise inventory.SpoolEditError("give only one of location or auto_location", "auto_location")
         rules = storage.current()
-        if location == "auto":
+        if auto:
             used = Counter(x["location"] for x in client.get("spool") if x.get("location") and x["id"] != spool_id)
             material = (before.get("filament") or {}).get("material") or ""
             location = placement.place([{"material": material, "sealed": False}], used, rules)[0]["location"]

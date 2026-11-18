@@ -318,10 +318,10 @@ function detail(v0, view, id) {
   });
 
   // Move
-  const moveBox = slotBox(), move = SW.field({ type: "select", label: tx("spool_move_title"), name: "location", options: [{ value: "auto", label: tx("storage_automatic") }] });
+  const moveBox = slotBox(), move = SW.field({ type: "select", label: tx("spool_move_title"), name: "location", options: [{ value: "", label: tx("storage_automatic") }] });
   places().then((names) => { for (const n of names) move._control.append(X("option", { value: n, text: n })); if (v0.location && names.includes(v0.location)) move._control.value = v0.location; });
   const moveGo = SW.btn(tx("spool_move"), { cls: "btn--primary", name: `${tx("spool_move")}: ${name(v0)}` });
-  moveGo.addEventListener("click", change(view, moveBox, { label: tx("spool_move"), body: () => ({ location: move._control.value }),
+  moveGo.addEventListener("click", change(view, moveBox, { label: tx("spool_move"), body: () => (move._control.value ? { location: move._control.value } : { auto_location: true }),
     say: (r) => (r.spool.location === r.before.location ? null : tx("spools_preview_move", { before: r.before.location || tx("spools_no_place"), after: r.spool.location })),
     done: (r) => tx("spool_result_moved", { location: r.spool.location }) }));
 

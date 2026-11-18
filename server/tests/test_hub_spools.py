@@ -316,9 +316,20 @@ out.afterMove = { hub: (await hubSays(1)).location, cell: cells(rowOf(1)).where,
 set(field(1, "location"), target);
 press(1, "Move");
 out.moveSame = await said(1, 1, "nothing to move");
-set(field(1, "location"), "auto");
+out.autoOption = field(1, "location").options[0].value;
+const sent = [], realFetch = window.fetch;
+window.fetch = (u, i) => { if (i && i.body) sent.push({ u, body: JSON.parse(i.body) }); return realFetch(u, i); };
+set(field(1, "location"), "");
 press(1, "Move");
 out.moveAuto = await said(1, 1, "the automatic preview");
+if (out.moveAuto.kind === "info") {
+  apply(1, 1);
+  await until(() => box(1, 1).dataset.state === "ok", "the automatic move done");
+  out.moveAutoDone = await said(1, 1, "the automatic result");
+  out.autoAfter = (await hubSays(1)).location;
+}
+window.fetch = realFetch;
+out.autoBodies = sent.filter((x) => x.u.endsWith("spools/1")).map((x) => x.body);
 
 // Link the last tapped tag: no tag, then a tag (preview, apply), then a tag held by another spool
 press(1, "Link the last tapped tag");
@@ -371,7 +382,12 @@ out.afterEmpty = { hub: (await hubSays(3)).state, row: rowOf(3).dataset.state, c
     assert page["moveDone"]["text"] == T("spool_result_moved", location=page["target"])
     assert page["afterMove"]["hub"] == page["target"] and page["afterMove"]["cell"].endswith(page["target"]) and page["afterMove"]["facts"] == page["target"]
     assert page["moveSame"] == {"kind": "neutral", "text": "Nothing would change.", "action": None}
-    assert page["moveAuto"]["kind"] in ("info", "neutral")
+    assert page["autoOption"] == "" and page["moveAuto"]["kind"] in ("info", "neutral")
+    # Automatic sends auto_location true and no location, for the preview and for Apply
+    assert [(b["auto_location"], "location" in b, b["dry_run"]) for b in page["autoBodies"]] == [(True, False, True)] + ([(True, False, False)] if page["moveAuto"]["kind"] == "info" else [])
+    if page["moveAuto"]["kind"] == "info":
+        assert page["moveAuto"]["text"].startswith("Preview: it moves from ") and page["moveAutoDone"]["text"] == T("spool_result_moved", location=page["autoAfter"])
+        assert page["moveAuto"]["text"].endswith(f"to {page['autoAfter']}.")
     assert page["linkNone"] == {"kind": "warn", "text": T("spool_sheet_no_tag"), "action": None}
     assert page["linkPreview"] == {"kind": "info", "text": "Preview: tag 4:de:ad:be is linked to this spool.", "action": "Apply"} and page["tagBefore"] is None
     assert page["linkDone"]["text"] == T("spool_result_tag_linked") and page["afterLink"]["hub"] == "4:de:ad:be" and page["afterLink"]["facts"] == "4:de:ad:be" and "Tagged" in page["afterLink"]["state"]
@@ -384,7 +400,7 @@ out.afterEmpty = { hub: (await hubSays(3)).state, row: rowOf(3).dataset.state, c
     assert page["afterEmpty"]["hub"] == "empty" and page["afterEmpty"]["row"] == "off" and T("common_empty") in page["afterEmpty"]["cell"]
     with httpx.Client() as c:                           # Spoolman holds what the page says
         first, sealed, emptied = (c.get(spoolman_url + f"/api/v1/spool/{n}").json() for n in (1, 2, 3))
-    assert first["remaining_weight"] == 340 and first["location"] == page["target"] and json.loads(first["extra"]["nfc_id"]) == "4:de:ad:be"
+    assert first["remaining_weight"] == 340 and first["location"] == page.get("autoAfter", page["target"]) and json.loads(first["extra"]["nfc_id"]) == "4:de:ad:be"
     assert json.loads(sealed["extra"]["nfc_id"]) == "4:77:90:e" and inventory.SEALED_COMMENT not in (sealed["comment"] or "") and sealed["first_used"]
     assert emptied["archived"] is True and emptied["remaining_weight"] == 0
 
