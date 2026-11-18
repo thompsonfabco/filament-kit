@@ -20,10 +20,10 @@ import time
 from urllib.parse import quote
 
 TTL = 60                 # seconds a ticket waits for its first use
-SESSION_TTL = 600        # seconds of idle a session lives (the Max-Age of its cookie)
+SESSION_TTL = 600        # seconds of idle a session lives in the Hub's memory (its cookie has no Max-Age)
 MAX_LIVE = 256           # tickets
 MAX_SESSIONS = 8
-COOKIE_NAME = "fk_camera"
+COOKIE_NAME = "fk_setup_camera"
 TOO_MANY = "Too many camera views are open. Close one first."
 
 _lock = threading.Lock()
@@ -125,16 +125,18 @@ def drop_printer(printer_id: str) -> int:
 
 def session_cookie(printer_id: str, session_id: str) -> dict:
     """The cookie the route sets for a session, as data: name, value, path (only that printer's camera routes under the
-    Hub page's base), max_age, http_only, secure, same_site."""
+    Hub page's base), http_only, secure, same_site. A SESSION cookie: no Max-Age and no Expires, because the browser
+    would drop a fixed one at minute 10 however busy the view is; the Hub's memory decides the end."""
     return {"name": COOKIE_NAME, "value": session_id, "path": f"/setup/api/printers/{quote(str(printer_id), safe='')}/camera",
-            "max_age": SESSION_TTL, "http_only": True, "secure": True, "same_site": "Strict"}
+            "http_only": True, "secure": True, "same_site": "Strict"}
 
 
 def set_cookie_header(printer_id: str, session_id: str, *, closing: bool = False) -> str:
-    """`session_cookie` as a Set-Cookie header value; `closing`: the same cookie emptied and expired (the close route)."""
+    """`session_cookie` as a Set-Cookie header value (no Max-Age, no Expires); `closing`: the same cookie emptied and
+    expired at once (Max-Age=0), for the close route."""
     c = session_cookie(printer_id, session_id)
-    value, age = ("", 0) if closing else (c["value"], c["max_age"])
-    return (f"{c['name']}={value}; Path={c['path']}; Max-Age={age}; HttpOnly; Secure; SameSite={c['same_site']}")
+    head = f"{c['name']}={'' if closing else c['value']}; Path={c['path']}"
+    return head + ("; Max-Age=0" if closing else "") + f"; HttpOnly; Secure; SameSite={c['same_site']}"
 
 
 def purge(*, clock=None) -> int:

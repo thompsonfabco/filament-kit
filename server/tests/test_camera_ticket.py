@@ -135,14 +135,27 @@ def test_a_restart_is_a_new_module_state():
     assert ct.verify_session("P1", sid) is False and ct.sessions_open() == 0
 
 
-def test_the_cookie_is_as_ruled():
+def test_the_cookie_is_a_session_cookie_as_ruled():
     c = ct.session_cookie("P 1/x", "abc")
-    assert c == {"name": "fk_camera", "value": "abc", "path": "/setup/api/printers/P%201%2Fx/camera",
-                 "max_age": 600, "http_only": True, "secure": True, "same_site": "Strict"}
-    assert ct.set_cookie_header("P1", "abc") == ("fk_camera=abc; Path=/setup/api/printers/P1/camera; Max-Age=600; "
-                                                "HttpOnly; Secure; SameSite=Strict")
+    assert c == {"name": "fk_setup_camera", "value": "abc", "path": "/setup/api/printers/P%201%2Fx/camera",
+                 "http_only": True, "secure": True, "same_site": "Strict"}
+    h = ct.set_cookie_header("P1", "abc")
+    assert h == "fk_setup_camera=abc; Path=/setup/api/printers/P1/camera; HttpOnly; Secure; SameSite=Strict"
+    assert "max-age" not in h.lower() and "expires" not in h.lower() and "max_age" not in c and "expires" not in c
     assert ct.set_cookie_header("P1", "abc", closing=True) == (
-        "fk_camera=; Path=/setup/api/printers/P1/camera; Max-Age=0; HttpOnly; Secure; SameSite=Strict")
+        "fk_setup_camera=; Path=/setup/api/printers/P1/camera; Max-Age=0; HttpOnly; Secure; SameSite=Strict")
+
+
+def test_a_view_kept_alive_for_25_minutes_is_still_valid_and_ends_10_idle_minutes_after_the_last_request():
+    clock = Clock()
+    sid = open_session(clock=clock)
+    for _ in range(25):
+        clock.t += 60
+        assert ct.verify_session("P1", sid, clock=clock) is True
+    clock.t += 599
+    assert ct.verify_session("P1", sid, clock=clock) is True             # still inside 10 idle minutes (and renewed)
+    clock.t += 600
+    assert ct.verify_session("P1", sid, clock=clock) is False
 
 
 def test_tickets_and_sessions_are_unique_and_the_comparison_is_constant_time(monkeypatch):
