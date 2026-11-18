@@ -120,7 +120,7 @@ def test_add_list_and_remove_an_entry():
     assert library.local_list() == {"entries": []}
     row = library.add_local_form(form(name="Pla Max"))
     assert set(row) == {"id", "brand", "name", "material", "added"}
-    assert row["id"] == "acme--pla-max" and row["added"] and (row["brand"], row["material"]) == ("Acme", "PLA")
+    assert row["id"] == "acme--pla-max" and type(row["added"]) is int and row["added"] > 1_700_000_000 and (row["brand"], row["material"]) == ("Acme", "PLA")
     library.add_local_form(form(brand="Acme", name="Abs Max", material="ABS"))
     library.add_local_form(form(brand="Zed", name="First"))
     assert [(r["brand"], r["name"]) for r in library.local_list()["entries"]] == [
@@ -191,3 +191,35 @@ def test_concurrent_adds_of_one_entry_leave_one_valid_file():
     [t.start() for t in ts]
     [t.join() for t in ts]
     assert len(library.local_list()["entries"]) == 1
+
+
+def test_the_entries_answer_carries_the_materials_the_catalog_knows(no_library):
+    assert profiles_api.local_entries() == {"entries": [], "materials": []}          # no catalog: an empty list
+
+
+def test_the_entries_answer_with_a_catalog_names_the_materials_and_times_are_whole_seconds():
+    library.add_local_form(form())
+    r = profiles_api.local_entries()
+    assert set(r) == {"entries", "materials"} and "PLA" in r["materials"] and r["materials"] == sorted(
+        r["materials"], key=str.casefold)
+    assert type(r["entries"][0]["added"]) is int
+
+
+def test_an_entry_with_no_date_has_a_null_added():
+    assert library.local_row({"vendor": "A", "product": "B", "material": "PLA"})["added"] is None
+    assert library.local_row({"vendor": "A", "product": "B", "material": "PLA", "updated": "junk"})["added"] is None
+
+
+def test_every_problem_is_field_and_text_with_a_field_of_the_form():
+    cases = [{"brand": ""}, {"name": ""}, {"material": ""}, {"nozzle_min": "x"}, {"nozzle_max": 9}, {"bed_min": -1},
+             {"bed_max": 999}, {"density": 0}, {"max_volumetric_speed": 500}, {"bambu_parent": "A @B"},
+             {"notes": "n" * 600}, {"material": "Moon Dust"}]
+    for bad in cases:
+        body = {"brand": "A", "name": "B", "material": "PLA", **bad}
+        with pytest.raises(ProfileError) as ei:
+            profiles_api.add_local_form(body, "d", "w")
+        probs = ei.value.extra["problems"]
+        assert probs and ei.value.status == 400 and ei.value.code == "invalid_entry"
+        for p in probs:
+            assert set(p) == {"field", "text"} and p["field"] in library.FORM_KEYS and p["text"] and isinstance(p["text"], str)
+        assert next(iter(bad)) in {p["field"] for p in probs} or "material" in bad

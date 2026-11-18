@@ -66,7 +66,7 @@ def test_version_and_update(monkeypatch):
                                                      "checked_at": 1_800_000_000, "half_install": False})
     r = get()
     assert r["version"] == "0.5.0" and r["update_available"] is True
-    assert r["newest"] == {"version": "0.7.0", "checked_at": "2027-01-15T08:00:00+00:00"}
+    assert r["newest"] == {"version": "0.7.0", "checked_at": 1_800_000_000}
     monkeypatch.setattr(updates, "summary", lambda: {"installed": "0.7.0", "latest": None, "newer": False,
                                                      "checked_at": None, "half_install": False})
     assert "newest" not in get()
@@ -76,7 +76,7 @@ def test_catalog_says_its_version_and_last_check(monkeypatch, no_library):
     assert get()["catalog"] == {}                                    # nothing downloaded, never checked
     from filament_kit import library
     monkeypatch.setattr(library, "last_check", lambda: {"at": 1_800_000_000, "ok": True, "error": None})
-    assert get()["catalog"]["checked_at"] == "2027-01-15T08:00:00+00:00"
+    assert get()["catalog"]["checked_at"] == 1_800_000_000
 
 
 def test_catalog_with_a_library():
@@ -95,7 +95,7 @@ def test_backup_last_time_and_nightly(monkeypatch):
         asked.append((since, kinds))
         return pages[len(asked) - 1]
     monkeypatch.setattr(events, "read", read)
-    assert get()["backup"]["last_at"] == "2027-01-16T03:00:00+00:00"
+    assert get()["backup"]["last_at"] == 1_800_068_400
     assert asked == [(0, ["backup.finished"]), (2, ["backup.finished"]), (3, ["backup.finished"])]
     cfg = config.load()
     for on in (True, False):
@@ -122,7 +122,7 @@ def test_devices_have_names_kinds_versions_and_one_is_this():
               {"id": "d5", "name": "Phone", "paired": 1, "last_seen": None, "type": None, "kind": "phone",
                "version": "1.2", "out_of_date": True}]
     d = {x["name"]: x for x in get(paired=paired, this_device="d1")["devices"]}
-    assert d["Pixel"] == {"name": "Pixel", "kind": None, "last_seen": "2027-01-15T08:00:00+00:00",
+    assert d["Pixel"] == {"name": "Pixel", "kind": None, "last_seen": 1_800_000_000,
                           "out_of_date": False, "this": True}
     assert d["station"]["kind"] == "station" and d["station"]["version"] == "0.5.0" and d["station"]["out_of_date"]
     assert d["Shop PC"]["out_of_date"] is False and d["Old PC"]["out_of_date"] is True
@@ -136,12 +136,12 @@ def test_a_device_that_sends_no_version_is_never_out_of_date():
 
 
 def test_the_tag_readers_are_devices():
-    rows = [{"id": "r1", "name": "bench", "created": "x", "build": 100, "last_seen": "2027-01-15T08:00:00+00:00",
+    rows = [{"id": "r1", "name": "bench", "created": "x", "build": 100, "last_seen": 1_800_000_000,
              "out_of_date": True},
             {"id": "r2", "name": "never", "created": "x", "build": None, "last_seen": None, "out_of_date": False}]
     d = {x["name"]: x for x in get(readers=rows)["devices"]}
     assert d["bench"] == {"name": "bench", "kind": "reader", "version": "100",
-                          "last_seen": "2027-01-15T08:00:00+00:00", "out_of_date": True, "this": False}
+                          "last_seen": 1_800_000_000, "out_of_date": True, "this": False}
     assert d["never"]["kind"] == "reader" and "version" not in d["never"]
 
 
@@ -194,9 +194,33 @@ def test_older(a, b, late):
     assert hub_view.older(a, b) is late
 
 
-@pytest.mark.parametrize("v,out", [(1_800_000_000, "2027-01-15T08:00:00+00:00"), ("2027-01-15T08:00:00Z",
-                                   "2027-01-15T08:00:00+00:00"), ("2027-01-15T03:00:00-05:00",
-                                   "2027-01-15T03:00:00-05:00"), ("2027-01-15T08:00:00", "2027-01-15T08:00:00+00:00"),
-                                   (None, None), ("", None), ("x", None), (True, None), (float("inf"), None)])
-def test_iso(v, out):
-    assert hub_view.iso(v) == out
+@pytest.mark.parametrize("v,out", [(1_800_000_000, 1_800_000_000), (1_800_000_000.9, 1_800_000_000),
+                                   ("2027-01-15T08:00:00Z", 1_800_000_000), ("2027-01-15T03:00:00-05:00", 1_800_000_000),
+                                   ("2027-01-15T08:00:00", 1_800_000_000), (None, None), ("", None), ("x", None),
+                                   (True, None), (float("inf"), None), (float("nan"), None)])
+def test_epoch(v, out):
+    assert hub_view.epoch(v) == out
+
+
+def test_every_time_of_the_answer_is_whole_seconds_and_null_stays_null(monkeypatch):
+    monkeypatch.setattr(updates, "summary", lambda: {"installed": "0.5.0", "latest": "0.7.0", "newer": True,
+                                                     "checked_at": 1_800_000_000.7, "half_install": False})
+    monkeypatch.setattr(events, "read", lambda *a: {"events": [{"id": 1, "at": "2027-01-15T08:00:00Z"}], "next": 1}
+                        if a[0] == 0 else {"events": [], "next": 1})
+    paired = [{"id": "d", "name": "P", "paired": 1, "last_seen": 1_800_000_000.5, "type": None},
+              {"id": "e", "name": "Q", "paired": 1, "last_seen": None, "type": None}]
+    readers = [{"id": "r1", "name": "b", "created": "x", "build": 1, "last_seen": "2027-01-15T08:00:00+00:00",
+                "out_of_date": False}]
+    r = get(paired=paired, readers=readers)
+    times = [r["newest"]["checked_at"], r["backup"]["last_at"], *[d["last_seen"] for d in r["devices"]]]
+    assert times == [1_800_000_000, 1_800_000_000, 1_800_000_000, None, 1_800_000_000]
+    assert all(t is None or (type(t) is int) for t in times)
+    assert not any(isinstance(v, str) and v[:4] == "2027" for v in json.dumps(r).split('"'))
+
+
+def test_spoolman_url_is_given_as_it_is_and_absent_when_it_cannot_be_reached():
+    cfg = config.load()
+    cfg["modules"] = {**cfg["modules"], "spoolman": True}
+    assert hub_view.build(cfg, host="hub.local", paired=[], readers=[])["spoolman_url"] == "http://hub.local:7912"
+    r = hub_view.build(cfg, host=None, paired=[], readers=[])
+    assert "spoolman_url" not in r

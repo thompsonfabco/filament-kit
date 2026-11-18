@@ -272,5 +272,5 @@ def test_hub_view_shows_build_and_last_seen_from_the_hubs_store(env):
     a, _ = TokenStore().issue("bench")
     record_seen([{"id": a, "build": 1794551072, "seen_at": at(0)}], now=T0)
     d = hub_view.build(paired=[])["devices"]
-    assert d == [{"name": "bench", "kind": "reader", "version": "1794551072", "last_seen": at(0),
+    assert d == [{"name": "bench", "kind": "reader", "version": "1794551072", "last_seen": int(T0),
                   "out_of_date": False, "this": False}]
