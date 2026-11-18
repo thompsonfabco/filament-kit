@@ -223,6 +223,45 @@ def test_gap_and_oldest(hub, store):
     assert hub.get("/api/events", headers=phone()).json()["gap"] is False                 # no cursor, no gap
 
 
+def test_next_is_the_hubs_highest_id_when_nothing_is_new(hub, store):
+    for i in range(3):
+        write(store, "print.started", {"job": str(i)})
+    assert hub.get("/api/events?since=3", headers=phone()).json()["next"] == 3          # nothing new, since == highest
+
+
+def test_next_below_since_tells_a_client_with_the_cursor_of_another_hub_to_start_over(hub, store):
+    write(store, "print.started", {"job": "a"})
+    body = hub.get("/api/events?since=500", headers=phone()).json()
+    assert body["events"] == [] and body["next"] == 1 and body["next"] < 500
+    assert hub.get("/api/events?since=500&alert=1", headers=phone()).json()["next"] == 1
+
+
+def test_next_after_a_wait_that_ends_empty_is_the_highest_id(hub, store):
+    write(store, "print.started", {"job": "a"})
+    write(store, "print.started", {"job": "b"})
+    body = hub.get("/api/events?since=2&wait=1", headers=phone()).json()
+    assert body["events"] == [] and body["next"] == 2
+    assert hub.get("/api/events?since=9&wait=1", headers=phone()).json()["next"] == 2
+
+
+def test_next_is_the_stores_highest_id_even_when_the_kinds_asked_for_are_older(hub, store):
+    """The store's highest, not the last event returned: what lies between does not match, so a client has seen it all.
+    A page cut by `limit` is the one case that ends at its last event (the client asks again from there)."""
+    write(store, "print.runout", {"job": "a", "percent": "5"})
+    write(store, "print.started", {"job": "b"})
+    write(store, "print.started", {"job": "c"})
+    body = hub.get("/api/events?kinds=print.runout", headers=phone()).json()
+    assert [e["id"] for e in body["events"]] == [1] and body["next"] == 3
+    page = hub.get("/api/events?limit=1", headers=phone()).json()
+    assert [e["id"] for e in page["events"]] == [1] and page["next"] == 1
+    assert hub.get("/api/events?kinds=spool.", headers=phone()).json()["next"] == 3
+
+
+def test_conditions_is_always_in_the_answer_an_empty_list_when_none(hub, store):
+    body = hub.get("/api/events", headers=phone()).json()
+    assert body["events"] == [] and body["next"] == 0 and body["conditions"] == []
+
+
 def test_wait_returns_at_once_for_news_and_after_the_time_for_none(hub, store):
     write(store, "print.started", {"job": "a"})
     t = time.monotonic()
@@ -389,6 +428,33 @@ def test_the_web_unit_hands_over_spool_kinds_only_and_names_its_actor(hub, store
     assert hub.post("/api/events/web", json={"events": [{**ok, "data": {"nope": 1}}]}, headers=web()).status_code == 400
 
 
+def _one(i, **kw):
+    return {"kind": "spool.moved", "at": f"2026-11-16T10:00:0{i}Z", "subject": {"type": "spool", "id": "7"},
+            "data": {"spool": "7", "before_location": "A", "after_location": f"B{i}"}, **kw}
+
+
+def test_a_hand_over_with_a_bad_item_in_the_middle_writes_nothing(hub, store):
+    batch = [_one(1), {**_one(2), "data": {"nope": "1"}}, _one(3)]
+    r = hub.post("/api/events/web", json={"events": batch}, headers=web())
+    assert r.status_code == 400 and "event 2 of 3" in r.json()["message"]
+    assert store.last_id() == 0 and store.read()["events"] == []
+    bad_time = [_one(1), {**_one(2), "at": "yesterday"}]
+    assert hub.post("/api/events/web", json={"events": bad_time}, headers=web()).status_code == 400
+    assert store.last_id() == 0
+
+
+def test_a_good_hand_over_is_written_in_order_and_a_resent_one_writes_nothing_twice(hub, store):
+    h = web()                                                       # one web unit, one token
+    batch = [_one(1), _one(2), _one(3)]
+    r = hub.post("/api/events/web", json={"events": batch}, headers=h)
+    assert r.status_code == 200 and r.json()["ids"] == [1, 2, 3]
+    assert [e["data"]["after_location"] for e in store.read()["events"]] == ["B1", "B2", "B3"]
+    again = hub.post("/api/events/web", json={"events": batch}, headers=h)     # the outbox sends it again
+    assert again.status_code == 200 and again.json()["ids"] == [1, 2, 3] and store.last_id() == 3
+    more = hub.post("/api/events/web", json={"events": [batch[2], _one(4)]}, headers=h)   # half old, half new
+    assert more.json()["ids"] == [3, 4] and store.last_id() == 4
+
+
 # ---------------------------------------------------------------- who did it: the request's device is the actor
 
 def test_a_spool_change_through_the_api_is_done_by_the_device_of_the_token(hub, sm, store):
@@ -401,6 +467,23 @@ def test_a_spool_change_through_the_api_is_done_by_the_device_of_the_token(hub, 
     moved = [e for e in store.read()["events"] if e["kind"] == "spool.moved"]
     assert len(moved) == 1 and moved[0]["actor"]["type"] == "device" and moved[0]["actor"]["name"] == "Pixel"
     assert moved[0]["actor"]["id"] and moved[0]["data"]["batch"]
+
+
+def test_the_device_name_is_looked_up_only_when_an_event_is_written(hub, sm, store, monkeypatch):
+    calls = []
+    real = pairing.devices
+    monkeypatch.setattr(pairing, "devices", lambda: calls.append(1) or real())
+    h = phone()
+    n = len(calls)                                                  # pairing the phone is not the request
+    assert hub.post("/api/alerts/test", json={}, headers=h).status_code == 200      # a POST that writes no event
+    assert len(calls) == n
+    sid = inventory.add_spools(sm, [{"vendor": "SUNLU", "name": "PLA+ Grey", "material": "PLA", "color_hex": "8A8C8E",
+                                     "net": 1000, "tare": 213, "density": 1.27, "count": 1, "sealed": False}],
+                               RULES, dry=False).spool_ids[0]
+    n = len(calls)
+    assert hub.patch(f"/api/spools/{sid}", json={"location": "Shelf B", "dry_run": False}, headers=h).status_code == 200
+    moved = [e for e in store.read()["events"] if e["kind"] == "spool.moved"]
+    assert moved[0]["actor"]["name"] == "Pixel" and 1 <= len(calls) - n <= 3
 
 
 def test_the_command_line_and_the_hub_itself_stay_the_hub_without_a_request(store):

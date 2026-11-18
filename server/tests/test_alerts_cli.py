@@ -172,6 +172,15 @@ def test_events_json_is_the_answer_of_the_route(capsys, store):
     assert again["events"] == got["events"] and again["gap"] is False
 
 
+def test_events_json_next_is_the_highest_id_and_conditions_is_a_list_with_none(capsys, store):
+    assert json.loads(run(capsys, "events", "--json")[1])["conditions"] == []
+    write(store, "print.started", {"job": "a"})
+    write(store, "print.started", {"job": "b"})
+    got = json.loads(run(capsys, "events", "--kind", "nothing.", "--json")[1])
+    assert got["events"] == [] and got["next"] == 2 and got["conditions"] == []
+    assert json.loads(run(capsys, "events", "--since", "9", "--json")[1])["next"] == 2
+
+
 def test_events_says_when_some_were_deleted_by_age(capsys, store):
     import datetime
     for i in range(3):

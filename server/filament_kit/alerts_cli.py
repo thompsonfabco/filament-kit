@@ -207,8 +207,7 @@ def run_events(args) -> int:
 
 def show(since, since_at, kinds) -> int:
     if since is None and since_at is None:
-        answer = {"events": alerts_api.newest(50, kinds), "next": None}
-        answer["next"] = answer["events"][-1]["id"] if answer["events"] else events.last_id()
+        answer = {"events": alerts_api.newest(50, kinds), "next": events.last_id()}     # the store's highest, as the API
         answer.update(oldest=events.oldest(), gap=False, test=None,
                       conditions=[alerts_api.event_view(c) for c in events.conditions()])
     else:

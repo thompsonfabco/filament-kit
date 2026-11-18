@@ -137,7 +137,15 @@ def weight_changed(sm) -> None:
 
 
 def current_actor() -> dict:
-    return _actor.get() or HUB
+    """The actor of this request or task, else the Hub. A name given as a function (`acting`) is looked up here, the
+    first time an event needs it, so a request that writes no event never pays for it."""
+    a = _actor.get()
+    if a and callable(a.get("name")):
+        try:
+            a["name"] = a["name"]()
+        except Exception:  # noqa: BLE001 - a name is a courtesy
+            a["name"] = ""
+    return a or HUB
 
 
 def new_batch() -> str:
@@ -147,7 +155,8 @@ def new_batch() -> str:
 @contextlib.contextmanager
 def acting(actor: dict | str | None = None, batch: str | None = None):
     """Events written inside this block (in this thread or task) have `actor`, and the spool events of one request
-    share `batch` (a given id, else a new one)."""
+    share `batch` (a given id, else a new one). The actor's `name` may be a function: it is called once, when the first
+    event is written."""
     a = _actor.set({"type": actor} if isinstance(actor, str) else actor)
     b = _batch.set(batch or _batch.get() or new_batch())
     try:

@@ -272,9 +272,10 @@ def _authed(fn):
             return _err(403, "forbidden", "this route is for the web unit only")
         request.state.device = device
         # what this request changes is written as an event done by this device (R80 E1); only a change writes one
+        # the name is looked up when an event is written, not for every request (pairing.devices() reads a file)
         actor = {"type": "device", "id": device}
         if request.method not in ("GET", "HEAD", "OPTIONS"):
-            actor["name"] = await run_in_threadpool(_device_name, device)
+            actor["name"] = functools.partial(_device_name, device)
         with event_sink.acting(actor):
             return await fn(request)
     return _handle(wrapper)
@@ -1347,8 +1348,9 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             batch.append((it["kind"], it.get("subject") or {"type": "spool"},
                           {"type": kind, "id": str(actor.get("id") or device), "name": str(actor.get("name") or "")},
                           it.get("data") or {}, when))
-        written = await run_in_threadpool(lambda: [events.write(k, sub, act, data, now=at)["id"]
-                                                   for k, sub, act, data, at in batch])
+        # all or none, and a resent hand-over writes nothing twice (events.write_many)
+        written = await run_in_threadpool(events.write_many, [
+            {"kind": k, "subject": sub, "actor": act, "data": data, "now": at} for k, sub, act, data, at in batch])
         return JSONResponse({"ok": True, "ids": written})
 
     @_authed
