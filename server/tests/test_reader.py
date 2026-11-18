@@ -98,6 +98,8 @@ class FakeKit:
                                                           for i, (key, sl) in enumerate(units.items())]}}
 
     def post(self, path, body):
+        if path == "/api/readers/web/seen":          # the reader's build and last call, handed to the Hub: not a load
+            return {"ok": True}
         with self.lock:
             self.loads.append((path, body))
         if self.load_gate is not None:

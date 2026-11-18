@@ -553,7 +553,8 @@ def test_clear_view_is_the_kit_routes_answer(rig, sm, fil):
     m, printer, client = rig
     s = spool(sm, fil, LOC_A2, prev="Rack 1")
     v = loading.clear_view(loading.clear(m, sm, SERIAL, "A2", False), True)
-    assert set(v) == {"slot", "spool", "moved_back", "waiting_ended", "printer_cleared", "dry_run"}
+    assert set(v) == {"slot", "spool", "moved_back", "waiting_ended", "printer_cleared", "dry_run", "text"}
+    assert v["text"] == "The printer still shows the old filament for this slot until a spool is loaded."
     assert v["slot"] == "A2" and v["moved_back"] == "Rack 1" and v["waiting_ended"] is True
     assert v["spool"]["id"] == s["id"] and v["spool"]["location"] == "Rack 1" and v["spool"]["loaded"] is None
     e = loading.clear_view(loading.clear(m, sm, SERIAL, "A2", False), False)

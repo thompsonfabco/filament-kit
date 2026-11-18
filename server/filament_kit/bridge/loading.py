@@ -482,6 +482,9 @@ def unload(manager, sm, serial: str, label: str, dry: bool, *, sealed_location: 
     return {"spool": spool, "slot": slot, "preset": None, "dry_run": bool(dry), "moved_back": moved}
 
 
+STILL_SHOWS = "The printer still shows the old filament for this slot until a spool is loaded."   # R83, ruled 20:33
+
+
 def clear(manager, sm, serial: str, label: str, dry: bool, *, sealed_location: str = SEALED) -> dict:
     """Clear slot `label` of printer `serial`: the Hub forgets which spool is in it (R83 s3). Whatever spool is
     recorded there goes back where it was, exactly as `unload` moves it; no spool recorded is not an error. Nothing
@@ -514,17 +517,20 @@ def clear(manager, sm, serial: str, label: str, dry: bool, *, sealed_location: s
                      "extra": {**(first.get("extra") or {}), "prev_location": json.dumps("")}}
         else:
             spool = sm.get(f"spool/{first['id']}")
-    return {"slot": slot, "spool": spool, "moved_back": moved, "printer_cleared": False, "dry_run": bool(dry)}
+    return {"slot": slot, "spool": spool, "moved_back": moved, "printer_cleared": False, "dry_run": bool(dry),
+            "text": STILL_SHOWS}
 
 
 def clear_view(r: dict, waiting_ended: bool) -> dict:
     """`clear`'s result as the kit route answers it (R83 s10.1): `slot` the label, `spool` its spool view and
-    `moved_back` the place it goes back to (None without a spool)."""
+    `moved_back` the place it goes back to (None without a spool); `text` (Bambu Lab: the printer keeps showing the old
+    filament, `STILL_SHOWS`) only when the result has one."""
     moved = r.get("moved_back") or []
     sp = r.get("spool")
     return {"slot": r["slot"]["label"], "spool": inventory.spool_view(sp) if sp else None,
             "moved_back": moved[0]["location"] if moved else None, "waiting_ended": bool(waiting_ended),
-            "printer_cleared": bool(r.get("printer_cleared")), "dry_run": bool(r["dry_run"])}
+            "printer_cleared": bool(r.get("printer_cleared")), "dry_run": bool(r["dry_run"]),
+            **({"text": r["text"]} if r.get("text") else {})}
 
 
 # the Spoolman moves, shared with the Klipper family (bridge.klipper.loads)
