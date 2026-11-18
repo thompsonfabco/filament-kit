@@ -36,8 +36,14 @@ Options go after `get.sh` (or after `./install.sh` from an unpacked release): `-
 (for example `--modules server,web --set web.public_url=https://filament.example.com/filament`), and
 `--version 0.3.0`. Without a terminal it asks nothing and installs the Hub Setup unless told otherwise.
 
+A first install at a Terminal asks first whether to finish setting up in your browser (**Guided Setup**): yes installs the Hub
+with the usual choices and asks nothing more, and the install ends with the Hub's address and the setup code. A new Hub
+takes port 443, so its addresses have no port (`https://<computer name>.local/setup`); if 443 is in use the installer
+asks for another port (8710 is offered). A Hub that was installed earlier keeps its port, and this guide shows `:8710` after
+the name for it. Both are in [Install the Hub](install-server.md#the-questions).
+
 The installer takes a few minutes. You can run it again at any time; it never deletes your spools or settings.
-Running it again later (an update) asks no questions and keeps the Setup you have.
+Running it again later (an update) asks no questions, keeps the Setup you have and does not change the Hub's port.
 
 <a id="install-modes"></a>
 ## Setups
@@ -123,9 +129,9 @@ The older names still work wherever a Setup name is asked for: `server` for `hub
 ## Install the app and pair your phone
 
 Step by step: [Install the app](install-android-app.md). In short: install `filament-kit.apk` from the
-Releases page (or from your Hub at `https://<computer name>.local:8710/app.apk`), run `sudo spoolwarden pair`
+Releases page (or from your Hub at `https://<computer name>.local/app.apk`; `:8710` after the name on a Hub that kept that port), run `sudo spoolwarden pair`
 on the Hub, and scan the QR code it prints, or pick the Hub in the app, compare the fingerprint, tap
-**It matches** and type the 6-digit code. The code expires after about 10 minutes and works once;
+**It matches** and type the 6-digit code. (If you type the address, leave **Port** empty: the app tries 443 and then 8710.) The code expires after about 10 minutes and works once;
 `sudo spoolwarden pair` makes a new one. The switch **Check the fingerprint when pairing by address** in the app's **Settings** is on by default. On Android 17 and newer the app needs **Local network** access.
 
 The app updates itself: after `sudo spoolwarden update` to a release with a newer app, the home screen offers
@@ -162,7 +168,8 @@ first PC that syncs is the one. To move to another PC, remove the first one with
    It prints a long link that starts with `fkit://pair?`, the certificate fingerprint and a 6-digit code.
 3. Click **Finish** in the setup with **Pair this PC with the Hub now** ticked. A console window
    opens. (Missed it? Start menu, **Pair Slicer Sync**.)
-4. In that console, paste the link and press Enter. (No link? Type the Hub's name or address instead. The
+4. In that console, paste the link and press Enter. (No link? Type the Hub's name or address instead; with no port,
+   Slicer Sync tries 443 and then 8710 and uses the one where the Hub answers. The
    window shows the Hub's certificate fingerprint. Check that it matches the one on the Ubuntu computer and
    type `y` to confirm it. Then it asks for the 6-digit code.) From then on the PC syncs every 10 minutes. While
    Bambu Studio is open it waits and tries again later (see [While Bambu Studio is open](#while-bambu-studio-is-open-v040)).
@@ -309,7 +316,8 @@ This has not been tried on a Linux machine with the slicers running.
 <a id="the-setup-page-v040"></a>
 ## The Hub page (v0.4.0)
 
-The Hub has a web page for setup at `https://<computer name>.local:8710/setup`, on the home network only.
+The Hub has a web page for setup at `https://<computer name>.local/setup` (`https://<computer name>.local:8710/setup` on a
+Hub that kept port 8710), on the home network only.
 It does what the Terminal's `config` menu, `pair` and the key commands do: the Anthropic key, printers and their
 Access Codes, the web passphrase and Catalog token, pairing a phone, Slicer Sync or a Weigh Station, Tag Reader
 tokens, the storage locations, and switching Features on or off. How to find the code, what it asks for, the lock-out after wrong codes
@@ -360,6 +368,8 @@ Run these in a Terminal on the Ubuntu computer, after `spoolwarden` (for example
 | `recent revise <record> --note TEXT [--item N]` | Ask the Label Reader to correct it | Ask the Label Reader to correct it |
 | `recent edit <record> field=value... [--item N] [--spools 41,42]` | Edit by hand | Edit by hand, Save changes |
 | `recent undo <record>` | Undo the newest revision that is not undone | Undo revision N |
+| `spools low` | The opened spools at or under the running-low threshold | (none) |
+| `events [--since ID\|TIME] [--kind PREFIX] [--follow]` | The Hub's events, newest last; `--follow` keeps printing new ones | (none) |
 | `devices` (same as `devices list`) | Paired devices | Devices |
 | `devices forget <device>` | Unpair a device | Unpair |
 | `pair [--slicer-sync \| --weigh-station] [--text] [--no-wait]` | Pairing code, QR and fingerprint | Pair a phone / Link Slicer Sync / Link a Weigh Station |
@@ -394,6 +404,11 @@ Run these in a Terminal on the Ubuntu computer, after `spoolwarden` (for example
 | `locations remove <name>` | Remove a location (asks) | Remove |
 | `locations default-overflow <name>` | Make it the default overflow (a Bulk storage location that is not overflow becomes overflow as well) | Make default overflow |
 | `locations sealed <name>` | Sealed spools go here | Sealed spools go here |
+| `alerts` (same as `alerts list`) | The alert switches and thresholds | (none) |
+| `alerts set <type> on\|off` | Switch one alert type | (none) |
+| `alerts set running-low <grams>` | Running low under | (none) |
+| `alerts set storage-warning <percent>` | Storage warning at | (none) |
+| `alerts test` | Send a test alert | (none) |
 | `label-reader status` | Label Reader engines and their health | Settings > Label Reader |
 | `label-reader test <photo>... [--engine cloud\|local]` | Read label photos without adding anything | Test |
 | `catalog status` | Filament Catalog version and last check | Settings > Filament Catalog |
@@ -437,6 +452,12 @@ Run these in a Terminal on the Ubuntu computer, after `spoolwarden` (for example
   `--port <port>` names its USB port. `--source <folder>` builds the firmware from the `reader` folder of a checkout with
   PlatformIO and flashes it; `--out <file>` only writes its `secrets.h` (mode 600) so you can build elsewhere
   ([reader/README.md](../reader/README.md)).
+- **`events`** prints the newest 50 events, oldest first, as `Id`, `Time`, `Kind`, `Subject` and `What`; `--since` takes an
+  event number or a time such as `'2026-11-17 04:00'`, `--kind print` keeps the kinds that start with it, and `--follow`
+  keeps printing until Ctrl-C. If it says the events could not be read, run it with `sudo`. See [Alerts](#alerts).
+- **`alerts set`** and **`alerts test`** need `sudo`. The types are `runout`, `paused`, `failed`, `printer_error`, `finished`,
+  `storage`, `running_low` and `device_down`. `running-low` takes grams from 10 to 2000 and `storage-warning` a percent used
+  from 1 to 99. See [Alerts](#alerts).
 - **`weigh-station pairing-state`** prints one line: `paired with <address>:<port>`, `not paired`, or `not checked yet`
   (when you are not root, so it can't read the pairing).
 
@@ -569,6 +590,112 @@ The app writes it under the name (`18 of 20 spools`, `7 spools`, `3 free`, `Full
 The location field of the add screen starts at **Automatic**; after **Check** (web app) or **Preview** (app) the line
 under it says where the spools would go and why. **Move** on a spool offers the same list. The list itself is edited on
 the Hub page or the command line, not in the apps.
+
+## Alerts
+
+The Hub writes down what happens: a print starts, pauses, runs out of filament, fails or finishes, a printer reports an
+error, a spool is added, moved, weighed or runs low, the Hub's disk fills, a device stops answering. Some of these are
+**alerts**: the ones whose **alert type** is on. Every event is written whether its type is on or not; the switch only
+decides which of them are shown to you as alerts.
+
+### The alerts
+
+| Alert | When | On at the start |
+|---|---|---|
+| **Filament ran out** (`runout`) | A print is paused because the filament ran out. | On |
+| **Print paused** (`paused`) | A print is paused for another reason (by you, by an error, or the Hub cannot tell which). | On |
+| **Print failed or stopped** (`failed`) | A print stopped before it finished, also when it was cancelled. | On |
+| **Printer error** (`printer_error`) | A printer reports a problem; the alert gives its error code. | On |
+| **Print finished** (`finished`) | A print is done. | Off |
+| **Storage almost full** (`storage`) | The Hub's disk passes the warning limit, and again at the limit that makes it full. | On |
+| **Spool running low** (`running_low`) | An opened spool has gone to or under the running-low limit. | On |
+| **Device stopped answering** (`device_down`) | A Weigh Station or a printer stopped answering. | Off |
+
+The Hub watches the Bambu Lab and Klipper printers you have added. It learns a printer's state when the Hub starts and
+alerts only on changes after that, and not for the Hub's own slot-mapping prints. The Weigh Station is watched only when the Hub
+has its address (the `station.url` setting) and exactly one station is paired; Tag Readers are not watched.
+
+An alert about a state that lasts (a paused print, a full disk, a stopped device, a spool running low) stays as a banner
+until the state ends; one about a moment (a failed print, a printer error) stays for 24 hours. A finished print is only a
+short message and an entry in the list. When a state ends, the Hub writes an event saying so (for example **No longer
+running low: ...**), which is not an alert.
+
+### Where you see them
+
+- **The banner.** An alert shows as a banner at the top of the web app and of the app (Android): its title, a line of
+  detail, the time, a button to the place that deals with it (**Open the printer**, **Show running low**) and **Dismiss**,
+  which hides that banner on that device until it changes. At most two show; the rest are one line, **<n> more alerts**,
+  that opens the Alerts list. Only warnings and problems are banners.
+- **The Alerts list.** **Recent alerts** (in the web app: **More**, **Settings**; in the app (Android): **Settings**,
+  **Alerts**) lists what is **Happening now**, then the alerts of the **Last 7 days**, newest first. The list shows only
+  alerts whose type is on.
+- **The Terminal.** `sudo spoolwarden events` lists the events and `sudo spoolwarden events --follow` prints them as they
+  come; `--kind print` or `--kind spool.low` narrows them. The Hub keeps events for 400 days (the setting
+  `events.keep_days`, 30 to 3650), in `/var/lib/filament-kit/events`, which backups include.
+- **`spoolwarden status`** and the Hub page's Overview have a row for the Hub's disk (`Storage: 41 GB free of 117 GB
+  (65 % used)`, which needs a look past a limit) and, while some spools are running low, a note `Running low: 2 spools`.
+
+### A phone with the web app
+
+While the web app is open, a new alert also shows as a short message. The page asks the Hub every 10 seconds and stops
+while it is hidden, so an alert that came meanwhile shows when you open it again.
+
+With the app closed, the phone gets a notification only through **Web Push**. It is off by default and works only at the `web`
+Feature's address, not at the Hub's own address. It needs `"web": {"push": true}`, `pip install 'filament-kit[push]'` and a
+way out to the browsers' push services for the web service (the steps are under
+[Claude connector and web app](#claude-connector-and-phone-web-app)). Then, in the web app's **Settings**, **Alerts on this
+phone**, switch on **Notify this phone** and allow notifications. On an iPhone this works only from the Home Screen:
+in Safari the page says **This browser cannot receive alerts. Alerts on iPhone work only from the Home Screen.**
+([Use the web app on an iPhone](install-iphone-web-app.md#alerts)). **Send a test alert** on that page sends one
+notification to the phones that switched this on, at most one every 30 seconds.
+
+### A phone with the app (Android)
+
+In the app's **Settings**, **Alerts**, the switch **Alerts on this phone** is off until you turn it on. Turning it on asks
+Android to allow notifications and, on Android 17 and newer, local network access. While it is on, Android shows a small
+permanent notification, **Watching the Hub for alerts**, and each alert arrives as a notification, also with the app
+closed. The app asks the Hub itself, so alerts arrive only while the phone can reach the Hub (at home, on its network).
+What happened meanwhile shows when it reaches the Hub again, as a notification if it is less than 24 hours old. **Send a
+test alert** on the same page tests this phone. More in [Using the app, Alerts](android-app.md#4-alerts).
+
+### Send a test alert
+
+`sudo spoolwarden alerts test` sends one test alert to every device that asks within a minute: an open web app, and every
+Android phone that has the switch on. It says `Test alert sent. Every device that asks in the next 60 seconds gets it.` The
+web app (with Web Push) and the app (Android) also have their own **Send a test alert** buttons, as above.
+
+### Which alerts are on, and the limits
+
+At a Terminal on the Hub:
+
+```
+spoolwarden alerts
+sudo spoolwarden alerts set running_low off
+sudo spoolwarden alerts set finished on
+sudo spoolwarden alerts set running-low 200
+sudo spoolwarden alerts set storage-warning 80
+```
+
+`spoolwarden alerts` shows each type with its key, the events it covers and whether it is on, then the limits: **Running low
+under** 150 g (10 to 2000) and **Storage warning at** 85 % used (1 to 99). Storage counts as full at 95 % used, or with
+under 1 GB free, whatever the percentages say; that limit is not changed from the Terminal. The settings are in `alerts.xml`
+in `/var/lib/filament-kit`, which backups include. If it cannot be read or saved, `spoolwarden status` says so and the
+defaults apply meanwhile. The apps show and change none of these.
+
+### Running low
+
+A spool is **running low** when it is opened (not sealed, not empty) and has no more than the limit left (150 g unless you
+changed it). `sudo spoolwarden spools low` lists them, least filament first: `Spool`, `Filament`, `Left`, `Location` and
+`Stock`, which says how many more spools of the same filament are not empty (sealed ones count), or **Last one**. The web
+app has a **Running low (n)** button in the spool search; the app (Android) has a button on its home screen and a **Running
+low (n)** filter in **Search**; `status` has the note row. The alert is raised once, when a spool goes under the limit.
+
+### Storage use
+
+The Hub measures the disk that holds its data and, when it is another disk, the one that holds the backups. The row in
+`status` shows the fullest. At the **Storage warning** limit (85 % used unless you changed it) the **Storage almost full**
+alert is raised and the row needs a look; at 95 % used, or under 1 GB free, the alert becomes **Storage on the Hub is
+full**. When the disk is fine again the Hub writes an event saying so.
 
 ## Bambu Lab printers
 
@@ -1080,8 +1207,8 @@ The `web` Feature runs one more service, `filament-kit-web`, on this computer on
   pause / resume / stop (stop asks first), the chamber light, the filament in each AMS unit, the usage log with
   undo, and a re-map button. The camera is a picture stream on printers that have one and an HLS video on the
   rest (HLS plays in Safari on iPhone and Mac). The light button follows the printer's reported chamber light;
-  the Hub switches both light nodes when a printer has two, as the old page did. Print alerts to the phone
-  (Web Push) are off; `"web": {"push": true}` turns them on, needs `pip install 'filament-kit[push]'` and lets the
+  the Hub switches both light nodes when a printer has two, as the old page did. Alerts to the phone
+  while the web app is closed (Web Push, see [Alerts](#alerts)) are off; `"web": {"push": true}` turns them on, needs `pip install 'filament-kit[push]'` and lets the
   web service reach the browsers' push services on the internet, which the Hub does not open for you: the web service's
   systemd limits allow only your home network, so run `sudo systemctl edit filament-kit-web`, add `[Service]` and
   `IPAddressAllow=any`, save, and `sudo systemctl restart filament-kit-web`. The phone's Test button says when the
@@ -1131,7 +1258,7 @@ type the passphrase there. Claude stays signed in after that; changing the passp
 ### Use the web app
 
 The Hub serves the web app itself, whatever Features are on: open
-`https://<server name>.local:8710/intake` on the phone while it is on the home network (the Hub page's
+`https://<server name>.local/intake` (`:8710` after the name on a Hub that kept that port) on the phone while it is on the home network (the Hub page's
 **Devices** section shows the address and a QR code), accept Safari's warning about the Hub's own certificate once,
 and add the page to the home screen if you like. With the `web` Feature on, `<public address>/intake` serves the
 same app as well, with your certificate (step by step: [Use the web app on an iPhone](install-iphone-web-app.md)).
@@ -1146,7 +1273,7 @@ It asks for the Access Code again before trusting a new certificate (and for a n
 and for a Klipper printer's API key when it moves, so the Hub never sends a stored secret to a host it can't vouch
 for. At the `web` Feature's public address these changes are off unless **Allow printer changes from the public
 address** is on (Hub page: Settings, Network and addresses); there the section only lists the printers.
-It answers by the Hub's own names, as the Hub page does. Print alerts to the phone come only through the `web`
+It answers by the Hub's own names, as the Hub page does. Alerts to the phone while the web app is closed come only through the `web`
 Feature's address. In Devices it shows as the built-in device ("This Hub's own pairing"):
 it is how the page reaches the Hub and pairs again whenever the Hub starts.
 
@@ -1181,6 +1308,10 @@ The ranges above are IPv4. A phone or computer that reaches the web address over
 The `remote` Feature puts web access on a public `https://` name, with a free certificate from Let's Encrypt.
 It installs nginx and certbot. It **never changes your firewall or router**: it prints the rules, and you set
 them up yourself.
+
+Remote access uses port 443 on this computer, so it cannot run beside a Hub that holds 443 (a new install where 443 was
+free). Switching it on then stops with `Remote access needs port 443, and the Hub is using it`, before anything is
+changed. A Hub installed with Remote access chosen takes 8710 instead, and so does a Hub that kept 8710.
 
 1. Do [Claude connector and web app](#claude-connector-and-phone-web-app) first (`web.public_url` set).
    Its host name is the public name; you can also write it as `"remote": {"hostname": "filament.example.com"}`,

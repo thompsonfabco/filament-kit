@@ -74,7 +74,21 @@ This way skips the signature check that the one command does.
 The installer first installs two small packages (`==> Installing system packages`), then asks these one at a
 time. For a first install, pressing **Enter** at every question is fine.
 
-1. **Setup** (the installer asks "Install mode")
+1. **Guided Setup** (a first install at a Terminal asks this first)
+
+   ```
+   Finish setting up in your browser (Guided Setup)? [Y/n]
+   ```
+
+   Press Enter for **yes**, the default. The Hub is then installed with the usual choices (the Hub Setup, no Label
+   Reader (Cloud), the default storage locations and the computer's own name as the display name), and none of the
+   questions below is asked. The install ends with the Hub's address and the setup code, with no QR codes: open the
+   address in a browser and carry on there (pair a phone from the Hub page's **Devices** section, or with
+   `sudo spoolwarden pair`). Answer `n` to get the questions below in the Terminal. That is also the way to install only a
+   Weigh Station. The question is not asked when you give an option such as `--mode` (see
+   [Answers on the command line](#answers-on-the-command-line)), or on an update.
+
+2. **Setup** (the installer asks "Install mode")
 
    ```
    Install mode: 1) server 2) station 3) all-in-one 4) custom [1]
@@ -85,7 +99,7 @@ time. For a first install, pressing **Enter** at every question is fine.
    the Hub runs somewhere else; it then asks for the Hub's address. Choice 4, **custom**, shows a checklist of
    every Feature (see [Change what is installed](#change-what-is-installed)).
 
-2. **Label Reader (Cloud)**
+3. **Label Reader (Cloud)**
 
    ```
    Read spool labels from photos with Claude (ai_intake; needs an Anthropic API key)? [y/N]
@@ -94,10 +108,13 @@ time. For a first install, pressing **Enter** at every question is fine.
    Press Enter for **no**. You then add spools by typing them in, which works fine. Type `y` only if you have an
    Anthropic API key.
 
+4. **Port for the Hub**: only when port 443 is not free, so most installs never see it. See
+   [The Hub's port](#the-hubs-port).
+
    The installer now installs packages and Spoolman. Several screens of text scroll past. Some lines look like
    errors but are not. Look at the status list at the end instead.
 
-3. **Display name**
+5. **Display name**
 
    ```
    Display name shown in the phone app (any text) [<computer name>]:
@@ -105,7 +122,7 @@ time. For a first install, pressing **Enter** at every question is fine.
 
    This is the name the app shows for this Hub. Press Enter to keep the computer's name, or type any name.
 
-4. **Storage locations**
+6. **Storage locations**
 
    ```
    Use the default storage locations? [Y/n]:
@@ -117,8 +134,29 @@ time. For a first install, pressing **Enter** at every question is fine.
    **Storage locations**, or with `sudo spoolwarden locations`.
    How the list works: [Storage locations](user-guide.md#storage-locations).
 
-5. **Anthropic API key**: only if you answered `y` to question 2. Paste the key and press Enter. Each character
+7. **Anthropic API key**: only if you answered `y` to question 3. Paste the key and press Enter. Each character
    shows as a `*`.
+
+<a id="the-hubs-port"></a>
+### The Hub's port
+
+A new install puts the Hub on port **443**, the port of an ordinary `https://` address, so the Hub's addresses have no
+port: `https://my-server.local/setup`. Where this guide shows an address without a port, a Hub that was installed earlier
+and keeps its port **8710** needs `:8710` after the name (`https://my-server.local:8710/setup`). An update never moves a
+Hub, so an existing Hub keeps the port it has.
+
+If something else on the computer already uses 443 (another web server, or Remote access, which uses 443 for its public
+address), a first install does not take it:
+
+- At a Terminal the installer says `Port 443 is already in use on this machine.` (or that it could not be checked) and
+  asks `Port for the Hub [8710]:`. Press Enter for 8710, or type another port from 1024 to 65535 that is free; it says
+  why when it will not take what you typed. If 8710 is also in use, the port offered is the next free one above it.
+- With Guided Setup, or without a Terminal, nothing is asked: the Hub takes 8710 (or the next free port) and the
+  installer prints a line saying so.
+
+If a firewall (`ufw`) is on and has no rule for the Hub's port, the installer prints the line to open it, for example
+`sudo ufw allow 443/tcp`; it does not change the firewall itself. When you type the Hub's address without a port in the
+app (Android) or in Slicer Sync, they try 443 first and then 8710.
 
 ### Answers on the command line
 
@@ -132,6 +170,8 @@ release):
 | `--modules a,b` | A custom set of Features, for example `--modules spoolman,server,printers`. What they need is added. |
 | `--set key=value` | A setting a Feature in `--modules` needs, for example `--set web.public_url=https://my-server.local/filament`. |
 | `--version 0.3.0` | `get.sh` only: that release instead of the newest. |
+
+Giving `--mode`, `--modules`, `--set` or `--hub` also skips the Guided Setup question.
 
 For example:
 
@@ -147,7 +187,7 @@ The installer finishes with a status list, a QR code to download the app (Androi
 ==> Status
 OK   service spoolman active
 OK   service filament-kit active
-OK   Spoolwarden API answering at https://127.0.0.1:8710/api/info
+OK   Spoolwarden API answering at https://127.0.0.1:443/api/info
 OK   Spoolman reachable at http://127.0.0.1:7912 (v0.27.0)
 OK   certificate present, fingerprint 7616...2eb8
 --   display name: my-server
@@ -157,7 +197,7 @@ OK   certificate present, fingerprint 7616...2eb8
 
 ==> Android app: scan this code with the phone's camera to download it
 (a large QR code)
-It downloads filament-kit.apk from this server (https://192.0.2.10:8710/app.apk); the browser warns about the
+It downloads filament-kit.apk from this server (https://192.0.2.10/app.apk); the browser warns about the
 kit's own certificate: continue, then open the file to install the app.
 Press Enter when the app is installed and you're ready to pair (or s to skip)
 
@@ -171,8 +211,11 @@ Expires at 10:07:30 (in 9 min)
 
 Done.   Spoolman: http://my-server.local:7912   Pair another phone: sudo spoolwarden pair
 
-Open https://my-server.local:8710/setup  (setup code: 1234-5678)
+Open https://my-server.local/setup  (setup code: 1234-5678)
 ```
+
+The addresses show no port because this Hub is on 443; a Hub on 8710 shows `:8710` in them. With Guided Setup the end is
+shorter: `Done.`, then `Open https://my-server.local/  (setup code: 1234-5678)`, and no QR codes.
 
 - **No line should start with `FAIL`.** Lines starting with `--` are information. On a new install,
   `library not downloaded`, `no build yet` and `PC sync: not set up` are expected.
@@ -196,7 +239,7 @@ Anthropic key, printers and their Access Codes, the web passphrase, the Catalog 
 Weigh Station, Tag Reader tokens, and switching Features on or off.
 
 1. Find the address and the code. The installer prints the page's address at the end (`https://<computer
-   name>.local:8710/setup`). It prints the **setup code** only when you are at a Terminal. To see them again:
+   name>.local/setup`; `https://<computer name>.local:8710/setup` on a Hub that is on port 8710). It prints the **setup code** only when you are at a Terminal. To see them again:
 
    ```bash
    sudo spoolwarden setup-code
@@ -235,7 +278,7 @@ log (for example `setup: anthropic key replaced from 192.0.2.20`) without the va
 ### The sections (v0.4.3)
 
 From v0.4.3 the page has sections: **Overview**, **Features**, **Printers**, **Devices**, **Settings** and **Updates**
-(`https://<computer name>.local:8710/setup#updates` opens one directly). v0.5.0 adds **Slicer presets** and **Logs**. **Flash a device** (between **Settings** and **Updates**) writes Spoolwarden's firmware to a Tag Reader or a Weigh Station display over USB ([the user guide](user-guide.md#flash-a-device)). The table above says what is on **Printers**,
+(`https://<computer name>.local/setup#updates` opens one directly). v0.5.0 adds **Slicer presets** and **Logs**. **Flash a device** (between **Settings** and **Updates**) writes Spoolwarden's firmware to a Tag Reader or a Weigh Station display over USB ([the user guide](user-guide.md#flash-a-device)). The table above says what is on **Printers**,
 **Devices** and **Settings**.
 
 - **Overview.** The installed version and Setup, with a note and a link to **Updates** when a newer release exists. Under
@@ -356,8 +399,8 @@ can't connect to it either. Two ways out:
 
   Then, in PowerShell, `wsl --shutdown`, and start Ubuntu again. The Linux side now shares the PC's network
   address: printers are discovered, and phones reach the Hub at the PC's name or IP address. If Windows
-  Firewall is on, allow Spoolwarden's ports through it (8710 for the app, 7912 for Spoolman, 5353 for `.local`
-  names).
+  Firewall is on, allow Spoolwarden's ports through it (443 for the app, or 8710 on a Hub that kept it, 7912 for Spoolman, 5353 for
+  `.local` names).
 - **Stay in NAT mode and add printers by hand**: `sudo spoolwarden printer add`.
   Phones still can't reach a NAT-mode Hub, so this only suits testing on the PC itself.
 
@@ -386,7 +429,7 @@ Either way, the PC must stay on and awake for the Hub to answer.
 - **The phone can't find the Hub**: the phone and the computer must be on the same Wi-Fi network. Type
   `hostname -I` on the computer to see its address. If you
   turned on Ubuntu's firewall (`ufw`), allow the app's port and name lookups:
-  `sudo ufw allow 8710/tcp` and `sudo ufw allow 5353/udp`. For Spoolman in a browser, also `sudo ufw allow 7912/tcp`.
+  `sudo ufw allow 443/tcp` (the Hub's port: 8710 on a Hub that kept it) and `sudo ufw allow 5353/udp`. For Spoolman in a browser, also `sudo ufw allow 7912/tcp`.
 - **`sudo spoolwarden update` says a printer is mapping or loading**: it does nothing then. Try again when the
   mapping or loading is done.
 - **`a Spoolman the kit did not install is in /opt/spoolman`**: Spoolwarden never replaces a Spoolman
