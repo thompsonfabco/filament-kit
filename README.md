@@ -107,7 +107,7 @@ On Android, install `filament-kit.apk` from the Releases page (Android 10 or new
 on the Hub and scan the QR code it prints: [Install the app](docs/install-android-app.md), then [Using the app](docs/android-app.md) for printers and spools. On an iPhone
 or in any phone browser, the `web` Feature (Web access) gives the same tasks as a web app you can put on the home screen:
 [Use the web app on an iPhone](docs/install-iphone-web-app.md). `sudo spoolwarden devices` lists paired phones, and `sudo spoolwarden devices forget <device>` removes one.
-Both apps show **alerts** (filament ran out, print paused, failed or finished, printer error, storage almost full, spool running low, device
+Both apps and the Hub page show **alerts** (filament ran out, print paused, failed or finished, printer error, storage almost full, spool running low, device
 stopped answering), and the app (Android) can notify you with the app closed: [Alerts](docs/user-guide.md#alerts).
 
 ## Pair your PC
