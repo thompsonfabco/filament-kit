@@ -951,6 +951,16 @@ function alertHref(a) {
   if (a.place === "devices") return hubPage ? hubPage + "#devices" : null;
   return null;
 }
+// The page closes the notifications of conditions that are over (R80 20:48 point 4): a condition's notification carries the tag
+// "sw-condition-<key>"; when an answer's `conditions` no longer holds the key, the notification goes. Needs no push.
+async function closeStaleNotifications(conditions, registration) {
+  try {
+    const reg = registration || (typeof ownReg === "function" ? await ownReg() : null);
+    if (!reg || !reg.getNotifications || !Array.isArray(conditions)) return;
+    const raised = new Set(conditions.map((c) => c && c.condition && c.condition.key).filter(Boolean).map((k) => "sw-condition-" + k));
+    for (const n of await reg.getNotifications()) if (n.tag && n.tag.startsWith("sw-condition-") && !raised.has(n.tag)) n.close();
+  } catch (e) { /* a notification left open is only a notification */ }
+}
 function startAlerts() {
   if (!window.SW_ALERTS) return;
   SW_ALERTS.start({ host: alertHost, interval: 10000, href: alertHref,
@@ -959,6 +969,7 @@ function startAlerts() {
       const res = await api(path), have = SW_ALERTS.state().cursor;
       // a Hub whose ids are lower than the cursor was restored or reinstalled: ask again from the start (the cursor is kept only in the page)
       if (res && res.next != null && have != null && Number(res.next) < have) setTimeout(startAlerts, 0);
+      if (res && Array.isArray(res.conditions)) closeStaleNotifications(res.conditions);
       return res;
     },
     onError: (e) => { if (e && e.status === 404) SW_ALERTS.stop(); } });                    // a Hub without the events route: stop asking
