@@ -19,6 +19,15 @@ object PrinterTexts {
     /** What Unload adds when a spool that was waiting for the slot is waiting no more. */
     const val UNLOAD_WAITING_ENDED = "The spool waiting for this slot is not waiting any more."
 
+    /** The guided add (R82 section 5). "Add a printer", "Use this printer", "Looking…" and "Back" are catalogue texts. */
+    const val GUIDE_FOUND = "Found on your network"
+    const val GUIDE_NONE = "None found. Type its address in the next step."
+    const val GUIDE_BY_ADDRESS = "Type its address"
+    const val MAP_TITLE = "Map its slots now?"
+    const val MAP_BODY = "Mapping tells the Hub which slot is which. Nothing heats or moves."
+    const val MAP_NOW = "Map slots"
+    const val MAP_LATER = "Later"
+
     private const val CLEAR_WAITING_ENDED = "The spool that was waiting for it is not waiting any more."
     private const val CLEAR_PRINTER_CLEARED = "The slot's setting on the printer is cleared too."
     private const val PREVIOUS_PLACE = "its previous place"
@@ -53,6 +62,6 @@ object PrinterTexts {
         val named = listOfNotNull(text("vendor"), text("name")).joinToString(" ")
         if (named.isNotBlank()) return named
         val id = (view["id"] as? JsonPrimitive)?.let { it.intOrNull?.toString() ?: it.contentOrNull }
-        return if (id.isNullOrBlank()) "The spool" else "spool #$id"
+        return if (id.isNullOrBlank()) "The spool" else "Spool #$id"
     }
 }

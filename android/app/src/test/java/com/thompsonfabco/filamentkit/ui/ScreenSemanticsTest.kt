@@ -370,7 +370,7 @@ open class ScreenSemanticsTest {
         host("Printers") { PrintersScreen(vm, onOpen = {}, onPairAgain = {}) }
         auditAllFour("Bambu Lab P1S")
         // the set-up printers with their status words and fix lines, the group of found ones, and the Klipper button
-        for (shown in listOf("Workshop X1", "Garage Voron", "Study A1 mini", "Found on the network".uppercase(), "Add a Klipper printer")) {
+        for (shown in listOf("Workshop X1", "Garage Voron", "Study A1 mini", "Found on the network".uppercase(), "Add a printer")) {
             rule.onNodeWithText(shown, substring = true).assertExists()
         }
         rule.onNodeWithText("The printer did not accept the Access Code. Enter the Access Code again.").assertExists()

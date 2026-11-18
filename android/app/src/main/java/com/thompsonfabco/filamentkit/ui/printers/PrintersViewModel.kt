@@ -60,7 +60,7 @@ data class SlotLook(val hex: String, val empty: Boolean, val waiting: Boolean = 
     val drawnEmpty: Boolean get() = empty && !(waiting && swatchColor(hex) != null)
 }
 
-/** "Add Bambu Lab <model>": the form for a printer the Hub found. */
+/** "Add Bambu Lab <model>": the form for a printer the Hub found. [guided]: opened from the guide, so Back returns to it. */
 data class AddDialog(
     val serial: String,
     /** The model's name; null when the Hub does not know it. */
@@ -69,6 +69,7 @@ data class AddDialog(
     val busy: Boolean = false,
     val codeMissing: Boolean = false,
     val problem: Problem? = null,
+    val guided: Boolean = false,
 )
 
 /** The "Add a Klipper printer" form; the typed fields live in the form, only the outcome is kept here. */
@@ -83,7 +84,35 @@ data class KlipperDialog(
     val createdId: String? = null,
     val createdName: String = "",
     val keyProblem: Problem? = null,
+    val guided: Boolean = false,
 )
+
+/**
+ * The first step of the guided add (R82 section 5): which printer. The found list is the printers the Hub sees that are
+ * not set up plus what the Klipper search answered; [searching] is the "Looking…" while that search runs ([scanned] is
+ * null until it has answered).
+ */
+data class AddGuide(
+    val searching: Boolean = true,
+    val scanned: List<KlipperFound>? = null,
+    val problem: Problem? = null,
+)
+
+/** The question after an add: map the new printer's slots now? */
+data class MapOffer(val id: String, val name: String)
+
+/** One row of the guide's found list. */
+sealed interface GuideRow {
+    data class Known(val printer: Printer) : GuideRow
+    data class Scanned(val found: KlipperFound) : GuideRow
+}
+
+/** The found list of the guide: the printers the Hub sees first, then search answers that are not already among them. */
+fun guideRows(found: List<Printer>, scanned: List<KlipperFound>?): List<GuideRow> {
+    val known = found.map { GuideRow.Known(it) }
+    val seen = found.filter { it.family == "klipper" }.mapNotNull { (it.host ?: it.ip)?.takeIf { h -> h.isNotBlank() } }.toSet()
+    return known + scanned.orEmpty().filter { it.host !in seen }.map { GuideRow.Scanned(it) }
+}
 
 /** The "Find Klipper printers" sheet: [results] is null until a search has answered. */
 data class FindSheet(
@@ -105,6 +134,9 @@ data class PrintersUiState(
     val dialog: AddDialog? = null,
     val klipper: KlipperDialog? = null,
     val find: FindSheet? = null,
+    val guide: AddGuide? = null,
+    /** A printer was just added: "Map its slots now?" is asked once. */
+    val mapOffer: MapOffer? = null,
     /** The name of a printer just added: the screen says so once. */
     val added: String? = null,
     val unauthorized: Boolean = false,
@@ -167,21 +199,24 @@ class PrintersViewModel(
         }.awaitAll().filter { it.second.isNotEmpty() }.toMap()
     }
 
-    fun openAdd(p: Printer) = _state.update {
+    fun openAdd(p: Printer, guided: Boolean = false) = _state.update {
         it.copy(
             dialog = AddDialog(
                 serial = p.serial, model = p.shownModel,
                 name = if (p.name == p.serial) "" else p.name,
+                guided = guided,
             ),
+            guide = null,
         )
     }
 
     /** Closes the form and reloads, since the printer's state may have changed meanwhile. */
     fun cancelAdd() {
         // an add that is running cannot be taken back: the Hub is connecting to the printer (05-android-app 2.5, rule 2)
-        if (_state.value.dialog?.busy == true) return
+        val d = _state.value.dialog
+        if (d?.busy == true) return
         _state.update { it.copy(dialog = null) }
-        refresh()
+        if (d?.guided == true) openGuide() else refresh()
     }
 
     fun submitAdd(accessCode: String, name: String) {
@@ -198,7 +233,7 @@ class PrintersViewModel(
                 val p = backend.addPrinter(d.serial, code, name.trim().ifBlank { null })
                 settleLater()
                 if (p.state == "connected") {
-                    _state.update { it.copy(dialog = null, added = p.name) }
+                    _state.update { it.copy(dialog = null, added = p.name, mapOffer = MapOffer(p.id, p.name)) }
                     load()
                 } else {
                     _state.update { s -> s.copy(dialog = s.dialog?.copy(busy = false, problem = Problem.PrinterState(p.state))) }
@@ -208,15 +243,16 @@ class PrintersViewModel(
     }
 
     /** Opens the Klipper form; [host] and [port] are filled in when it comes from a search result or a found row. */
-    fun openAddKlipper(host: String = "", port: Int = DEFAULT_KLIPPER_PORT) = _state.update {
-        it.copy(klipper = KlipperDialog(host = host, port = port), find = null)
+    fun openAddKlipper(host: String = "", port: Int = DEFAULT_KLIPPER_PORT, guided: Boolean = false) = _state.update {
+        it.copy(klipper = KlipperDialog(host = host, port = port, guided = guided), find = null, guide = null)
     }
 
     fun cancelAddKlipper() {
         val k = _state.value.klipper
         if (k?.busy == true) return
         _state.update { it.copy(klipper = null) }
-        if (k?.createdId != null) refresh()
+        // a printer that is already added cannot be taken back to the guide: the list is read again instead
+        if (k?.guided == true && k.createdId == null) openGuide() else if (k?.createdId != null) refresh()
     }
 
     /**
@@ -266,7 +302,7 @@ class PrintersViewModel(
                         return@guard
                     }
                 }
-                _state.update { it.copy(klipper = null, added = shown) }
+                _state.update { it.copy(klipper = null, added = shown, mapOffer = MapOffer(id, shown)) }
                 load()
             }
         }
@@ -280,6 +316,51 @@ class PrintersViewModel(
             load()
         }
     }
+
+    // --- the guided add (R82 section 5, R83 section 6): which printer, its details, test then add, map its slots ---
+
+    private var guideJob: Job? = null
+
+    /** Step 1: opens the guide and looks for Klipper printers while the Hub's own found list is read again. */
+    fun openGuide() {
+        guideJob?.cancel()
+        _state.update { it.copy(guide = AddGuide(), find = null) }
+        guideJob = viewModelScope.launch {
+            launch { load() }
+            guard(onError = { p -> _state.update { s -> s.copy(guide = s.guide?.copy(searching = false, scanned = emptyList(), problem = p.takeUnless { it is Problem.FeatureOff })) } }) {
+                val found = backend.scanKlipper(null).filterNot { it.configured }
+                _state.update { it.copy(guide = it.guide?.copy(searching = false, scanned = found, problem = null)) }
+            }
+        }
+    }
+
+    fun closeGuide() {
+        guideJob?.cancel()
+        _state.update { it.copy(guide = null) }
+    }
+
+    /** "Use this" on a row of the found list: step 2 with its address, or its serial, filled in. */
+    fun useGuideRow(row: GuideRow) {
+        guideJob?.cancel()
+        when (row) {
+            is GuideRow.Known ->
+                if (row.printer.family == "klipper") {
+                    openAddKlipper(row.printer.host ?: row.printer.ip.orEmpty(), DEFAULT_KLIPPER_PORT, guided = true)
+                } else {
+                    openAdd(row.printer, guided = true)
+                }
+            is GuideRow.Scanned -> openAddKlipper(row.found.host, row.found.port, guided = true)
+        }
+    }
+
+    /** "None found" or not on the list: step 2 with an empty address. */
+    fun addByAddress() {
+        guideJob?.cancel()
+        openAddKlipper(guided = true)
+    }
+
+    /** The map question was answered. */
+    fun dismissMapOffer() = _state.update { it.copy(mapOffer = null) }
 
     fun openFind() = _state.update { it.copy(find = FindSheet()) }
 
