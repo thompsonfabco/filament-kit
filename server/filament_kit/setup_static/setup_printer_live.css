@@ -1,0 +1,51 @@
+/* The live printer view of the Printers section (R83 section 2 and 3). The view is its own container: the width it has, not the window's,
+   decides the layout, so it holds in the Panes look beside a list and on a phone alike. */
+.plive { container: plive / inline-size; display: grid; gap: var(--s3); min-width: 0; }
+.plive > * { min-width: 0; }
+.plive__state, .plive__camrow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); }
+.plive__job .status, .plive__alerts .status { white-space: normal; }
+.plive__alerts { display: grid; gap: var(--s1); }
+.plive__alerts:empty, .plive__notes:empty, .plive__locked:empty, .plive__controls:empty { display: none; }
+.plive__prog { display: flex; align-items: center; gap: var(--s3); }
+.plive__prog > .progress { flex: 1 1 auto; min-width: 0; }
+.plive__pct { flex: none; }
+.plive__detail, .plive__temps, .plive__msg { margin: 0; overflow-wrap: anywhere; }
+.plive__controls { flex-wrap: wrap; }
+.plive__controls .btn, .plive__actions .btn { white-space: normal; }
+.plive__group { display: grid; gap: var(--s2); min-width: 0; }
+.plive__title, .plive__unittitle { margin: 0; font-size: var(--fs-b); font-weight: var(--fw-title); }
+.plive__unit { display: grid; gap: var(--s2); }
+/* the camera */
+.plive__cam { min-width: 0; }
+.plive__img, .plive__video { display: block; width: 100%; max-width: 100%; height: auto; border-radius: var(--r); background: var(--surface-2); }
+.plive__camtext { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); padding: var(--s3); border-radius: var(--r); background: var(--surface-2); }
+.plive__camtext > p { margin: 0; flex: 1 1 calc(var(--s7) * 3); }
+/* a slot: label, swatch, what is in it, how much, in use, its three actions, and under them the last result */
+.plive__slot { grid-template-columns: calc(var(--s6) - var(--s1) / 2) calc(var(--s4) + var(--s1) / 2) minmax(0, 1fr) auto auto auto; }
+.plive__what { display: grid; min-width: 0; overflow-wrap: anywhere; }
+.plive__waiting { color: var(--muted); font-size: var(--fs-s); }
+.plive__slot[data-state="waiting"] .swatch { outline: calc(var(--hairline) * 2) dashed var(--text); outline-offset: var(--hairline); }
+.plive__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--s1) var(--s2); }
+.plive__slotline { grid-column: 1 / -1; }
+.plive__slotline:empty, .plive__used > .result:empty { display: none; }
+.plive__lines { display: grid; gap: var(--s1); }
+/* Filament used */
+.plive__usage { display: grid; margin: 0; padding: 0; list-style: none; }
+.plive__used { display: grid; grid-template-columns: calc(var(--s7) + var(--s4)) minmax(0, 1fr) auto auto; align-items: center; gap: var(--s1) var(--s3);
+               padding: var(--s2) 0; border-top: var(--hairline) solid var(--border); }
+.plive__usage > .plive__used:first-child { border-top: 0; }
+.plive__used[data-state="undone"] { color: var(--muted); }
+.plive__from { grid-column: 2 / 4; overflow-wrap: anywhere; }
+.plive__used > .result { grid-column: 1 / -1; }
+.plive__picks { display: grid; gap: var(--s1); margin-top: var(--s2); max-height: calc(var(--s7) * 5); overflow: auto; }
+.plive__pick { justify-content: flex-start; text-align: left; white-space: normal; }
+.plive__pick[aria-pressed="true"] { border-color: var(--accent-text); }
+@container plive (max-width: 560px) {
+  .plive__slot { grid-template-columns: calc(var(--s6) - var(--s1) / 2) calc(var(--s4) + var(--s1) / 2) minmax(0, 1fr) auto; }
+  .plive__slot > .slot-strip__use { grid-column: 3 / -1; }
+  .plive__slot > .slot-strip__use:empty { display: none; }
+  .plive__actions { grid-column: 1 / -1; justify-content: flex-start; }
+  .plive__used { grid-template-columns: auto minmax(0, 1fr); }
+  .plive__used > .plive__when, .plive__from { grid-column: 1 / -1; }
+  .plive__used > .btn { grid-column: 1 / -1; justify-self: start; }
+}
