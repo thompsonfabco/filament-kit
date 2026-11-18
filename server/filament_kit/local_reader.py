@@ -27,6 +27,12 @@ The items have the cloud reader's shape (intake.ITEM_PROPS); intake.py does all 
 The kit sends no order history, prices, comments or spool data. `local_intake.url` may name another machine (the
 GPU tier wants a GPU the kit server usually lacks); an optional bearer token (`<etc>/local_intake_token`) protects
 that link, and it is sent on reads only, never logged.
+
+HTTPS (R82 section 2 point 6): a reader on another machine is to be at an https address. The Hub pins its certificate
+at Test (`test`: trust on first use, the fingerprint in the result) and every call after that accepts only that
+certificate (a changed one: `LocalReaderError("cert_changed")`; Test again with `trust=True` takes the new one). The
+reader's own repository has to serve HTTPS first (R82 section 10 point 6), so until `ENFORCE_HTTPS` is switched on
+an `http://` address on another machine is accepted as it always was and `https_row` gives the Checks row.
 """
 from __future__ import annotations
 
@@ -39,7 +45,7 @@ import urllib.error
 import urllib.request
 from urllib.parse import quote, urlparse
 
-from . import config
+from . import config, station_client
 
 DEFAULT_URL = "http://127.0.0.1:7915"
 API_MAJOR = 1                    # the reader API major version this kit speaks; any 1.x is accepted
@@ -55,12 +61,18 @@ FEEDBACK_TIMEOUT = 30            # list, add, delete: the reader strips and shri
 BUNDLE_TIMEOUT = 120
 BUNDLE_CAP = 40 * 1048576        # the reader's own bundle limit is 25 MB; more than this is not a bundle of ours
 SUBMIT_TIMEOUT = 600             # the upload plus the reader's proof of work (a few seconds of CPU, more on a slow box)
+ENFORCE_HTTPS = False            # True once the reader serves HTTPS: an http:// address on another machine is then refused
+TEXT_NEEDS_HTTPS = "A Label Reader on another machine needs an https address."
+TEXT_NOT_HTTPS_ROW = "The Label Reader at {address} is not using HTTPS."
+TEXT_CERT_CHANGED = "The Label Reader at {address} presents a different certificate than the one the Hub trusts."
+TEXT_CERT_FIX = "Press Test in Settings > Label Reader to trust the new certificate."
+PIN_KIND = "reader"
 FORBIDDEN_FIELDS = ("endpoint", "feedback_endpoint", "url", "address")     # never in a request body (plan section 8)
 
 
 class LocalReaderError(Exception):
     """The local reader could not answer. `code`: unreachable | bad_answer | version | refused | unauthorized |
-    busy | tier_unavailable | revise_unsupported."""
+    busy | tier_unavailable | revise_unsupported | cert_changed | needs_https."""
 
     def __init__(self, code: str, message: str):
         super().__init__(message)
@@ -95,7 +107,25 @@ def check_url(url: str) -> str | None:
         return "The port in the reader's address must be a number from 1 to 65535"
     if u.path not in ("", "/") or u.query or u.fragment:
         return "Give only the reader's address (scheme, host, port), no path"
+    if ENFORCE_HTTPS and needs_https(url):
+        return TEXT_NEEDS_HTTPS
     return None
+
+
+def _loopback(host: str | None) -> bool:
+    return (host or "").lower() in ("127.0.0.1", "localhost", "::1")
+
+
+def needs_https(url: str) -> bool:
+    """An `http://` address that is not this machine's own (127.0.0.1): what R82 refuses once the reader serves HTTPS."""
+    u = urlparse(str(url or "").strip())
+    return u.scheme == "http" and bool(u.hostname) and not _loopback(u.hostname)
+
+
+def https_row(cfg: dict) -> str | None:
+    """The Checks row for a reader on another machine at an http address (TEXT_NOT_HTTPS_ROW), else None."""
+    url = settings(cfg)["url"]
+    return TEXT_NOT_HTTPS_ROW.format(address=urlparse(url).netloc) if needs_https(url) else None
 
 
 def write_token(token: str):
@@ -190,12 +220,46 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 _OPENER = urllib.request.build_opener(_NoRedirect)
 
 
+class _PinHandler(urllib.request.HTTPSHandler):
+    """https:// through a connection pinned to `fp` (station_client.PinnedConnection); with `fp` None the certificate
+    met is left in `seen` for the caller to keep (trust on first use)."""
+
+    def __init__(self, fp: str | None):
+        super().__init__()
+        self.fp, self.seen, self._conn = fp, None, None
+
+    def https_open(self, req):
+        def make(host, timeout=None, **_ignored):
+            self._conn = station_client.PinnedConnection(host, None, self.fp, timeout)
+            return self._conn
+        try:
+            return self.do_open(make, req)
+        finally:
+            self.seen = getattr(self._conn, "seen", None)
+
+
+def _origin(url: str) -> str:
+    u = urlparse(url)
+    return f"{u.scheme.lower()}://{(u.hostname or '').lower()}:{u.port or (443 if u.scheme.lower() == 'https' else 80)}"
+
+
+def _opener_for(url: str):
+    """(opener, pin handler or None): plain for http, a pinned one for https."""
+    if urlparse(url).scheme.lower() != "https":
+        return _OPENER, None
+    h = _PinHandler(station_client.pin_get(PIN_KIND, _origin(url)))
+    return urllib.request.build_opener(_NoRedirect, h), h
+
+
 def _request(url: str, *, body: dict | None, timeout: float, auth: bool = False, method: str | None = None,
              errors: dict | None = None, raw_cap: int | None = None) -> dict | bytes:
     """One call. `method` defaults to GET without a body, POST with one. `errors`: {reader error code or HTTP status:
     (kind, text)} tried before the generic mapping (the feedback calls' own words). `raw_cap`: the answer is bytes
     (a download) of at most that many, else `too_large`; without it the answer is a JSON object."""
+    if ENFORCE_HTTPS and needs_https(url):
+        raise LocalReaderError("needs_https", TEXT_NEEDS_HTTPS)
     _reachable(url)
+    opener, pin = _opener_for(url)
     data = None if body is None else json.dumps(body).encode("utf-8")
     headers = {"Accept": "application/json" if raw_cap is None else "*/*",
                **({"Content-Type": "application/json"} if body is not None else {})}
@@ -207,7 +271,7 @@ def _request(url: str, *, body: dict | None, timeout: float, auth: bool = False,
         req = urllib.request.Request(url, data=data, method=method or ("GET" if body is None else "POST"),
                                      headers=headers)
         try:
-            with _OPENER.open(req, timeout=max(1.0, deadline - time.monotonic())) as resp:  # noqa: S310
+            with opener.open(req, timeout=max(1.0, deadline - time.monotonic())) as resp:  # noqa: S310
                 if raw_cap is None:
                     raw = resp.read()
                 else:
@@ -215,6 +279,8 @@ def _request(url: str, *, body: dict | None, timeout: float, auth: bool = False,
                     if len(raw) > raw_cap:
                         raise LocalReaderError("too_large", f"the local reader's download is over {raw_cap // 1048576} "
                                                             "MB: not fetched")
+            if pin is not None and pin.fp is None and pin.seen:
+                station_client.pin_set(PIN_KIND, _origin(url), pin.seen)    # trust on first use
             break
         except urllib.error.HTTPError as e:
             code, msg = _error_of(e.read() or b"")
@@ -242,6 +308,9 @@ def _request(url: str, *, body: dict | None, timeout: float, auth: bool = False,
             raise LocalReaderError(kind, what) from None
         except (urllib.error.URLError, http.client.HTTPException, OSError) as e:
             reason = getattr(e, "reason", None) or e
+            if isinstance(reason, station_client.PinMismatch):
+                raise LocalReaderError("cert_changed", f"{TEXT_CERT_CHANGED.format(address=urlparse(url).netloc)} "
+                                                       f"{TEXT_CERT_FIX}") from None
             raise LocalReaderError("unreachable", f"the local reader at {urlparse(url).netloc} does not answer "
                                                   f"({reason})") from None
     if raw_cap is not None:
@@ -387,6 +456,29 @@ def health(cfg: dict, timeout: float = HEALTH_TIMEOUT) -> dict:
         out["ok"], out["error"] = False, ("the local reader needs a token: set it on the setup page (Settings, Local "
                                           "label reader) or with sudo spoolwarden local-intake token")
     return out
+
+
+def test(cfg: dict, timeout: float = HEALTH_TIMEOUT, trust: bool = False) -> dict:
+    """Settings > Label Reader's Test: `health(cfg)` plus `https` (bool), `fp` (the certificate's SHA-256 the reader
+    presents, to show beside the result; None for http) and `pin`: "new" (kept now: trust on first use), "same",
+    "changed" (not the one kept: the result says so and `trust=True` keeps the new one) or "replaced" (it was changed
+    and `trust` took it). For an http address on another machine `warning` holds TEXT_NOT_HTTPS_ROW (once
+    ENFORCE_HTTPS is on, `error` holds TEXT_NEEDS_HTTPS). Never raises."""
+    u = urlparse(settings(cfg)["url"])
+    out: dict = {"fp": None, "pin": None, "https": u.scheme == "https", "warning": https_row(cfg)}
+    if u.scheme == "https" and u.hostname:
+        key = _origin(settings(cfg)["url"])
+        known = station_client.pin_get(PIN_KIND, key)
+        try:
+            seen = station_client.peer_fingerprint(u.hostname, u.port or 443, CONNECT_TIMEOUT)
+        except OSError:
+            seen = None         # health below says it does not answer
+        if seen:
+            out["fp"] = seen
+            if known is None or (known != seen and trust):
+                station_client.pin_set(PIN_KIND, key, seen)
+            out["pin"] = "new" if known is None else "same" if known == seen else "replaced" if trust else "changed"
+    return {**health(cfg, timeout), **out}
 
 
 def catalog(fils: list[dict], vendors: list[dict], line_of) -> tuple[list[dict], list[dict]]:

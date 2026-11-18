@@ -62,7 +62,7 @@ class PinnedConnection(http.client.HTTPSConnection):
     With `fp` None every certificate is taken and its fingerprint is left in `.seen` (trust on first use: the caller
     decides what to keep)."""
 
-    def __init__(self, host: str, port: int, fp: str | None, timeout: float):
+    def __init__(self, host: str, port: int | None, fp: str | None, timeout: float):
         super().__init__(host, port, timeout=timeout, context=_context())
         self.fp, self.seen = fp, None
 
