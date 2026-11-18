@@ -300,7 +300,8 @@ def change_port(text, *, run=None, root=None, state=port_state) -> list[str]:
 
 def _main(argv: list[str]) -> int:
     """`state PORT` prints free, taken or unsure. `check PORT [change]` exits 0 for a usable port (and prints it), else
-    1 with the reason on standard error. `next PORT` prints the first free port from PORT."""
+    1 with the reason on standard error. `next PORT` prints the first free port from PORT. `offer remote|plain` and `station-offer hub|alone` print
+    "<kind> <port>" (see `offer`): the installer's first-install decision."""
     if len(argv) >= 2 and argv[0] == "state" and parse_port(argv[1]):
         print(port_state(int(argv[1])))
         return 0
@@ -311,13 +312,20 @@ def _main(argv: list[str]) -> int:
             return 1
         print(n)
         return 0
+    if len(argv) == 2 and argv[0] == "offer" and argv[1] in ("remote", "plain"):
+        print(*offer(argv[1] == "remote"))
+        return 0
+    if len(argv) == 2 and argv[0] == "station-offer" and argv[1] in ("hub", "alone"):
+        print(*station_offer(argv[1] == "hub"))
+        return 0
     if len(argv) >= 2 and argv[0] == "next" and parse_port(argv[1]):
         n = next_free(int(argv[1]))
         if n is None:
             return 1
         print(n)
         return 0
-    print("usage: python -I -m filament_kit.hubport state PORT | check PORT [change] | next PORT", file=sys.stderr)
+    print("usage: python -I -m filament_kit.hubport state PORT | check PORT [change] | next PORT | offer remote|plain | "
+          "station-offer hub|alone", file=sys.stderr)
     return 2
 
 
