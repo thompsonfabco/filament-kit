@@ -754,7 +754,7 @@ alone.
 | "Move" | A menu with the same entries as the Location select of 4.5, in fill order, each with how full it is (a full one stays choosable and shows "Full"; an Individual containers location is one entry; it sends the set's `name` and gives the lowest free container, and a container the person picks sends its `containers[].name`; the spool's current place is found by matching its location text as in 4.5, and a text that matches nothing is shown as it is, under no location); choosing one moves it at once; inline result "Moved to Dry box 1." and the toast of 3.9 with "Undo" for 10 s. |
 | "Print a label" | Opens the web app's print page, `/intake/labels?ids=<spool id>&size=62x29`, in a new tab: the size choice ("62 x 29 mm", "50 x 30 mm", "Sheet of 24"), the preview of the label (`02-components.md` 7.13, drawn by the Hub: GET `spools/<id>/label.svg`, 14), the one line about the printed address and **Print**, which opens the browser's own print dialog; all as `03-hub-page.md` 16.5 gives them. It changes nothing, so it asks for nothing and leaves no event. |
 | "Mark empty" | Kept apart at the end (danger outline). Sheet "Mark spool 214 empty?" ("Polymaker PolyTerra PLA Charcoal Black will be marked as used up." · "Cancel" · "Mark empty", danger). Result "Marked empty." and the toast "Marked Polymaker PETG Teal (77) empty." with "Undo" (3.9). |
-| "Load into a printer" | Printers Feature on. A step list in the sheet: "Load into which printer?" (one row per printer with state), then "Which slot on Workshop X1?" (one row per slot with its current spool), then the automatic preview and "Load", exactly as the load sheet of 6.5. Endpoints: GET `printers`, GET `printers/<id>/state`, POST `printers/<id>/slots/<slot>/load`. |
+| "Load into a printer" | Printers Feature on. A step list in the sheet: "Load into which printer?" (one row per printer with state), then "Which slot on Workshop X1?" (when the printer's `auto_possible` is true, "Automatic" first, with the hint "The slot where the spool appears." and preselected; then one row per slot with its current spool; the person who wants a certain slot picks it, as before), then the automatic preview and "Load", exactly as the load sheet of 6.5. With "Automatic" the preview is the one of 6.5's Load a spool sheet, and the result is the Auto notice of 6.5 on that printer's page. A printer that cannot do it shows its slots alone. Endpoints: GET `printers`, GET `printers/<id>/state`, POST `printers/<id>/slots/<slot>/load`, and for "Automatic" POST `printers/<id>/slots/auto/load`. |
 
 **Latest events.** Under the actions the sheet lists the spool's last ten events, newest first, each with the time (`--mono`),
 who and what, in the Hub's own words ("Moved Bambu Lab PETG HF Orange (212) to Shelf B."). Title "Latest events"; empty:
@@ -856,6 +856,7 @@ card (2.3). When the list opens without an address naming a printer, the printer
 | Workshop X1                              |
 | Bambu Lab X1 Carbon . 192.0.2.40         |
 | (o) Connected                            |
+| [ Load a spool ]                         |
 |------------------------------------------|
 | (*) Printing: Benchy                     |
 | [============-----------------]  42 %    |
@@ -867,6 +868,9 @@ card (2.3). When the list opens without an address naming a printer, the printer
 | [ Show camera ]                          |
 |------------------------------------------|
 | Slots                                    |
+| (i) Waiting for eSUN ABS+ White to be    |
+|     loaded into any slot of Workshop X1. |
+|     [ Stop waiting ]                     |
 | AMS A . AMS 2 Pro                        |
 | A1 [#] Polymaker PolyTerra PLA     In use|
 |        Charcoal Black . 620 g left       |
@@ -882,6 +886,9 @@ card (2.3). When the list opens without an address naming a printer, the printer
 | Printer settings                         |
 +------------------------------------------+
 ```
+
+The header holds the printer's name, its facts, the connection badge and, under them, the default button "Load a spool"
+(6.5), shown while the printer is connected.
 
 Sections in this order, each a group: status (6.3), controls and camera (6.4), Slots (6.5), Filament used (6.6), Slot
 mapping (6.7), Printer settings (6.8). The back link "Printers" (chevron) sits above the title on phones; on tablets
@@ -950,6 +957,43 @@ One group per unit, headed "<label> · <type>" (for example "AMS A · AMS 2 Pro"
 
 Empty: "The printer reports no slots." Results of load, unload and clear appear in a line under that slot's row.
 
+**Auto.** A spool can be assigned to the printer with no slot named: the Hub watches the slots it can (the printer's
+`auto_possible` is true when two or more slots are watchable, each slot's `watchable` says which) and, when a spool
+shows up in one, loads the assigned spool there exactly as a named load would. A slot with a spool recorded gives that
+spool back where it was, as every load does; a slot whose own tag names its spool, and the slot that feeds a running
+print, are not chosen. A printer has at most one Auto assignment; a new one replaces the old one. It ends when no slot
+changes for 15 minutes, on "Stop waiting", when the same spool is loaded into a named slot anywhere, when a new one
+replaces it, when the printer is removed and when the Hub restarts. On a Klipper printer that is printing the slot is
+still noticed and the load is sent when the printer allows it.
+
+While the printer has an Auto assignment (`auto` in its status), the Slots group starts with one notice block
+(02-components 7.5, 8.6), above the first unit:
+- `auto.state` "waiting": the info line "Waiting for Polymaker PolyTerra PLA Charcoal Black to be loaded into any slot
+  of Workshop X1." and the default button "Stop waiting" at its end (on phones under the text). POST
+  `printers/<id>/auto/cancel`; the line under the notice says "Stopped waiting for Polymaker PolyTerra PLA Charcoal
+  Black."
+- `auto.state` "choose": the warn line "Two slots were loaded. Which one got Polymaker PolyTerra PLA Charcoal Black?"
+  with one default button per label of `auto.slots` ("A2", "A3"; each `--ctl` high) and "Stop waiting". A slot button
+  sends POST `printers/<id>/auto/choose` `{slot}` and the answer is the one of a named load into that slot (the
+  slot's line says "Loaded into A2.").
+When the assignment ends the notice goes away without a word. A refusal (409 `nothing_to_choose` or `not_waiting`) shows
+the Hub's text in the line under the notice.
+
+**Load a spool** (the header button) opens the sheet "Load a spool", the Load sheet below with the spool first and the
+slot second:
+- Step 1, the spool: "Use the last tapped tag", "or", and the search, as in the Load sheet.
+- Step 2, "Which slot on Workshop X1?": when `auto_possible` is true, "Automatic" first with the hint "The slot where
+  the spool appears.", preselected; then one choice per slot with its current spool. A printer that cannot do Automatic
+  lists the slots alone, with the first one preselected.
+- The plan runs by itself after the pick. For "Automatic" its lines are "Load <spool> into any slot of <printer>",
+  "Watching: A1, A2, A3, A4" and, when one is waiting, "Replaces <spool>, which was waiting."; for a slot, the lines of
+  the Load sheet. The refusal "This printer has no slots the Hub can watch. Choose a slot." shows as an octagon line,
+  and the choice moves to the first slot. POST `printers/<id>/slots/auto/load` `{spool_id, dry_run: true}`, then with
+  `dry_run: false` on "Load".
+- After "Load" with "Automatic" the sheet closes and the notice above shows, with the Hub's `message` ("Waiting for
+  <spool> to be loaded into any slot of <printer>.") as the result line under the header button.
+The per-slot "Load" button keeps the Load sheet below: it names the slot.
+
 **Unload and Clear slot** mean two things. "Clear slot" is "the Hub forgets which spool is in this slot": for a spool the
 Hub does not know, or a record that is simply wrong. "Unload" is "I took this spool out". Both, in this order: a spool
 waiting for the slot is no longer waiting; the spool recorded there goes back where it was before it was loaded; on a
@@ -1003,7 +1047,9 @@ A3."); when a
 waiting assignment ended too: "No spool is waiting for A3 any more."; on a Bambu Lab printer, where `printer_cleared`
 is always false: "The printer still shows the old filament for this slot until a spool is loaded."
 
-After an unload and after a clear, the toast of 3.9 ("Unloaded eSUN ABS+ White from A3.", "Cleared slot A3.") carries "Undo" too.
+After an unload and after a clear, the toast of 3.9 ("Unloaded eSUN ABS+ White from A3.", "Cleared slot A3.") carries
+"Undo" too. The load that an Auto assignment makes is a load like any other: the page shows the slot's line "Loaded into
+A2." and the toast of 3.9 with "Undo".
 
 ### 6.6 Filament used
 
@@ -1880,6 +1926,7 @@ right column is left out or falls back as described there.
 | New wording in the Hub's own texts: the refusal page (11.1); the `no_preset` refusal ("Slicer presets" instead of "the Presets tab"); the busy-stream text; "internal error (see the server log)"; the sign-in page's title and the command it names | 6.4, 11 | Today's wording appears in those places |
 | The sign-in page served with the web app's stylesheet instead of styles inside the page | 11.2 | Today's look on that page |
 | Optional: the printers list with job progress and slots, so the list needs one request | 6.1 | One state request per printer every 10 s |
+| Auto as the slot choice: the printer answers of `GET api/printers` and `GET api/printers/{id}` with `auto_possible: bool`, each slot with `watchable: bool` and, on the one printer, `auto: {spool_id, spool: {id, name, material, color_hex}, state: "waiting" or "choose", slots?: [<labels to choose from>], text, expires_at}?`; the twins `POST printers/{id}/slots/auto/load` (`{spool_id, dry_run}`; dry run `{auto: true, watching: [<labels>], replaces?: {spool_id, name}, dry_run: true}`, real `{auto: true, pending: true, confirmed: null, expires_in: 900, message}`, 409 `{error: "auto_not_possible", text}`), `POST printers/{id}/auto/choose` (`{slot}`; the answer of a named load into that slot, 409 `{error: "nothing_to_choose", text}`) and `POST printers/{id}/auto/cancel` (`{cancelled: true}`, 409 `{error: "not_waiting", text}`); each passes the kit route on unchanged, with the guards the neighbouring twins have; `auto` is a reserved slot label | 5.4, 6.2, 6.5 | No "Automatic", no "Load a spool" in the header, no notice and no choice; a slot is chosen by hand |
 | Web twins, under the web app's own base, that pass the Hub's routes of events and alerts on (the web unit reads them through its token; it opens no file of the Hub): `GET events?since=&since_at=&alert=&wait=&kinds=&limit=` (the events, `next`, `oldest`, `gap` and the raised `conditions`, each with `alert`, built `title` and `text`, and `action: {place, id}`), `GET spools/low` (`{threshold_g, spools: [{id, filament, material, color, remaining_g, location, in_stock, last_one}]}`), and for completeness `GET alerts`, `GET storage-use` and `POST alerts/test`, which the web app does not use (its test button keeps today's push test); the web unit's own hand-over of spool events to the Hub (`POST api/events/web`) is not a route of the web app | 3.8, 5.5, 9.2 | No alert banners, toast or Alerts list; no Running low chip; the Alerts panel keeps today's push switch and test button |
 | The Hub screen: a twin of the kit route `GET api/hub` under the web app's own base (`GET hub`), answering `{name, version, newest: {version, checked_at}?, update_available, checks: [{group, state: "ok", "look", "note" or "off", text, fix?}], getting_started: {done, total, hidden, finished}, features: [{id, name, on}], catalog: {version?, checked_at?}, backup: {last_at?, nightly}, reader: {engine, key_set}, devices: [{name, kind, version?, last_seen?, out_of_date, this}], records_kept, spoolman_url?, hub_page?}`; `hub_page` and `spoolman_url` are built from the host the caller used and are absent where the thing cannot be reached | 5.6, 9.1, 9.3 | No Hub screen, no Getting started line and no Open Spoolman; "Open the Hub page" uses the page attribute |
 | Twins for the catalog form and for adding a printer: `GET library/local`, `POST library/local` (the form's values; 400 `{error: "invalid_entry", problems: [{field, text}]}`), `POST library/local/{id}/remove`, `POST printers/scan` with `{subnet?}` and `POST printers/{id}/slots/{label}/clear` (`{dry_run}`; answers `{slot, spool?, moved_back?, waiting_ended, printer_cleared, dry_run}`, and `event_id`, absent on a dry run); each passes the kit route on unchanged, with the guards the neighbouring twins have; the unload answer gains `waiting_ended` | 6.5, 6.9, 8 | No form and no list under Slicer presets; "Search" and "Clear slot" are not offered |

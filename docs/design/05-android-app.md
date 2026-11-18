@@ -1008,8 +1008,8 @@ summary row is pinned at the top of each step.
 | Step | Route | Content |
 |---|---|---|
 | 1. Printer | `spools/{id}/load` | Header "Which printer?". One row per configured printer: status shape and word, name, model. Printers that cannot take a load now (offline, wrong Access Code) are shown disabled with the reason as the supporting line ("Offline"). Skipped when exactly one printer can take the load; step 2 then shows "Printer: Workshop X1". Loading: "Loading printers…" skeleton rows. Empty: "No printers are set up yet. Add one under Printers." with the text button "Open Printers". |
-| 2. Slot | `spools/{id}/load/{printerId}` | Header "Which slot on Workshop X1?". The printer's slots grouped by unit ("AMS A", "Toolhead"): one row per slot: slot label in `--mono` (as the Hub names it: "A2", "T0"), swatch, and the line "<material> · <spool name> · <percent> %" ("PETG · Bambu Lab PETG HF Orange · 88 %"); parts the printer or the inventory does not give are left out with their separator ("PLA" for filament linked to no spool); an empty slot reads "Empty" with the dashed swatch; a slot a spool is waiting for (Bambu Lab) shows that spool's colour with the dashed ring and the line "Waiting for the spool to load in <slot>."; the active slot adds " · in use". A printer problem, when there is one, as a notice line at the top with its fix text. "The printer reports no slots." when empty. Loading: "Loading slots…". |
-| 3. Preview | `spools/{id}/load/{printerId}/{slot}` | On entry the app asks for a dry run ("Checking…"). Header "Load into Workshop X1, slot A2?". The Hub's preview lines as rows (preset, nozzle, where the spool now in the slot goes back to). The text "This sets the slot on the printer and moves the spool there in the inventory." Buttons "Back" (outlined) and "Load" (main; "Loading…" with a spinner). |
+| 2. Slot | `spools/{id}/load/{printerId}` | Header "Which slot on Workshop X1?". When the printer's `auto_possible` is true, the first row is "Automatic" with the supporting line "The slot where the spool appears.", and it is preselected; a printer that cannot do it lists the slots alone. A person who wants a certain slot taps it, as before. Then the printer's slots grouped by unit ("AMS A", "Toolhead"): one row per slot: slot label in `--mono` (as the Hub names it: "A2", "T0"), swatch, and the line "<material> · <spool name> · <percent> %" ("PETG · Bambu Lab PETG HF Orange · 88 %"); parts the printer or the inventory does not give are left out with their separator ("PLA" for filament linked to no spool); an empty slot reads "Empty" with the dashed swatch; a slot a spool is waiting for (Bambu Lab) shows that spool's colour with the dashed ring and the line "Waiting for the spool to load in <slot>."; the active slot adds " · in use". A printer problem, when there is one, as a notice line at the top with its fix text. "The printer reports no slots." when empty. Loading: "Loading slots…". |
+| 3. Preview | `spools/{id}/load/{printerId}/{slot}` | On entry the app asks for a dry run ("Checking…"). Header "Load into Workshop X1, slot A2?". The Hub's preview lines as rows (preset, nozzle, where the spool now in the slot goes back to). The text "This sets the slot on the printer and moves the spool there in the inventory." Buttons "Back" (outlined) and "Load" (main; "Loading…" with a spinner). With "Automatic" the route's `{slot}` is `auto`, the header is "Load into Workshop X1, any slot?", the rows are "Load <spool> into any slot of Workshop X1", "Watching: A1, A2, A3, A4" and, when one is waiting, "Replaces <spool>, which was waiting.", and the text is "The Hub watches the printer's slots and loads the spool into the one where a spool appears." (`POST api/printers/{id}/slots/auto/load` with `dry_run`). The refusal "This printer has no slots the Hub can watch. Choose a slot." is a `bad` notice and "Back" returns to the slot step. |
 
 While the load is being written Back is ignored (2.5 rule 2). Results:
 
@@ -1018,6 +1018,7 @@ While the load is being written Back is ignored (2.5 rule 2). Results:
 | Loaded | The load stack closes; the spool screen's result line shows "Loaded into Workshop X1, slot A2." and the snackbar "Loaded Bambu Lab PETG HF Orange (212) into A2 of Workshop X1." carries "Undo" (7.9) |
 | Accepted, not shown yet | Same, with a `warn` result line: "The printer accepted it but hasn't shown the change yet." |
 | Waiting (the answer says `pending`) | The load stack closes; the result line is an `info` line: "Waiting for the spool to load in <slot>." The slot shows the waiting state (9.5) until the printer shows the load |
+| Waiting for any slot (Automatic; the answer says `auto: true` and `pending`) | The load stack closes; the result line is an `info` line with the Hub's `message`: "Waiting for <spool> to be loaded into any slot of <printer>." The printer screen shows the notice of 9.5 until a slot gets a spool, "Stop waiting" is pressed, or 15 minutes pass |
 | Connection lost during the write | The step stays open with a `bad` notice: "The connection dropped while loading, so the app can't tell if it worked. Check the printer's slot and the spool's location before trying again." Buttons "Open the printer" and "Done". |
 | Refused | `bad` notice with the Hub's or printer's reason; for a pairing refusal: "Not loaded: the Hub did not accept this phone's pairing at that moment. Nothing was changed." |
 
@@ -1232,6 +1233,9 @@ autoplays sound.
 | +----------------------------------+ |
 |                                      |
 | Slots                                |
+|  (i) Waiting for eSUN ABS+ White to  |
+|      be loaded into any slot of      |
+|      Workshop X1.     [Stop waiting] |
 |  AMS A                               |
 |  A1 [sw] PLA · PolyTerra Charcoal    |
 |          Black   [=====---] 62 %   > |
@@ -1299,13 +1303,16 @@ screen in landscape with a close button.
 **Slots panel** (9.5). **Slot mapping panel** (9.7). **Filament used panel** (9.10, with By month and Download as CSV). A final row "Printer settings"
 with a chevron opens 9.9.
 
-TalkBack order: back, title, connection, appearance, More actions; state line, progress (one node: "Printing
-benchy.3mf, 42 percent, layer 120 of 284, 1 hour 12 minutes left"), temperatures, alerts, controls (Pause, Turn the
-light off, Stop print), camera (Hide, picture), each slot row, Slot mapping, Filament used, Printer settings.
+TalkBack order: back, title, connection, appearance, More actions; state line, progress (one node: "Printing benchy.3mf,
+42 percent, layer 120 of 284, 1 hour 12 minutes left"), temperatures, alerts, controls (Pause, Turn the light off, Stop
+print), camera (Hide, picture), the Auto notice and its buttons, each slot row, Slot mapping, Filament used, Printer
+settings.
 
 ### 9.5 Slots panel
 
-Title "Slots". One group per unit, titled by the unit ("AMS A", "AMS HT A", "Toolhead"). One row per slot
+Title "Slots". While the printer has an Auto assignment (`auto` in the printer's status: a spool the Hub loads into
+whichever watched slot gets a spool next), the panel starts with its notice, above the first unit. One group per unit,
+titled by the unit ("AMS A", "AMS HT A", "Toolhead"). One row per slot
 (`ListItem` minimum height): slot label in `--mono` (fixed `slot-label` column), swatch, headline "<material> · <spool name>" or "Empty"
 (dashed swatch), supporting "<n> g left" with a level bar, and the tag "In use" for the active slot. Slot messages
 from the Hub follow the group as `info` lines.
@@ -1321,6 +1328,20 @@ Tapping a row opens the **slot sheet** (`ModalBottomSheet`):
 
 A waiting slot's row has that spool's colour in the swatch with a dashed ring and, in place of the level bar, the line
 "Waiting for the spool to load in A2."
+
+**The Auto notice** is an `info` notice line with a text button, placed above the first unit; the printer has at most
+one Auto assignment, and a new one replaces the old one.
+- `auto.state` "waiting": "Waiting for Polymaker PolyTerra PLA Charcoal Black to be loaded into any slot of Workshop
+  X1." and the text button "Stop waiting" (`POST api/printers/{id}/auto/cancel`; the result line says "Stopped waiting
+  for Polymaker PolyTerra PLA Charcoal Black.").
+- `auto.state` "choose": a `warn` notice line "Two slots were loaded. Which one got Polymaker PolyTerra PLA Charcoal
+  Black?" and under it one outlined button per label of `auto.slots` ("A2", "A3"), then the text button "Stop waiting".
+  A slot button sends `POST api/printers/{id}/auto/choose` with `{slot}`; the answer is the one of a named load into
+  that slot and the result line says "Loaded into A2." The Hub's refusals (409 `nothing_to_choose`, `not_waiting`) show
+  as a `bad` notice with the Hub's text. The notice goes away without a word when the assignment ends: after 15 minutes
+  without a change, when the same spool is loaded into a named slot anywhere, when the printer is removed and when the
+  Hub restarts. Offline, its buttons are disabled with "Available when the printer is connected." The rows of the slots
+  keep their own states: the watched slots are not marked.
 
 "Load a spool" opens 9.6. "Unload" runs the dry run and opens the dialog: title "Unload from <slot>?" ("Unload from
 A1?"), body "Unload Polymaker PolyTerra PLA Charcoal Black from A1? It goes back to Shelf A." followed, on a Bambu Lab
@@ -2040,6 +2061,7 @@ The design above works with the Hub as it is. These additions to the Hub's paire
 | A per-item structure in the dry-run answer of `POST api/intake/add` (what is created, what is reused, where each spool goes). | 6.5 rows | The app shows the Hub's lines one per row. |
 | `GET api/hub`: `{name, version, newest: {version, checked_at}?, update_available, checks: [{group, state: "ok", "look", "note" or "off", text, fix?}], getting_started: {done, total, hidden, finished}, features: [{id, name, on}], catalog: {version?, checked_at?}, backup: {last_at?, nightly}, reader: {engine, key_set}, devices: [{name, kind, version?, last_seen?, out_of_date, this}], records_kept, spoolman_url?, hub_page?}`; `hub_page` and `spoolman_url` are built from the host the phone used and are absent where the thing cannot be reached | 5 the Getting started line, 12.8 | No Hub screen and no Getting started line. |
 | `event_id` in the answer of each route that makes an undoable change: `PATCH api/spools/{id}`, `POST api/spools/{id}/link` and the slot `load`, `unload` and `clear` routes (absent on a dry run) | 7 Undo (the snackbar) | "Undo" reads the newest event of the spool or slot (`GET api/events` with `subject` and `limit=1`). |
+| Auto as the slot choice: `auto_possible: bool` on the printers of `GET api/printers` and `GET api/printers/{id}`, `watchable: bool` on each slot, and on the one printer `auto: {spool_id, spool: {id, name, material, color_hex}, state: "waiting" or "choose", slots?: [<labels to choose from>], text, expires_at}?`; `POST api/printers/{id}/slots/auto/load` with `{spool_id, dry_run}` (dry run `{auto: true, watching: [<labels>], replaces?: {spool_id, name}, dry_run: true}`, real `{auto: true, pending: true, confirmed: null, expires_in: 900, message}`, 409 `{error: "auto_not_possible", text}`), `POST api/printers/{id}/auto/choose` with `{slot}` (the answer of a named load into that slot, 409 `{error: "nothing_to_choose", text}`) and `POST api/printers/{id}/auto/cancel` (`{cancelled: true}`, 409 `{error: "not_waiting", text}`); `auto` is a reserved slot label | 7.6 the slot step, 9.4 and 9.5 the notice | No "Automatic" row, no notice and no choice; a slot is chosen by hand. |
 | `POST api/printers/{id}/slots/{label}/clear` with `{dry_run}` (answer `{slot, spool?, moved_back?, waiting_ended, printer_cleared, dry_run}`); the answer of `unload` gains `waiting_ended`; the load answer's `pending` is read | 9.5 Clear slot, 7.6 and 9.5 waiting | No "Clear slot" button; a waiting load shows as loaded. |
 | `POST api/library/local/form` with `{brand, name, material, nozzle_min?, nozzle_max?, bed_min?, bed_max?, density?, max_volumetric_speed?, bambu_parent?, notes?}` (201 `{entry}`; 400 `{error: "invalid_entry", problems: [{field, text}]}`), `GET api/library/local` (`{entries: [{id, brand, name, material, added}]}`), `DELETE api/library/local/{id}` (`{removed: true}`) | 8 | The form and the list are absent. |
 | `spoolman_url` in the answer of `GET api/spools` | 7.1 "Open Spoolman" | The item is absent. |

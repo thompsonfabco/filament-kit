@@ -145,7 +145,7 @@ parts. The last column names the place on the Hub page that does the same thing,
 | `printer forget-certificate <printer>` | Forget certificate (Bambu) | Forget certificate |
 | `printer forget <printer>` | Forget printer | Forget printer |
 | `printer live <printer>` | Prints where the camera is (section 10) | Show camera |
-| `printer load <printer> <slot> <spool>` | Load a spool into a slot (asks) | Load |
+| `printer load <printer> <slot> <spool>` | Load a spool into a slot (asks); with `auto` for the slot, into whichever slot gets a spool next | Load, Load a spool |
 | `printer unload <printer> <slot>` | Unload the spool of a slot (asks) | Unload |
 | `printer clear <printer> <slot>` | Clear slot: the Hub forgets the spool recorded there (asks) | Clear slot |
 | `printer usage <printer> [--days N]` | Filament used by the printer, newest first | Filament used |
@@ -607,7 +607,7 @@ Any step that can take longer than 2 seconds shows a progress line once 2 second
 | `spool show` | `{spool, last_use: {at, printer, grams}?}` |
 | `spool weigh`, `spool move`, `spool empty` (need `--yes`) | `{spool, before, dry}`, the spool view after and before the change; the same for `spool move <n> auto` |
 | `printer clear` (needs `--yes`) | the answer of `POST api/printers/<id>/slots/<slot>/clear`: `{slot, spool?, moved_back?, waiting_ended, printer_cleared, dry_run}` |
-| `printer load`, `printer unload` (need `--yes`) | the answers of the routes `.../slots/<slot>/load` and `.../unload`; `unload` adds `waiting_ended`, and a load for a printer that has not shown it yet says `pending: true` |
+| `printer load`, `printer unload` (need `--yes`) | the answers of the routes `.../slots/<slot>/load` and `.../unload`; `unload` adds `waiting_ended`, and a load for a printer that has not shown it yet says `pending: true`; `printer load <printer> auto <spool>` gives the answer of `POST api/printers/<id>/slots/auto/load`: the dry run `{auto: true, watching: [<labels>], replaces?: {spool_id, name}, dry_run: true}`, the real one `{auto: true, pending: true, confirmed: null, expires_in: 900, message}`, and the refusal `{"ok": false, "error": "<text>", ...}` for 409 `auto_not_possible` |
 | `printer usage` | the answer of `GET api/printers/<id>/usage` |
 | `catalog local` | `{entries: [{id, brand, name, material, added}]}` |
 | `catalog add --ask` (needs `--yes`) | `{entry: {id, brand, name, material, added}}` |
@@ -704,7 +704,7 @@ Every question, word for word (names are examples):
 | `locations remove` | `Remove Rack 2? 3 spools are recorded there. They keep that location until you move them; it is no longer offered for new spools.` (`No spools are recorded there.` when there are none) | `Removed Rack 2.` |
 | `devices forget` | `Unpair Shop phone? It can no longer reach the Hub until it is paired again.` | `Unpaired Shop phone.` |
 | `devices set` | the preview, for example `Volume would change from 70 to 40.`, then `Apply?` | `Saved: volume 40.` |
-| `printer load` | the plan lines (`Load Polymaker PolyTerra PLA Charcoal Black into A4`, `Preset: …`, `Nozzle: 0.4 mm`, `Spool 211 now in A4 goes back to Shelf B.`), then `Load it?` | `Loaded into A4.`, `Sent to A4. The printer accepted it but hasn't shown the change yet.` or `Waiting for the spool to load in A4.` |
+| `printer load` | the plan lines (`Load Polymaker PolyTerra PLA Charcoal Black into A4`, `Preset: …`, `Nozzle: 0.4 mm`, `Spool 211 now in A4 goes back to Shelf B.`), then `Load it?`; with `auto` the plan lines are `Load Polymaker PolyTerra PLA Charcoal Black into any slot of Workshop X1`, `Watching: A1, A2, A3, A4` and, when one is waiting, `Replaces eSUN ABS+ White, which was waiting.`, then `Wait for it?` | `Loaded into A4.`, `Sent to A4. The printer accepted it but hasn't shown the change yet.` or `Waiting for the spool to load in A4.`; with `auto`, `Waiting for Polymaker PolyTerra PLA Charcoal Black to be loaded into any slot of Workshop X1.` |
 | `printer unload` | `Unload from A3? Unload eSUN ABS+ White from A3? It goes back to Shelf B. Only the inventory changes; the printer's slot setting stays as it is.` (on a Klipper printer the last sentence is `The slot's setting on the printer is cleared.`) | `Unloaded eSUN ABS+ White from A3. Moved back: spool 211 to Shelf B.` |
 | `printer clear` | `Clear slot A3? The Hub forgets the spool recorded here. eSUN ABS+ White (211) goes back to Shelf B.` (the second sentence only when a spool is recorded; on a Bambu Lab printer it ends with `The printer still shows the old filament for this slot until a spool is loaded.`) | `Cleared slot A3. Spool 211 is back on Shelf B.` (without a spool `Cleared slot A3.`; also `No spool is waiting for A3 any more.` when a waiting assignment ended, and, on a Bambu Lab printer, `The printer still shows the old filament for this slot until a spool is loaded.`) |
 | `spool weigh` | `Remaining changes from 620 g to 482 g.`, then `Apply?` | `Weight updated: 482 g left.` |
@@ -1338,16 +1338,21 @@ A3    eSUN ABS+ White                         #F4F4F2  35 %
 A4    empty
 ```
 
-A Klipper printer shows `API key  set` and `Lane data  auto` in place of Certificate, and its tool slots (`T0`,
-`T1`). A slot a spool is waiting for (a Bambu Lab printer that has not shown the load yet) shows
-`waiting for the spool to load in A2` in the LEFT column. A printer with a problem shows it under the fields, with its Fix:
-`▲ needs a look  The last slot mapping stopped twice. A report would help.` A printer offline shows
-`No slot data while offline.` in place of the slot table.
+A Klipper printer shows `API key  set` and `Lane data  auto` in place of Certificate, and its tool slots (`T0`, `T1`). A
+slot a spool is waiting for (a Bambu Lab printer that has not shown the load yet) shows `waiting for the spool to load
+in A2` in the LEFT column. While the printer has an Auto assignment, `printer show` prints under the fields, above the
+table, `Note: Waiting for Polymaker PolyTerra PLA Charcoal Black to be loaded into any slot of Workshop X1.`, or, in the
+state choose, `▲ Two slots were loaded. Which one got Polymaker PolyTerra PLA Charcoal Black? A2, A3` with the Fix
+`spoolwarden printer load workshop A2 214` (a named load of the same spool into the slot that got it ends the
+assignment). It ends by itself after 15 minutes. A printer with a problem shows it under the fields, with its Fix: `▲
+needs a look  The last slot mapping stopped twice. A report would help.` A printer offline shows `No slot data while
+offline.` in place of the slot table.
 
 **`printer show <printer> --watch`** prints the same, preceded by the printer's state line (state, job, progress, layer,
 time left) and its temperatures, and redraws every 2 seconds until Ctrl-C (exit code 130). Not at a terminal it stops
 with exit code 2: `Error: --watch needs a terminal.` and `Fix: use spoolwarden printer show --json for one reading.`
-With `--json` it prints one `{summary, status}` object per line each time.
+With `--json` it prints one `{summary, status}` object per line each time, with `auto_possible` on the printer,
+`watchable` on each slot and `auto` while an Auto assignment exists, as `GET api/printers/<id>` gives them.
 
 **Other printer commands.** Result lines use the Hub page's words.
 
@@ -1365,7 +1370,7 @@ With `--json` it prints one `{summary, status}` object per line each time.
 | `printer scan` | `Found on 192.0.2.0/24: 192.0.2.57:7125 (add it: sudo spoolwarden printer use mainsailos)` / `No Moonraker found on 192.0.2.0/24.` | One line per printer found; ones already added say `(added as Garage Voron)` |
 | `printer report` | `Collected a report: <file>.` then the Hub's sentence on what a report never holds | |
 | `printer reports` | table `MADE`, `SIZE`, `NAME` (long column) and the folder they are in / `No report kept for this printer yet.` | |
-| `printer load` | The plan, then the question and the result of section 7 | `printer load workshop A4 214` loads spool 214. A load that waits for the printer ends with `Waiting for the spool to load in A4.` Needs the Hub running |
+| `printer load` | The plan, then the question and the result of section 7 | `printer load workshop A4 214` loads spool 214. A load that waits for the printer ends with `Waiting for the spool to load in A4.` `printer load workshop auto 214` assigns spool 214 to the printer with no slot named: the Hub watches the slots it can and loads the spool into the one where a spool shows up (`auto` is not a slot name). It needs a printer with two or more slots the Hub can watch, else `Error: This printer has no slots the Hub can watch. Choose a slot.`; a new `auto` for the printer replaces the old one and the plan says so; it ends after 15 minutes, when the same spool is loaded into a named slot, or when the printer is removed. Needs the Hub running |
 | `printer unload` | section 7 | Offered only when a spool is recorded in the slot: otherwise `Error: no spool is recorded in A3.` and `Fix: spoolwarden printer clear workshop A3` |
 | `printer clear` | section 7 | Always possible. It means "the Hub forgets which spool is in this slot": a spool waiting for the slot is no longer waiting, the recorded spool goes back where it was before it was loaded, and on a Klipper printer the slot's setting is cleared when the printer is online and can do it; on a Bambu Lab printer what the printer shows is left as it is |
 | `printer usage` | Table `WHEN`, `SLOT`, `JOB`, `GRAMS` and the note of an entry (`undone`, `logged only`), newest first; `Nothing used in the last 7 days.` | `--days N` (default 7) |
@@ -2653,6 +2658,7 @@ this design.
 | Collect a printer report | Y | Y | Y | Y | Y | none |
 | Saved printer reports | unknown | Y | unknown | N | Y (`printer reports`) | **closed** |
 | Load or unload a spool in a slot; clear a slot | Y | new | Y | N | Y (`printer load`, `unload`, `clear`) | none for the command line |
+| Load a spool into whichever slot gets a spool next (Auto), with its notice, Stop waiting and the choice between two slots | new | new | new | N | P (`printer load <printer> auto <spool>`; the notice and the choice in `printer show`) | remains: Stop waiting and the buttons of the choice are on the Hub page, the web app and the app; on the command line a named `printer load` of the same spool into a slot does the work of the choice and ends the assignment |
 | Filament used, with undo | Y | new | Y | N | P (`printer usage` lists it; `usage` totals it) | remains: a filament-used entry's undo is on the Hub page, the web app and the app |
 | Features on and off | N | Y | N | Y | Y, needs shown before switching | none for the command line |
 | Choose the setup | N | Y | N | Y | Y (`features setup`) | none for the command line |
@@ -2745,6 +2751,8 @@ The command line calls the same code as the Hub page's routes (`/setup/api/...`)
    started block. Until it exists `status` has no Getting started block and no `getting_started` key.
 10. **Spools, slots, devices and the catalog form.** The kit routes `GET api/spools` (with `filter`, each spool with
     `loaded` and `low`, and `spoolman_url`), `POST api/printers/<id>/slots/<slot>/clear`, the changed `unload`,
+    `POST api/printers/<id>/slots/auto/load` for `printer load <printer> auto <spool>` (and `auto_possible`, `watchable`
+    and `auto` in the printer's answers),
     `GET api/library/local`, `POST api/library/local/form` and `DELETE api/library/local/<id>`, and the page routes
     `GET /setup/api/devices`, `GET /setup/api/device/<id>` and `POST /setup/api/device/<id>/settings`
     (`03-hub-page.md` section 15). Until they exist, the commands that need one say `Error: this Hub does not offer

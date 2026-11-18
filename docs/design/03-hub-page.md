@@ -1136,10 +1136,14 @@ not call the web app's routes, so the page's lock applies whether or not the web
 ```
 Desktop: the expansion of Workshop X1
 +--------------------------------------------------------------------------------------------------+
+| Workshop X1                                                                       [Load a spool] |
+|                                                                                                  |
 | (*) Printing: Benchy                                          [Pause] [Turn the light off]         |
 | [==============----------------]  42 %                                    [Show camera] [Stop print] |
 | Layer 80 of 190 · 1 h 12 min left · Nozzle 220 / 220 °C · Bed 55 / 55 °C                           |
 | /!\ Printer alert 0300_0100                                                                      |
+|                                                                                                  |
+| (i) Waiting for eSUN ABS+ White to be loaded into any slot of Workshop X1.        [Stop waiting] |
 |                                                                                                  |
 | AMS A · AMS 2 Pro                                                                                |
 | A1 [#] Polymaker PolyTerra PLA  Charcoal Black #2B2B2E   62 %  In use  [Load] [Unload] [Clear slot] |
@@ -1156,17 +1160,43 @@ Phone:  one column; each slot is a card with its actions on their own line; the 
 
 | Part | Content |
 |---|---|
+| Header | The printer's name, and at the end the default button **Load a spool** (below) |
 | State | A status badge and the sentence from `state` (`02-components.md` 7.1), then the print state as a sentence with its shape: "Printing", "Paused", "Preparing", "Finished", "Print failed", "Idle", followed by ": <job name>" |
 | Progress | While Printing, Paused or Preparing: the determinate bar (`02-components.md` 8.3) with the percentage in `--mono`, then "Layer <n> of <total> · <time> left", where <time> is "<h> h <m> min" or "<m> min" under an hour |
 | Temperatures | "<name> <current> / <target> °C", joined by " · " |
 | The printer's alerts | One error-shape line each: the printer's text, or "Printer alert <code>" |
 | Camera | **Show camera** and **Hide camera**; a 16:9 box under the controls; MJPEG printers draw the picture, HLS printers play it; the box and its states are those of `04-web-app.md` 6.4 |
 | Slots | The full slot strip (`02-components.md` 7.5), grouped by unit; each row has the slot's actions (below). A waiting slot shows the spool's colour with the dashed ring (`02-components.md` 7.3) and the line "Waiting for the spool to load in <slot>." |
+| The Auto notice | Above the slots, while the printer has an Auto assignment (**Auto**, below): the notice of `02-components.md` 7.5 with **Stop waiting**, or the choice between the slots that changed |
 | Filament used | Title "Filament used" and "Last 7 days", and the overflow menu "More actions for Filament used" with **Download as CSV** (2.10); the rows, newest first, up to 20: "<g> g" in `--mono`, "<job> · <slot>", the time in `--mono` `--muted`, and ghost **Undo** on each row that can still be undone; an undone row is struck through and ends "(undone)". Empty: "Nothing used in the last 7 days." The months are in Analytics (17). |
 
 **Waiting.** A spool assigned to a slot that has not loaded yet (Bambu Lab printers) is shown wherever a slot is
 shown: in the live view, in the slot strip of the Slots column (5.2) and in the result of a load. The state ends by
 itself when the printer shows the load, or by **Unload** or **Clear slot**.
+
+**Auto.** A spool can also be assigned to the printer with no slot named. The Hub remembers how each slot it can watch
+looks at that moment, and when a spool shows up in one, loads the scanned spool into that slot exactly as a named load
+would (same preset, same move, same answer; its event, `spool.loaded`, carries `auto: yes`).
+- **Which slots are watched.** On a Bambu Lab printer, every slot that has a filament sensor the printer reports: the
+  slots of an AMS, an AMS 2 Pro and an AMS HT; not the external spool holders, and not the slots of a printer that
+  reports no such sensors. On a Klipper printer, the lanes or gates of a filament system that reports "loaded" per
+  lane: AFC (Box Turtle included) and Happy Hare; not a single extruder and not a toolchanger. A slot's `watchable` says
+  which, and the printer's `auto_possible` is true when two or more slots are watchable. With fewer there is nothing to
+  choose between, and the printer keeps its named loads alone.
+- **A spool shows up in a slot** when the slot is seen empty and then loaded: empty at the start and now loaded, or
+  loaded at the start, then seen empty, then loaded again (a spool swapped in a full slot). "Loaded" is what a waiting
+  assignment already uses: present, no longer being read, and steady for 3 seconds. A slot that was loaded at the start
+  and never changes is never chosen. A slot whose own tag names its spool (a Bambu Lab spool with RFID) is not chosen,
+  because the slot has identified itself; Auto goes on waiting for another slot. The slot that feeds a running print
+  is not chosen. If the chosen slot has a spool recorded, that spool goes back where it was, as every load does.
+- **One at a time.** A printer has at most one Auto assignment; a new one replaces the old one. If a second watched slot
+  shows up before the first is applied (within its 3 seconds), the Hub does not pick: the assignment stays in the state
+  "choose", and the printer shows the choice. Nothing is assigned by a guess.
+- **How it ends.** If no slot changes, after 15 minutes, with nothing left but the notice going away. Also when someone
+  presses **Stop waiting**, when the same spool is loaded into a named slot anywhere, when a new Auto replaces it,
+  when the printer is removed, and when the Hub restarts (it is kept in memory, like a waiting assignment).
+- **A Klipper printer that is printing** refuses a load. The slot is still noticed and the load is sent when the printer
+  allows it; if the 15 minutes pass first, the assignment ends with the Hub's reason.
 
 | Control | Shown when | Style | Does | Endpoint |
 |---|---|---|---|---|
@@ -1175,7 +1205,10 @@ itself when the printer shows the load, or by **Unload** or **Clear slot**.
 | **Stop print** | Printing, Paused or Preparing | Danger, apart at the end of the row | Opens "Stop the print?"; result "Stopped." | `{action: "stop", confirm: true}` |
 | **Turn the light on** / **Turn the light off** | The printer reports a light | Ghost; the label says what pressing does | Result "Light on." / "Light off." | `{action: "light_on"}` / `{action: "light_off"}` |
 | **Show camera** / **Hide camera** | The printer has a camera | Default | Shows or closes the box; closing the region, leaving the section or hiding the tab stops the stream | `G printers/<id>/camera.mjpeg` or `G printers/<id>/camera/<name>` (code; on a computer that is not trusted, with `?ticket=<ticket>` from `P printers/<id>/camera/ticket` on the first request, see Lock); **Hide camera** also calls `P printers/<id>/camera/close` |
+| **Load a spool** | Always (the printer is connected) | Default, in the header | Opens the Load a spool dialog (below): the spool first, then Automatic or a slot | `P printers/<id>/slots/auto/load` (code) `{spool_id, dry_run}` for Automatic, else as **Load** |
 | **Load** | Every slot | Default | Opens the Load dialog (below) | `P printers/<id>/slots/<slot>/load` (code) `{spool_id, dry_run}` |
+| **Stop waiting** | The printer has an Auto assignment (waiting or choose) | Default, at the end of the notice | Ends it at once; result "Stopped waiting for <spool>." | `P printers/<id>/auto/cancel` (code) |
+| A slot's label (**A2**, **A3**) | The Auto assignment is in the state choose | Default, in the notice | Loads the spool into that slot and shows the result of a named load | `P printers/<id>/auto/choose` (code) `{slot}` |
 | **Unload** | A spool is recorded in the slot | Default | Runs the dry run, then opens "Unload from <slot>?" | `P printers/<id>/slots/<slot>/unload` (code) `{dry_run}` |
 | **Clear slot** | Every slot, whether a spool is recorded there or not | Ghost | Runs the dry run, then opens "Clear slot <label>?" | `P printers/<id>/slots/<slot>/clear` (code) `{dry_run}` |
 | **Undo** (Filament used) | The entry can be undone | Ghost | Opens "Put it back on the spool?" | `P usage/<entry>/undo` (code) |
@@ -1201,29 +1234,35 @@ the slot's own tag sets a spool again.
 | Unload | "Unload from <slot>?" | "Unload <spool name> from <slot>? It goes back to <place>." and then, on a Bambu Lab printer, "Only the inventory changes; the printer's slot setting stays as it is.", on a Klipper printer, "The slot's setting on the printer is cleared." | Cancel · **Unload** (primary) |
 | Clear slot | "Clear slot <label>?" | "The Hub forgets the spool recorded here. <Spool> goes back to <place>." (the second sentence only when a spool is recorded) and then, on a Bambu Lab printer, "The printer still shows the old filament for this slot until a spool is loaded." | Cancel · **Clear slot** (danger) |
 | Put it back | "Put it back on the spool?" | "Put <g> g back on the spool? (<job>, <slot>, <time>)" | Keep · **Put it back** (primary) |
+| Load a spool | "Load a spool" | Step 1, the spool: as in Load into <slot> below (the button **Use the last tapped tag**, "or", the search, the same lines before and after a pick). Step 2, once a spool is picked, "Which slot?": the choice "Automatic" with the hint "The slot where the spool appears." first and preselected when the printer's `auto_possible` is true, then one choice per slot with its current spool as in the slot strip. Under the choice the plan lines of the dry run: for Automatic, "Load <spool> into any slot of <printer>", "Watching: <labels>" and, when one is waiting, "Replaces <spool>, which was waiting."; for a slot, as in Load into <slot>. A refusal ("This printer has no slots the Hub can watch. Choose a slot.") shows as an error line, and the choice moves to the first slot | Cancel · **Load** (primary; disabled with "Pick a spool first." or "Working out the plan…") |
 | Load into <slot> | "Load into <slot>" | The button **Use the last tapped tag**, "or", a search field "Brand, colour, material" with rows of opened and sealed spools. Before a pick: "Pick a spool: tap its tag on a reader, or search." After a pick, the plan lines of the dry run: "Load <spool> into <slot>", "Preset: <name or none>", "Nozzle: <mm> mm" ("Nozzle size not reported by the printer; assuming <mm> mm"), "Spool <n> now in <slot> goes back to <place>", and the Hub's problems as error lines. The tag lines: "Tag <id> is not linked to a spool." / "No tag read yet: tap one." | Cancel · **Load** (primary; disabled with "Pick a spool first." or "Working out the plan…") |
 
 | Result | Shape | Text |
 |---|---|---|
 | Loaded | OK | "Loaded into <slot>." (or "Sent to <slot>. The printer accepted it but hasn't shown the change yet.") |
 | Load waits for the printer (Bambu Lab) | Note | "Waiting for the spool to load in <slot>." |
+| Automatic is on | Note | "Waiting for <spool> to be loaded into any slot of <printer>." (the notice stays under the header while it lasts) |
+| Two slots changed | Warn | "Two slots were loaded. Which one got <spool>?" (the notice's choice) |
+| Stopped waiting | Note | "Stopped waiting for <spool>." |
+| Nothing to choose, or nothing waiting (409) | Note | The Hub's text |
 | Unloaded | OK | "Unloaded <spool name> from <slot>. Moved back: spool <n> to <place>." |
 | Slot cleared | OK | "Cleared slot <label>. Spool <n> is back on <place>." (without a spool: "Cleared slot <label>.") |
 | A waiting assignment ended | Note | "No spool is waiting for <slot> any more." |
 | Cleared on a Bambu Lab printer (`printer_cleared` is always false there) | Note | "The printer still shows the old filament for this slot until a spool is loaded." |
 | Filament put back | OK | "Put <g> g back on the spool." |
 
-**Undo after a slot action.** Load, Unload and Clear slot each end in the toast of 2.9 with **Undo** (for 10 seconds), beside
-the result above, which stays. A Bambu Lab load that is still waiting for the printer is not undone by Undo but by
-**Unload** or **Clear slot**, as before. Undoing a load or an unload puts the Hub's record back and not the printer's
-own slot setting; the answer says "Put back. The printer still shows what it was set to."
+**Undo after a slot action.** Load, Unload and Clear slot each end in the toast of 2.9 with **Undo** (for 10 seconds),
+beside the result above, which stays. A Bambu Lab load that is still waiting for the printer is not undone by Undo but
+by **Unload** or **Clear slot**, as before; an Auto assignment that is waiting is ended by **Stop waiting**, and the
+load it makes is a load like any other, with its own Undo. Undoing a load or an unload puts the Hub's record back and
+not the printer's own slot setting; the answer says "Put back. The printer still shows what it was set to."
 
-**Lock.** Looking needs nothing: state, slots, waiting and filament used show on a Locked page. The camera, the print
-controls, the light and every slot action need the page Unlocked or Trusted (section 2.1) and ask for the code in place.
-**The camera's address.** On a trusted computer the page asks for the stream directly. Otherwise it first asks
-`P printers/<id>/camera/ticket` with the setup code and gets `{ticket, expires_in: 60}`; the first camera request takes
-`?ticket=<ticket>` (the stream's address, or the playlist's). That request spends the ticket, and the Hub answers it
-with a cookie that is the **camera session**.
+**Lock.** Looking needs nothing: state, slots, waiting, the Auto notice and filament used show on a Locked page. The
+camera, the print controls, the light and every slot action need the page Unlocked or Trusted (section 2.1) and ask for
+the code in place. **The camera's address.** On a trusted computer the page asks for the stream directly. Otherwise it
+first asks `P printers/<id>/camera/ticket` with the setup code and gets `{ticket, expires_in: 60}`; the first camera
+request takes `?ticket=<ticket>` (the stream's address, or the playlist's). That request spends the ticket, and the Hub
+answers it with a cookie that is the **camera session**.
 
 - **The cookie**, named `fk_setup_camera`, is valid only for that printer's camera routes (its path is `/setup/api/printers/<id>/camera`) and is
   HttpOnly, Secure and SameSite=Strict. It names a session that the Hub keeps in memory for that printer for 10 minutes.
@@ -1491,6 +1530,15 @@ is also a row of Paired devices (7.2) with its build and last seen.
 | Make a token | Text field "Name", placeholder "e.g. printer bench"; default **Make a token** → `P readers` (code) `{name}` |
 | New token | OK result "New Tag Reader token <id> (<name>):" then a code block with the token and Copy, and the warn line "Shown only this once. Put it in the reader's `src/secrets.h` as `READER_TOKEN`, then build and flash it." The token is cleared from the page when the section is left. |
 | Pointer | Quiet line at the card foot: "Setting up a Tag Reader over USB is easier: Flash a device." (link) |
+
+**What a Tag Reader's knob offers for a printer.** The reader shows the slot list the Hub gives it for the printer that
+is picked (`GET /reader/printers/{id}/slots`; no firmware change is needed). On a printer where Auto is possible (the
+printer's `auto_possible`: two or more slots the Hub can watch) the list gains a first entry, "Auto" (the label `auto`,
+which no real slot may carry). "Auto" is the default wherever the reader takes the first entry: when a printer is
+picked, and when a saved slot no longer exists. A reader that has a slot saved keeps it until its owner turns the knob.
+A scan with "Auto" is sent as `slot: "auto"` (`POST /reader/scan`); the Hub answers `status: "queued"`, and the reader
+shows "Auto: load any slot (waits 15 min)", the waiting answer it already shows. The assignment is then the printer's
+Auto assignment (5.10), with its notice and **Stop waiting**.
 
 ### 7.6 Trusted computers
 
@@ -2981,7 +3029,7 @@ column says.
 | Printers announced by Bambu Lab printers, listed by the Hub's own listener for them | Add a printer, step 1 (5.6) | The found list holds Klipper printers only, with the sentence "Bambu Lab printers are added by address." |
 | A Label Reader on another machine that serves HTTPS on its port (a change in the reader's own repository) | Settings > Label Reader, Address and Test (10.5) | The Hub accepts the reader's `http://` address as before and the Checks show the Note "The Label Reader at <address> is not using HTTPS. A later Label Reader version adds it." |
 | The page routes of the Spools section, under `/setup/api/`: `GET spools` (`q`, `filter`, `offset`, `limit`; answer `{spools, total, offset, has_more, spoolman_url?}`, `filter` one of `sealed`, `opened`, `loaded`, `low`, none meaning every spool that is not empty), `GET spools/{id}` (`{spool, last_use: {at, printer, grams}?}`), `POST spools/{id}` (`{gross` or `remaining` or `location` or `auto_location: true` or `empty`, `dry_run}` → `{spool, before, dry, event_id?}`), `GET spools/last-tag` (`{tag: {uid, read_at, source}?}`), `POST spools/{id}/link` (`{tag, dry_run}` → `{spool, before, dry, event_id?}`); a spool carries `loaded` and `low` besides the spool view; the three changes need the page unlocked; a change answers `event_id`, the id of its event, absent on a dry run (2.9) | Spools (16) | The section shows the error state "Could not read the spools. <Hub's text>" with **Try again** |
-| The page routes of the live view: `GET printers/{id}/live` (`{summary, status}` as `GET api/printers/{id}` gives them, the slots with `pending`), `POST printers/{id}/command` (`{action}`: `pause`, `resume`, `stop` with `confirm: true`, `light_on`, `light_off`), `POST printers/{id}/slots/{label}/load`, `unload` and `clear` (`{spool_id?, dry_run}`; `clear` answers `{slot, spool?, moved_back?, waiting_ended, printer_cleared, dry_run}`; each of the three also answers `event_id`, absent on a dry run), `GET printers/{id}/usage` (`days`), `POST usage/{entry}/undo`, `GET printers/{id}/camera.mjpeg` and `camera/{name}` (on a computer that is not trusted, with `?ticket=<ticket>` from `POST printers/{id}/camera/ticket`, which takes the setup code and answers `{ticket, expires_in: 60}`: the first camera request that carries `?ticket=` spends the ticket and gets the camera-session cookie `fk_setup_camera`, valid only for that printer's camera routes and for 10 minutes after the last camera request; at most 8 sessions, the ninth ticket is refused with "Too many camera views are open. Close one first."), `POST printers/{id}/camera/close` (needs only the camera-session cookie; answers `{closed: true}`); they call the same printer code as the kit routes, in the Hub's process, and not the web app's routes; the state and usage reads are open, `camera/close` needs only the camera-session cookie, and every other route, the camera included, needs the page unlocked | Printers, the live view (5.10) | The expansion shows the facts of 5.3 and no live view |
+| The page routes of the live view: `GET printers/{id}/live` (`{summary, status}` as `GET api/printers/{id}` gives them, the slots with `pending` and `watchable`, the printer with `auto_possible`, and `auto: {spool_id, spool: {id, name, material, color_hex}, state: "waiting" or "choose", slots?: [<labels to choose from>], text, expires_at}?` while an Auto assignment exists), `POST printers/{id}/command` (`{action}`: `pause`, `resume`, `stop` with `confirm: true`, `light_on`, `light_off`), `POST printers/{id}/slots/{label}/load`, `unload` and `clear` (`{spool_id?, dry_run}`; `clear` answers `{slot, spool?, moved_back?, waiting_ended, printer_cleared, dry_run}`; each of the three also answers `event_id`, absent on a dry run), `POST printers/{id}/slots/auto/load` (`{spool_id, dry_run}`, answers as the kit route: dry run `{auto: true, watching: [<labels>], replaces?: {spool_id, name}, dry_run: true}`, real `{auto: true, pending: true, confirmed: null, expires_in: 900, message}`, 409 `{error: "auto_not_possible", text}`; `auto` is a reserved slot label), `POST printers/{id}/auto/choose` (`{slot}`; answers as a named load into that slot, 409 `{error: "nothing_to_choose", text}`) and `POST printers/{id}/auto/cancel` (`{cancelled: true}`, 409 `{error: "not_waiting", text}`), `GET printers/{id}/usage` (`days`), `POST usage/{entry}/undo`, `GET printers/{id}/camera.mjpeg` and `camera/{name}` (on a computer that is not trusted, with `?ticket=<ticket>` from `POST printers/{id}/camera/ticket`, which takes the setup code and answers `{ticket, expires_in: 60}`: the first camera request that carries `?ticket=` spends the ticket and gets the camera-session cookie `fk_setup_camera`, valid only for that printer's camera routes and for 10 minutes after the last camera request; at most 8 sessions, the ninth ticket is refused with "Too many camera views are open. Close one first."), `POST printers/{id}/camera/close` (needs only the camera-session cookie; answers `{closed: true}`); they call the same printer code as the kit routes, in the Hub's process, and not the web app's routes; the state and usage reads are open, `camera/close` needs only the camera-session cookie, and every other route, the camera included, needs the page unlocked, the three Auto routes like every slot action | Printers, the live view (5.10) | The expansion shows the facts of 5.3 and no live view |
 | The Hub page's part of the catalog form: `GET library/local` (`{entries: [{id, brand, name, material, added}]}`, `added` a day, `YYYY-MM-DD`), `POST library/local` (the form's values; 400 `{error: "invalid_entry", problems: [{field, text}]}`) and `POST library/local/{id}/remove` (`{removed: true}`); the Hub builds the entry from the values with one function | Settings > Filament Catalog (10.9) | The group shows its state and the update buttons only |
 | Devices: `GET devices` (`{devices: [{id, name, kind, version?, newest?, out_of_date, advice?, paired?, last_seen?, reachable?, built_in, page}]}`, `kind` one of `phone`, `pc`, `station`, `web`, `reader`, `builtin`; the Tag Readers are rows of it), `GET device/{id}` (`{device, status?, settings?: [{id, label, kind, value, choices?, min?, max?}], own_page: <address as text>?, photo: bool}`), `GET device/{id}/photo` (open; `image/jpeg`), `POST device/{id}/settings` (code) and `POST device/{id}/open` (unlocked; the Hub asks the station for a one-time ticket and answers `{address: "<own_page>#ticket=<ticket>"}`); what the Hub takes from a station is checked (JSON only, at most 256 KiB, 5 seconds, no redirect, only to the stored host and port over the pinned certificate; a setting's `id` matches `[a-z0-9_.-]{1,40}`, its `kind` is `switch`, `choice`, `number` or `text`, a `label` is at most 80 characters, at most 60 settings; the photo is `image/jpeg`, at most 4 MiB; 7.10); the Hub keeps each client's `X-Spoolwarden-Client: <kind>/<version>` and each reader's `X-Reader-Build` with its pairing, and a Weigh Station's hello gives its version every 5 minutes; `GET state` keeps its `devices` and `readers` fields | Devices (7.2, 7.9, 7.10) | The list is the one of `G state`, without Kind, Version and out-of-date lines |
 | `GET api/events` takes `activity=1` (only the kinds of the Activity list), `subject=<type>:<id>` (for example `spool:212`) and `actor=<type>` or `actor=<type>:<id>`; each served event gains `undo: {possible: bool, until?, why_not?: "changed_since" or "too_old" or "already_undone" or "not_undoable"}`, `undone: bool` and `undo_of?: <id>`; `POST api/events/{id}/undo` answers 200 `{undone: true, event: <the new event>, note?: <text>}`, 409 `{error: <one of the why_not values>, text}` or 404; a web token may call it; the routes that make an undoable change (`PATCH api/spools/{id}`, `POST api/spools/{id}/link`, the slot `load`, `unload` and `clear` routes) answer with `event_id` beside what they answer today, absent on a dry run | Activity (13.4), Undo (2.9), a spool's last ten events (16.3) | No Activity choice, no Undo button, no last ten events |
