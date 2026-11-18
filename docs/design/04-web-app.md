@@ -27,7 +27,7 @@ on screen change.
 
 | Address | Served by | Differences on screen |
 |---|---|---|
-| `https://<hub>:8710/intake` (the **home address**) | the Hub itself | Everything in this document. |
+| `https://<hub>/intake` (the **home address**; `https://<hub>:<port>/intake` on a Hub that was moved to another port) | the Hub itself | Everything in this document. |
 | `<public address>/intake` (the **public address**, when the web Feature is on) | the Hub's web service behind its reverse proxy | **Recent** is dimmed and opens the notice in 7.4. **Printer settings** are read-only unless the owner allowed printer changes from the public address (6.8). **Open the Hub page** is not offered (9.1). |
 
 Both addresses are refused to anyone outside the home network (section 11.1). Neither asks for a setup code: the
@@ -1381,7 +1381,7 @@ A sheet on phones with the address `#settings` (2.4), opened over the last place
 |------------------------------------------|
 | This Hub                                 |
 | Workshop                                 |
-| https://192.0.2.10:8710/intake           |
+| https://192.0.2.10/intake                |
 | [ Open the Hub page ]                    |
 +------------------------------------------+
 ```
@@ -1392,7 +1392,7 @@ The segmented control takes the full content width; each theme tile is a radio t
 |---|---|
 | Appearance | The wide segmented control "Light / Dark / System" with sun, moon and half-circle icons (F5). Applies at once; line "Saved on this device: <choice>." |
 | Theme | Four preview tiles in a two-by-two grid (F6.2): Console "Dense and technical", Workbench "Calm cards", Palette "Colourful and roomy", Panes "Simple lists". A radio group; choosing applies at once, no reload, no save button; line "Saved on this device: <choice>." Helper: "New phones start with the Hub's theme for new devices." |
-| Alerts on this phone (only when alerts can be sent to the phone, `data-push`) | The same switch, test button and texts for its limits as before; the alerts now cover every alert type the Hub has switched on (filament ran out, print paused, print failed or stopped, printer error, print finished, storage almost full, spool running low, device stopped answering), not only print states. Status: "Off" (hollow circle), "On: this phone gets alerts." (filled circle), "Notifications are blocked for this site. Allow them in the phone's settings." (triangle), or "This browser cannot receive alerts. On iPhone, add Spoolwarden to the Home Screen first." (info) with the button "Add to Home Screen". Toggle "Notify this phone" (on: GET `push/key` then POST `push/subscribe`; off: POST `push/unsubscribe`). Button "Send a test alert" (POST `push/test`; "Sent." or the Hub's "wait <n> s between test alerts"). Link "Recent alerts" opens the Alerts list (3.8). The switch is the push subscription itself: the phone is on while it has one, and the Hub stores no switch for it; the subscriptions are kept by the web unit in `push.xml` in its own folder. The test button keeps today's push test; an alert sent from the command line (`spoolwarden alerts test`) reaches every subscription. The alert types and thresholds are edited on the Hub page or the command line, like every setting. |
+| Alerts on this phone (only when alerts can be sent to the phone, `data-push`) | The same switch, test button and texts for its limits as before; the alerts now cover every alert type the Hub has switched on (filament ran out, print paused, print failed or stopped, printer error, print finished, storage almost full, spool running low, device stopped answering), not only print states. Status: "Off" (hollow circle), "On: this phone gets alerts." (filled circle), "Notifications are blocked for this site. Allow them in the phone's settings." (triangle), or "This browser cannot receive alerts. On iPhone, add Spoolwarden to the Home Screen first." (info) with the button "Add to Home Screen". Toggle "Notify this phone" (on: GET `push/key` then POST `push/subscribe`; off: POST `push/unsubscribe`). Button "Send a test alert" (POST `push/test`; "Sent." or the Hub's "wait <n> s between test alerts"). Link "Recent alerts" opens the Alerts list (3.8). The switch is the push subscription itself: the phone is on while it has one, and the Hub stores no switch for it; the subscriptions are kept by the web unit in `push.xml` in its own folder. The test button keeps today's push test; an alert sent from the command line (`spoolwarden alerts test`) reaches every subscription. The alert types and thresholds are changed on the Hub page and with `spoolwarden alerts` only; the sheet shows them read-only with the line "Change this on the Hub page." |
 | This Hub | Hub name; the address this page is using (`--mono`); on the home address "Open the Hub page". |
 
 The alert itself (from the service worker) has the Hub's title (default "Printer"), body and tag: for every alert type

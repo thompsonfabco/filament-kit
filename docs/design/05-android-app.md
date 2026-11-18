@@ -158,7 +158,7 @@ sentence in the sheet.
 
 | State | Shape (F10) and colour | Chip word | Meaning, shown in the sheet |
 |---|---|---|---|
-| Connected | filled circle, `--ok` | Connected | "Connected to Workshop hub at 192.0.2.10:8710." |
+| Connected | filled circle, `--ok` | Connected | "Connected to Workshop hub at 192.0.2.10." |
 | Not known yet (first check after start) | none: a skeleton of the badge's width (02 7.1, Loading) | none; content description "Hub connection: checking" | "Checking the connection to the Hub…" |
 | Offline | hollow circle, `--bad` | Offline | "Cannot reach Workshop hub. Check that this phone is on the home network." |
 | Certificate changed | triangle, `--warn` | Needs a look | "The Hub's certificate is not the one this phone paired with." |
@@ -172,7 +172,7 @@ line, then:
 
 | Row | Content |
 |---|---|
-| Hub | name (`--fs-l` `--fw-title`) and address in `--mono` ("192.0.2.10:8710") |
+| Hub | name (`--fs-l` `--fw-title`) and address in `--mono` ("192.0.2.10") |
 | Versions | "App 0.5.2 · Hub 0.5.2" in `--mono`; "Hub version not known yet" when it is not |
 | Last answer | relative time ("12 seconds ago"); long-press shows the exact time (F2) |
 | Action | one button by state: Offline "Try again" (filled; runs the check now, label "Checking…" with a spinner while it runs); Certificate changed "Review the certificate" (filled; opens 4.8); No longer paired "Pair again" (filled; opens the pairing graph); Needs local network access "Allow" or "Open app settings" (filled; as 4.2). Connected: "Hub connection settings" (text button; opens 12.3). |
@@ -476,7 +476,7 @@ stay visible over a `--scrim` band.
 |---|---|---|
 | Heading | "Enter the Hub's address" | `Text` `--fs-l` `--fw-title` |
 | Address | Label "IP address or name", placeholder "192.0.2.10 or hub.local", one line, `KeyboardType.Uri`, no autocorrect | `OutlinedTextField` |
-| Port | Label "Port", prefilled "8710", `KeyboardType.Number`, `port-field` wide | `OutlinedTextField` |
+| Port | Label "Port", starts empty with a hint that an empty port means 443, then 8710, `KeyboardType.Number`, `port-field` wide. Left empty, Connect tries port 443 first and 8710 second and keeps the one that answered with the fingerprint of the pairing; port 443 counts only when a Hub answers `api/info` there (another web server on 443 is not a Hub), otherwise 8710 is tried; a typed port is used as typed | `OutlinedTextField` |
 | Connect | "Connect"; "Connecting…" with a spinner while busy; fields disabled while busy | `Button` |
 | Errors | Under the field they concern: "Enter the Hub's address." (address empty); "The port must be a number from 1 to 65535." (port). Connection failures under the button (4.9). | supporting text, notice line |
 
@@ -1685,7 +1685,7 @@ Console.
 | Element | Text / behaviour | Material 3 |
 |---|---|---|
 | Status | Shape and word (2.4) with the last answer time. | Status |
-| Field rows | "Hub" Workshop hub; "Address" 192.0.2.10:8710 (`--mono`); "Certificate fingerprint" (grouped, `--mono`, selectable); "Hub version" 0.5.2. None paired: "No Hub is paired." with the main button "Pair with a Hub". | Panel, field rows |
+| Field rows | "Hub" Workshop hub; "Address" 192.0.2.10 (`--mono`); "Certificate fingerprint" (grouped, `--mono`, selectable); "Hub version" 0.5.2. None paired: "No Hub is paired." with the main button "Pair with a Hub". | Panel, field rows |
 | Open the Hub page | Outlined button "Open the Hub page", with the line "Features, keys, devices and backups are set on the Hub page." Opens the Hub page's address (today `https://<host>:<port>/setup`) in the browser. Errors: "No browser on this phone could open it." / "The Hub's address isn't known yet." | `OutlinedButton` |
 | Pair again | Outlined button "Pair again" (opens `pair`). | `OutlinedButton` |
 | Fingerprint check | Group "Security". Switch row "Check the fingerprint when pairing by address", on by default, with the supporting text "When this is off, the app trusts the certificate a Hub presents when you pair by typing its address. A scanned QR code is always checked." Turning it off asks: dialog "Skip the fingerprint check?" / "Only do this on a network you trust." / "Cancel" / "Skip the check". | `ListItem` + `Switch` |
@@ -1712,8 +1712,8 @@ Field "Tag ID" (`--mono`) and button "Simulate a tag tap": behaves as a real tap
 ### 12.7 Alerts (`settings/alerts`)
 
 The row sits after Hub connection in 12.1 (its number only keeps the numbers of 12.2 to 12.6 as they are). The alert
-types and thresholds are edited on the Hub page or the command line, like every setting; this screen is about this
-phone.
+types and thresholds are changed on the Hub page and with `spoolwarden alerts` only; this screen shows them read-only
+with the line "Change this on the Hub page." and is otherwise about this phone.
 
 | Element | Text / behaviour | Material 3 |
 |---|---|---|

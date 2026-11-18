@@ -1988,6 +1988,57 @@ group; on expanded width `ListDetailPaneScaffold` shows the group beside the lis
 </nav>
 ```
 
+### 6.5 Getting started panel (Hub page only)
+
+**Purpose.** Lead an owner through what is left to set up, one row per step, in any order. Only the Hub page has it
+(`03-hub-page.md` section 4.2). It is made of parts of this document and adds no shared component: nothing in
+`components.css` or `components.js` changes for it.
+
+**Anatomy.** A card (`03-hub-page.md` section 3.8) with a title row, rows and a foot. Title row: "Getting started" and, at the right, the count "<n> of <m> done". Each row: a status badge (7.1) with
+the state word, the step's name in weight 650, one line of result or reason in `--muted`, and one button (4.1). Foot: a
+ghost button **Hide this list**. Hidden, it is one quiet line "Getting started: <n> of <m> done" with a link **Show**.
+When every shown step is done, the card says "All set" once and is gone. While no step is done, one quiet row above the
+steps offers "Moving from another computer? Restore its backup": it is not a step, has no state word and is not counted
+in "<n> of <m>".
+
+**Sizes and tokens.** Rows as the rows of a collection (6.1): padding `var(--s3) var(--s4)`, a `--hairline` between rows,
+`--fs-m`. The state word is the status badge's: "Done" is `ok` with the filled circle; "Next" is bold on the first
+step not done and its button is the only filled button of the card; "Not yet" is muted with no status shape.
+
+**States.**
+- Default: the rows above.
+- Hover, focus, pressed: a row's button as its button (4.1); nothing else in the row is interactive.
+- Disabled: a button that needs the setup code asks for it in place when pressed (3.2); a step whose condition is not
+  met is not drawn.
+- Loading: the skeleton of 10.3 for three rows.
+- Error: the error state of 10.2 inside the card with **Try again**; the rest of Overview stays.
+
+**Behaviour and keyboard.** "Next" only marks the first open step; any step can be done first. The count and the
+words change when the data they come from changes, in place and without moving focus (6.1). **Hide this list** and
+**Show** move focus to the line or the card that replaces them.
+
+**Accessibility.** A list (`role="list"`); the state word is text, read before the step's name; the count is part of
+the card's heading ("Getting started, 3 of 8 done"); "All set" is announced once through the polite region (1.4).
+
+**Theme profiles.** No change: rows follow the `collection` profile of the theme, the card follows `detail`.
+
+**Android.** Not in the Android app yet; its one-line summary on Home is specified with the app's Home.
+
+**HTML.**
+```html
+<section class="card gs" aria-labelledby="gs-title">
+  <h2 id="gs-title">Getting started <span class="gs__count">3 of 8 done</span></h2>
+  <ul class="gs__list">
+    <li class="gs__row"><span class="status status--ok">…Done</span> <b>Name this Hub</b>
+      <span class="muted">Workshop hub</span> <a class="btn" href="#settings/general">Open settings</a></li>
+    <li class="gs__row"><span class="gs__next">Next</span> <b>Check storage locations</b>
+      <span class="muted">The default locations are in use.</span>
+      <a class="btn btn--primary" href="#settings/storage">Open settings</a></li>
+  </ul>
+  <button class="btn btn--ghost" type="button">Hide this list</button>
+</section>
+```
+
 ---
 
 ## 7. Showing data and status

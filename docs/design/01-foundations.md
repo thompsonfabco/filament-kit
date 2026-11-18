@@ -273,6 +273,18 @@ the most work, because of the drill-in navigation). See `09-implementation-order
 - Content keeps a side gutter of at least `--s4` (16 px).
 - Android: compact, medium and expanded window size classes correspond to phone, tablet and desktop.
 
+The window decides the frame: which navigation shows, the phone, tablet and desktop behaviour, and everything the table
+above ties to the three widths stay on the breakpoints of 600 and 1024 px, and a container query never replaces one of
+them. A container query is for one kind of place only: a region whose width does not follow the window, because it
+shares its row with something that opens, closes or changes width (a theme's detail pane or drawer, a side list). There
+it is the right tool, and a rule that guesses the region's width from the window is the thing to avoid. It sets
+`container-type: inline-size` and nothing more, on the component's own root element (never on `body`, `main` or the
+page frame); it names a container only where two nest, and uses no style queries and no container units for type or
+spacing. Its edge is derived, not chosen: the least useful width of the part that stays plus the fixed parts beside it,
+written as that sum in the comment beside the rule and listed in `08-platform-mapping.md` section 7. The stylesheets
+already rely on `:has()`, which browsers got no earlier than container queries, so this cuts off no older browser. The
+Android app has its own window size classes and pane rules and is not concerned.
+
 ## 8. Navigation
 
 Hub page sections, in this order, in two groups:

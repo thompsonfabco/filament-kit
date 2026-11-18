@@ -33,9 +33,10 @@ Contents: 1 Conventions · 2 Page-wide behaviour · 3 Global chrome · 4 Overvie
 | Button kinds | Primary, default, ghost, danger and icon buttons of `02-components.md`. Every section, card and row has at most one primary button (foundations principle 2). |
 
 Example values in this document are those of `mockups/CONTENT-SPEC.md`: the Hub is named "Workshop hub", version 0.5.2, at
-`https://192.0.2.10:8710/setup`; printers Workshop X1 (192.0.2.40), Garage Voron (voron.example:7125) and Study
-A1 mini (192.0.2.41); devices "Kitchen phone" and "Desk PC". `http://127.0.0.1:7915` is not an example but the
-product's own default address of the On this Hub engine (section 10.5).
+`https://192.0.2.10/setup` (a new Hub uses port 443, so its address has no port; section 10.7); printers Workshop X1
+(192.0.2.40), Garage Voron (voron.example:7125) and Study A1 mini (192.0.2.41); devices "Kitchen phone" and "Desk PC".
+Where an example shows a Hub on another port (10.7, 10.11), it is `https://192.0.2.10:8710/setup`.
+`http://127.0.0.1:7915` is not an example but the product's own default address of the On this Hub engine (section 10.5).
 
 ### 1.2 Addresses inside the page
 
@@ -389,7 +390,7 @@ spinner until the Hub answers. When it answers, the banner goes and the section 
 Hub's access rules is not this case: "the setup page only answers the home network" and "Open the setup page by the
 server's own name or address" are shown as a full-page error state with the rewritten texts "This Hub page only
 opens from the home network." and "Open the Hub page by the Hub's own name or address, for example
-https://192.0.2.10:8710/setup. Other names can be added in Settings > Network and addresses." A change refused with
+https://192.0.2.10/setup. Other names can be added in Settings > Network and addresses." A change refused with
 "bad origin" (the page was opened under another address than the one the request reached) is shown where the
 change's result goes, as the error "The Hub refused this change because the page was opened under a different
 address. Reload the page and try again."
@@ -416,7 +417,8 @@ page form of `spoolwarden status`. Address `#overview`.
 
 **Data.** `G state`, `G overview` (view); when Unlocked or Trusted, `P overview` (code) instead, which returns the
 same shape without hidden addresses. `G intake/history` for the Recently added tile. `G storage-use` (`GET
-api/storage-use`) for the Storage row and its panel; `G spools/low` (`GET api/spools/low`) for the Running low card.
+api/storage-use`) for the Storage row and its panel; `G spools/low` (`GET api/spools/low`) for the Running low card. `G start` (`GET start`, view) for the Getting started panel; `P start`
+(code) for its Hide, Show and Keep buttons.
 
 ### 4.1 Layout
 
@@ -460,6 +462,21 @@ Phone:  one column; the tiles become one key-value list card; each check is a st
         location, stock note).
 ```
 
+The Getting started panel takes the place of the Still to do card while it shows (4.2). Desktop, with five steps shown:
+
+```
++-- Getting started ------------------------------------------------------------ 2 of 5 done --+
+| (*) Done     Name this Hub                          Workshop hub                [Open settings] |
+| (*) Done     Check storage locations                The default locations      [Open settings] |
+| **Next**     Choose features                           [Keep these]  [Go to Features]          |
+| Not yet      Add a printer                                                    [Add a printer] |
+| Not yet      Use a phone                                                      [Go to Devices] |
+|                                                                               [Hide this list] |
++--------------------------------------------------------------------------------------------+
+Hidden:  Getting started: 4 of 8 done · Show
+Tablet and phone: one column; each row stacks the state word and the name, the line, then the button.
+```
+
 ### 4.2 Cards
 
 **Header meta line.** "Spoolwarden <version_text>" · "Setup: <setup name>" (names in section 9) · when
@@ -470,8 +487,57 @@ Phone:  one column; the tiles become one key-value list card; each check is a st
 stopped halfway", body "To repair it, run this on the Hub:" and a code block with Copy holding the command the Hub
 sends.
 
-**Still to do** (only when it has items; card title "Still to do" with the count in a badge). Each item is a row:
-warn triangle, one sentence, one default button.
+**Label Reader banner** (warn; while Label Reader: On this Hub is on and the reader is not installed, and only after
+the person has left Features before the switch's job ended, 9.4): "The Label Reader is switched on but not installed."
+with the default button **Finish in Settings** → `#settings/label-reader`. It goes when the reader is installed.
+
+**Getting started** (the welcome checklist: Guided Setup is this panel; built from the parts of `02-components.md`
+section 6.5). It is the top card of Overview, above the tiles, and it replaces the Still to do card while it shows.
+Title "Getting started", and at the right the count "<n> of <m> done", where <m> is the number of steps shown. One row
+per step, in the order of the table: the state word, the step's name, one line of result or reason (the Hub's own
+`line`), and one button. Any step can be done in any order. Conditions are in brackets; the first column is the name
+shown.
+
+| Step | Button → place | Done when |
+|---|---|---|
+| Name this Hub | **Open settings** → `#settings/general`; ghost **Keep "<name>"** | The name was saved once, on this page or at the installer's question, or **Keep "<name>"** was pressed |
+| Check storage locations | **Open settings** → `#settings/storage`; ghost **Keep the defaults** | The list was saved once, or the installer's storage question was answered, or **Keep the defaults** was pressed |
+| Choose features | **Go to Features** → `#features`; ghost **Keep these** | A feature was switched once, or the installer asked about features, or **Keep these** was pressed |
+| Install the Label Reader (only with "Label Reader: On this Hub" on) | **Open settings** → `#settings/label-reader` | The reader is installed |
+| Set the Anthropic API key (only with the Cloud (Claude) engine on) | **Open settings** → the key field of `#settings/label-reader` | A key is set |
+| Add a printer (only with a printer feature on) | **Add a printer** → the guided drawer (5.6) | A printer exists |
+| Map its slots (same condition) | **Map slots** → that printer's Map slots (5.7) | A printer has a saved slot map |
+| Use a phone | **Go to Devices** → `#devices/pair`, the pairing code | A phone is paired, or the web passphrase is set |
+| Set the web passphrase (only with Web access on) | **Open settings** → `#settings/passphrase` | The passphrase is set |
+| Pair Slicer Sync (only with Slicer presets on) | **Go to Devices** → `#devices/pair`, the pairing code | A PC is paired |
+| Add your first spool | **Open the web app**: the phone web app's Add (7.4); with the hint "Do this from your phone." beside it when no phone is set up | Spoolman has at least one spool |
+| Make a first backup | **Back up now** → `#settings/backups` | A backup exists |
+
+**The Restore row.** "Moving from another computer? Restore its backup" with **Restore a backup** → `#settings/backups`
+is not a step. It is a quiet row above the steps, shown only while no step is done, and it goes when any step is done.
+It has no state word: it is never "Next" and never "Done", and it is not counted in "<n> of <m>". The Hub's answer
+carries it as `restore_offer` (section 15).
+
+The setup code is not a step: a Hub installed by the installer always has one. The Still to do card keeps its row for
+the rare Hub without one, and while Getting started shows, that row is the only part of the card drawn.
+
+- **State words.** "Done" with the filled circle; "Next" in bold on the first step not done, and its button is the one
+  filled button of the card; "Not yet" in `--muted` with no status shape. "Next" only marks the first open step.
+- **Hide and finish.** The foot has a ghost button **Hide this list**. Overview then shows one quiet line "Getting
+  started: 4 of 8 done · Show", and **Show** brings the panel back. When every shown step is done, the panel says "All
+  set" once and is then gone for good, with no line. Changing something (Hide, Show, Keep) needs the setup code as
+  everywhere; looking does not.
+- **When it shows at all.** On a Hub installed with this version or later. A Hub that was updated from an earlier
+  version starts with the panel hidden (the line with **Show** is there, so nothing is forced on an owner who is long
+  set up); a Hub restored from a backup starts hidden too.
+- **Where it is kept.** The marks (hidden, finished, and that the name, storage and features questions were answered) are
+  kept by the Hub in `firstrun.xml` in its state folder, and are part of a backup. Everything else is read at the
+  moment the panel is drawn: printers, slot maps, devices, features, the reader's install state, the key, the
+  passphrase, backups and the number of spools. The state of the panel never stops the Hub from starting: when it cannot
+  be read or written, the panel is treated as hidden and nothing else changes.
+
+**Still to do** (only when it has items, and only while Getting started is hidden, finished or not shown, or, while
+Getting started shows, only its setup-code row; card title "Still to do" with the count in a badge). Each item is a row: warn triangle, one sentence, one default button.
 
 | Shown when | Sentence | Button → place |
 |---|---|---|
@@ -504,6 +570,9 @@ When Share corrections is on and corrections are waiting (10.5.2), the Label Rea
 "<n> corrections waiting to be shared" to `#settings/label-reader`. That line is the only reminder: no toast, no
 mark on the navigation, and nothing is ever sent by itself.
 
+While Label Reader: On this Hub is on and the reader is not installed, the Label Reader tile says "Not installed yet" as
+its second line, with the link **Finish in Settings** to `#settings/label-reader`.
+
 When the feature behind a tile is off, the tile shows "Switched off" in `--muted` and still links to its section.
 
 **Checks** (a collection of the Hub's `rows`, `table` profile in Console).
@@ -533,8 +602,17 @@ When the feature behind a tile is off, the tile shows "Switched off" in `--muted
 
   The same row is in `spoolwarden status`. A storage warning also shows as an alert banner on every section
   (section 2.8).
+- **Rows for the satellites and the reader.** The same rows are in `spoolwarden status` (`06-command-line.md` 9.1).
+
+  | Group | Status | Row | Fix |
+  |---|---|---|---|
+  | Devices | Needs a look | "The Weigh Station <name> is not using HTTPS. Update it." (a Weigh Station that has not been updated sends no fingerprint, and the Hub keeps calling it over plain HTTP until it is) | none: the text is the fix |
+  | Devices | Needs a look | "The tag source <address> is not using HTTPS." (a printer-side tag service that answers only on plain HTTP, which the Hub still reads) | none |
+  | Devices | Needs a look | "The certificate of the tag source <address> has changed." | "Save the tag source again to trust the new certificate." |
+  | Label Reader | Needs a look | "The Label Reader at <address> is not using HTTPS." (a reader on another machine, until its own side serves HTTPS) | none |
+  | Label Reader | Needs a look | "The Label Reader is switched on but not installed." | The command that installs the reader, as a code block with Copy |
 - Row action `ensure_fields`: primary button **Make the fields** (code) → `P fields`, the page's main action while
-  its check needs a look (4.3); inline result "Made the fields: <made>." or, when `made` is 0, "The fields were
+  its check needs a look (4.3; a default button while Getting started shows a Next step); inline result "Made the fields: <made>." or, when `made` is 0, "The fields were
   already there." It is the only row action.
 - Card action (title row, ghost button with refresh icon): **Run the checks again** → reads the rows again.
 
@@ -549,12 +627,18 @@ Trusted, the page reads `P overview` by itself and the line goes.
 | Loading | Tiles and five check rows as loading skeleton; screen reader "Checking the Hub." |
 | Error | Error state in the Checks card: "Could not check the Hub. <Hub's text>" and **Try again** |
 | Nothing to do, all OK | No Still to do card; the Checks card title badge reads "OK" and the first line of the card "Everything checked out." |
+| Getting started loading | Three skeleton rows in the panel's place |
+| Getting started shows | Still to do is not drawn, except its setup-code row on a Hub that has no setup code |
+| Getting started unreadable | The panel is left out until `G start` answers, and Still to do shows as it does without the panel |
+| Getting started hidden | One quiet line "Getting started: <n> of <m> done · Show" in the panel's place; Still to do shows |
+| Getting started, every step done | "All set" once, then neither the panel nor the line; Still to do shows |
 | Job running | The meta line adds "<job title> is running" with a link that opens the job strip |
 | Storage use loading or unreadable | The Storage row is left out until `G storage-use` answers; the panel shows the loading skeleton, or the error state "Could not read the storage use. <Hub's text>" with **Try again** |
 | Nothing running low | No Running low card |
 
 **Main action:** none permanent. When a check needs a look and has an action, that action is the page's one primary
-button. **Run the checks again** is a ghost button.
+button. **Run the checks again** is a ghost button. While Getting started shows and a step is Next, that step's button is
+the one filled button of Overview, and a check's action is then a default button.
 
 ---
 
@@ -708,30 +792,56 @@ they concern, otherwise in the dialog above its buttons; the dialog stays open w
 
 ### 5.6 Add a printer (drawer)
 
-Side drawer on desktop (420 px), full-height dialog on tablet, bottom sheet on phone. Address `#printers/add`. Title
-"Add a printer".
+One guided add flow, for the first printer and every later one. Side drawer on desktop (420 px), full-height dialog on
+tablet, bottom sheet on phone. Address `#printers/add`. Title "Add a printer". It is opened by **Add a printer** in
+Printers and by the Getting started step of that name (4.2). Four steps; each has **Back** (default), and the drawer
+keeps what was typed when the person goes back or forward. Cancel (default) closes; with typed values it asks "Leave
+without saving?" (section 2.6).
+
+**Step 1: Which printer?** The printer type: segmented choice "Bambu Lab" / "Klipper", only for the families whose
+feature is on; with one family on, the step shows the found list only. Above the choice, "Found on your network": one
+row per printer found, each with **Use this**, which fills the next step. Klipper printers come from the existing search
+(`P printers/scan`, 5.4); Bambu Lab printers come from the Hub's own listener for printer announcements when it can
+supply them (section 15).
+
+| State of the list | Text |
+|---|---|
+| Searching | "Looking…" |
+| Nothing found | "None found. Type its address in the next step." |
+| The Hub cannot list Bambu Lab printers | The list holds Klipper printers only, and the sentence is "Bambu Lab printers are added by address." |
+
+**Step 2: Its details.**
 
 | Field | Type | Shown | Sent as |
 |---|---|---|---|
-| Printer type | Segmented choice "Bambu Lab" / "Klipper" | Only when both families are on; kept while the drawer is open | |
-| IP address or name | Text, `--mono`, placeholder `192.0.2.40 or printer.local` | Bambu Lab | `address` |
-| Access Code | Secret field with show/hide; hint "On the printer: Settings > Network/LAN." | Bambu Lab | `access_code` |
+| IP address or name | Text, `--mono`, placeholder `192.0.2.40 or printer.local`; filled from the found row | Bambu Lab | `address` |
+| Access Code | Secret field with show/hide; hint "On the printer: Settings > Network/LAN > Access Code", and one more line when the model is known from the found row or the reply | Bambu Lab | `access_code` |
 | Name (optional) | Text | Both | `name` |
-| Serial (optional) | Text, `--mono`, upper case; hint "Read from the printer when left empty." | Bambu Lab | `serial` |
-| Address | Text, `--mono`, placeholder `voron.example` | Klipper | `host` |
+| Serial (optional) | Text, `--mono`, upper case; hint "Read from the printer when left empty."; under "More" | Bambu Lab | `serial` |
+| Address | Text, `--mono`, placeholder `voron.example`; filled from the found row | Klipper | `host` |
 | Port | Number, `--mono`, default 7125 | Klipper | `port` |
 | Moonraker API key (optional) | Secret field | Klipper | `api_key` |
 
-Main action **Add printer** (primary, drawer foot) → `P printers` (Bambu Lab) or `P printers/klipper` (code).
-Cancel (default) closes; with typed values it asks "Leave without saving?" (section 2.6).
+**Step 3: Test, then add.** Main action **Add printer** (primary, drawer foot) tests first and says the result in
+words, then adds → `P printers` (Bambu Lab) or `P printers/klipper` (code). Nothing is saved on a failed test unless
+**Add anyway** is pressed.
 
 | Result | What shows |
 |---|---|
-| Success | The drawer closes; toast "Added <name>."; the new row is expanded with the message "Added. The Hub is connecting to it." and its Test connection button focused. A `note` from the Hub joins the message. |
+| Added | The printer is saved; toast "Added <name>."; the drawer goes to step 4. A `note` from the Hub joins the message of the new row. |
+| Bambu Lab: the printer cannot be read | The add reads the printer's certificate and fails with the Hub's text when it cannot; the text stays at its field and the drawer stays open |
+| Klipper: no answer | The Hub asks the printer for its info before it saves. Above the drawer's buttons: "The Hub could not reach a Klipper printer at <address>:<port>." with **Try again** and, beside it, **Add anyway** (for a printer that is switched off), which saves it without the test |
 | "names itself <A>, not <B>" | At the address field: "The printer at <ip> calls itself <A>, not <B>. Check the address." |
 | Serial cannot be read | At the serial field: "Spoolwarden could not read the serial. Type it in: on the printer, Settings > Device." |
 | Bad address | At the address field: the Hub's text, which ends "On the printer: Settings > Network." |
 | Other refusal | Above the drawer's buttons, the Hub's text |
+
+Empty required fields are refused at the field before anything is sent (5.5).
+
+**Step 4: Map its slots now?** One sentence: "Mapping tells the Hub which slot is which. Nothing heats or moves." **Map slots**
+(primary) opens the existing map flow (5.7) for the new printer. **Later** closes the drawer on the new printer's row,
+expanded with the message "Added. The Hub is connecting to it." and its Test connection button focused. The fifth
+step of a guided add, loading a spool, is not here: the Hub page has no load flow.
 
 ### 5.7 Mapping and reports
 
@@ -957,7 +1067,7 @@ Desktop
 | |  This Hub's web app    (built in)          2026-11-12 14:06                                  | |
 | +---------------------------------------------------------------------------------------------+ |
 | +-- Weigh Stations asking to pair ------+ +-- The web app on a phone ---------------------------+ |
-| | No Weigh Station is asking to pair.   | | At home: https://192.0.2.10:8710/intake  [QR]      | |
+| | No Weigh Station is asking to pair.   | | At home: https://192.0.2.10/intake  [QR]           | |
 | +---------------------------------------+ | Away from home: https://hub.example/... [QR]       | |
 | +-- Tag Readers ------------------------+ +----------------------------------------------------+ |
 | | rd-3  Printer bench  made 2026-11-01  | +-- Trusted computers ------------------ (*) On -----+ |
@@ -1018,6 +1128,12 @@ visible and the page is Unlocked or Trusted.
 | Locked | "A Weigh Station on another computer asks from its own screen. Requests are shown once the page is unlocked." and default **Unlock to show** |
 | None | "No Weigh Station is asking to pair." |
 | Request (one row each) | "<name> at <address> asks to pair. Its screen shows <ddd ddd>." (digits in `--mono` `--fs-l`); hint "Pair only if the Weigh Station shows the same six digits. If not, refuse it: someone else asked." Primary **Pair** → `P stations/requests/<id>/pair` (code), result "Paired <name>. It picks up its pairing within a few seconds."; default **Refuse** → `P stations/requests/<id>/refuse` (code), result "Refused <name>." |
+
+A paired Weigh Station serves HTTPS with a certificate it made itself. At every start it tells the Hub its certificate's
+fingerprint, its port and its version over the connection it already has, and the Hub then calls it only at that port
+and accepts only that certificate; nobody types an address or a fingerprint for it. A Weigh Station on this Hub's own
+machine is called at `http://127.0.0.1:5003`, which never leaves the machine. A station that has not been updated sends
+no fingerprint and is still called over plain HTTP; the Checks show it (4.2).
 
 ### 7.4 The web app on a phone
 
@@ -1258,10 +1374,13 @@ Side drawer on desktop, full-height dialog on tablet, bottom sheet on phone. Add
 | Corrections waiting | Only when turning off Label Reader: On this Hub while corrections are waiting (10.5.2): a warn line "Deletes <n> corrections waiting to be shared. Send them first in Settings > Label Reader, or go on." They are kept by the reader and go with it. |
 | Afterwards | "On afterwards:" and the list of feature names, or "Nothing" |
 | Settings it needs | One labelled field per `needs` item: the label from the item's `prompt` (for example "Public https address of the web app", placeholder `https://hub.example/filament`); required |
+| Label Reader lead-in | Only when turning on Label Reader: On this Hub: the line "After this, install the reader in Settings > Label Reader (a download)." |
 | Refused | Error banner with the Hub's `refused` text, rewritten when it matches: "This page belongs to the Hub service. To switch it off, run on the Hub: `sudo spoolwarden features off hub`." Apply is then absent. |
+| Remote access while the Hub holds port 443 | Refused before anything is changed: "Remote access needs port 443, and the Hub is using it. Move the Hub to another port first: Settings > Network and addresses, Hub port." with a link to `#settings/network`. Apply is absent. The Hub never moves by itself. |
 | Loading | Skeleton lines, screen reader "Reading what changes." |
 | Buttons | Cancel · **Apply** (primary) → `P modules/mode` (code) `{mode, settings}` or `P modules` (code) `{name, on, settings}` |
 | Result | Reply `changed: true`: the drawer closes, toast "Saved; applying… Follow it in the job panel.", the job strip follows job `apply`. `changed: false`: inline "Nothing to change." and the drawer stays. |
+| After Label Reader: On this Hub is switched on | When the job ends well and the reader is not installed, the page goes to Settings > Label Reader by itself, with the install plan in view (10.5), and shows the toast "Label Reader switched on. Install it here to finish." If the person has left Features meanwhile, Overview shows the Label Reader banner instead (4.2). A failed job changes nothing here: the job strip says so as it does for every feature. |
 
 **Main action:** none permanent; Apply in the drawer.
 
@@ -1272,6 +1391,7 @@ Side drawer on desktop, full-height dialog on tablet, bottom sheet on phone. Add
 | Loading | Three skeleton choice cards, six skeleton rows |
 | Job running (`apply`) | Every Turn on / Turn off and the setup cards are disabled with tooltip "Wait for the current change to finish."; a banner "Applying the changes… Follow it in the job panel." |
 | Hub service row | Its button is absent; the row reads "Always on while this page is open." |
+| Label Reader: On this Hub is on and the reader is not installed | The row says "Not installed yet" with the link **Finish in Settings** → `#settings/label-reader` |
 
 ---
 
@@ -1489,6 +1609,8 @@ only Records kept stays editable.
 | Address             [http://127.0.0.1:7915      ]  [Test]                                                   |
 |                     (*) Answers: version 1.2.0, API 1, tiers CPU and GPU, corrections supported              |
 | Tier                [Automatic | Processor (CPU) | Graphics card (GPU)]                                     |
+| Installed on this machine: version 1.2.0, CPU tier.      [Check for an upgrade]  [Remove the reader]        |
+| Reader token  (*) Not set    [                    ] [Set a token]                                           |
 | RECENTLY ADDED                                                                                              |
 | Records kept        [ 20 ]  Now 20 records, 14.2 MB of photos. Each record with photos takes 0.5 to 2 MB.   |
 | /!\ Saving a new model or reads per day restarts the Hub. This page comes back by itself.                  |
@@ -1502,10 +1624,28 @@ only Records kept stays editable.
 | Anthropic API key | Key row: status badge "Set" / "Not set", masked value, default **Check**, default **Replace** (or **Set a key**), danger **Remove** (only when set). Replace reveals a secret field "New Anthropic API key", placeholder `sk-ant-…`, and a ghost **Cancel** | New key: `P key` (code) `{key}`, sent by the group's Save. Check: `P key/check` (view). Remove: confirm, `P key/remove` (code) | Cloud on (otherwise one line: "Only used by Label Reader: Cloud (Claude), which is switched off.") | Check: inline spinner "Checking the key…", then the Hub's text as OK or error; "Wait 3 seconds between checks." when too soon. After a new key is saved: "Key saved. Check it to be sure it works." |
 | Claude model | Text, `--mono`, placeholder "Default model" | `model` | Cloud on | Hint "Leave empty for the default model." Restarts the Hub. |
 | Reads per day | Number with unit "reads" | `reads_per_day` | Cloud on | Hint "Cloud reads allowed per day; reads On this Hub do not count." Restarts the Hub. Field error "Enter a whole number from 1." |
-| Address | Text, `--mono`, default `http://127.0.0.1:7915` | `local_intake.url` (unreleased) | On this Hub on | Hint "Where the reader answers: this Hub, or another computer at home." |
-| **Test** | Default button beside Address | The saved address: `G settings/local-intake` (view, unreleased). An address that is typed but not saved: the Hub's test of a given address, a change-like request that passes the lock (the Hub contacts a host the person typed, so it asks for the setup code like any change; it sends no token there and follows no redirect) | On this Hub on | Inline spinner "Asking the reader…"; OK "Answers: version <v>, API <n>, tiers <list>, corrections <supported / not supported>."; warn "Answers, but degraded: <reason>."; error "No answer at <address>. Check that the reader is running and the address." Test works on what the field shows: the saved address without the lock, a changed address after unlocking in place, without saving it. Until the Hub offers the test of a given address, Test is disabled while the field holds an unsaved change, with the reason "Save the address first, then test it." A 409 (On this Hub switched off) shows "Label Reader: On this Hub is switched off. Switch it on in Features." |
+| Address | Text, `--mono`, default `http://127.0.0.1:7915` | `local_intake.url` (unreleased) | On this Hub on | Hint "Where the reader answers: this Hub, or another computer at home." A reader on this machine (`127.0.0.1`) stays on plain `http://`, as it never leaves the machine. A reader on another machine needs an `https://` address: an `http://` address that is not `127.0.0.1` is refused at the field with "A Label Reader on another machine needs an https address." |
+| **Test** | Default button beside Address | The saved address: `G settings/local-intake` (view, unreleased). An address that is typed but not saved: the Hub's test of a given address, a change-like request that passes the lock (the Hub contacts a host the person typed, so it asks for the setup code like any change; it sends no token there and follows no redirect) | On this Hub on | Inline spinner "Asking the reader…"; OK "Answers: version <v>, API <n>, tiers <list>, corrections <supported / not supported>."; warn "Answers, but degraded: <reason>."; error "No answer at <address>. Check that the reader is running and the address." Test works on what the field shows: the saved address without the lock, a changed address after unlocking in place, without saving it. Until the Hub offers the test of a given address, Test is disabled while the field holds an unsaved change, with the reason "Save the address first, then test it." A 409 (On this Hub switched off) shows "Label Reader: On this Hub is switched off. Switch it on in Features." For a reader at an `https://` address on another machine, Test also pins its certificate the first time (trust on first use) and shows the fingerprint, in groups of four in `--mono`, beside the result; from then on the Hub accepts no other certificate from that address. |
 | Tier | Segmented choice "Automatic" / "Processor (CPU)" / "Graphics card (GPU)" | `local_intake.tier` (unreleased; `auto` / `cpu` / `gpu`) | On this Hub on | Hint "Automatic uses the graphics card when the reader has one." |
 | Records kept | Number | `intake.history_keep` | Always | Hint "How many of the newest additions Recently added keeps with their photos (0 keeps none). Now <count> records, <size> of photos; a record with photos takes about 0.5 to 2 MB." Field error "Enter a whole number from 0 to 500." |
+
+**Install block.** Under Tier, with On this Hub on: the reader that runs on this machine, its install plan and its
+token. None of it is part of Save Label Reader: install and removal run as jobs, and the token is set by its own
+buttons.
+
+| Element | Text / behaviour |
+|---|---|
+| State line | Installed: "Installed on this machine: version <version>, <tier> tier." Not installed: "Not installed on this machine. A reader on another computer at home (one with a graphics card) works too: switch it on in Features and give its address above." |
+| **Check what an install needs** (default; **Check for an upgrade** when installed) | Runs the job `local_intake_plan` (`P job` (code) `{name}`; the Hub's own process cannot reach the release, so a helper job does); the job strip follows it (3.5). |
+| Install plan | After the check, under the buttons: "Checked <date and time>:", then the lines of the plan, one per line. Required download: "Download now: <n> MB (required)." Optional download of the tier: "Also downloaded for the <tier> tier (optional): <what>. The release gives no size in MB for it, so it is not added to the figures here." or "… (optional): nothing." Total disk space: "Disk used in total: <n> MB." Before them the line "Install the local label reader <version>, <tier> tier, about <n> min." (or "Upgrade to", "Reinstall", "Go back (downgrade) to"), "Installed: version <version> (<tier> tier)." when one is installed, and, right after that line, "This release has no <tier> tier: its <tier> tier is used." when the tier asked for is not the one the plan uses (the first <tier> is the one asked for, the second the one used), and "Other tiers: <tier>: <n> MB download, <n> MB disk." when the release has more. A figure the release does not state reads "not stated by this release (missing: <field>)", never a guess. When the plan is over an hour old: "That check is over an hour old: check again to install." The plan always ends with "The tier is the one under Tier above: change it there and save, then check again." |
+| **Install** (primary; its name is "<label> <version> (<tier> tier)", where <label> is Install, Upgrade or Reinstall by the plan) | Shown when the plan is fresh, the release has the tier and the install is not a downgrade. Opens the confirm "Install the local label reader <version>?" with the plan lines (without "Installed" and "Other tiers") as its text and the button's name as its confirm; runs the job `local_intake_install`; the job strip follows it. |
+| **Remove the reader** (ghost, danger; only when installed) | Confirm "Remove the local label reader?" "It leaves this machine, and Label Reader: On this Hub is switched off. Its settings are kept." with **Remove** (danger); runs the job `local_intake_remove`; the job strip follows it. |
+| Reader token | Label "Reader token" with the status "Set" / "Not set"; hint "Only for a reader installed with a token, usually one on another computer. It is sent with each read and never shown again."; secret field; default **Set a token** (**Replace** when set) → `P local_intake_token` (code) `{token}`, result "Saved."; ghost danger **Remove** (only when set) → `P local_intake_token/remove` (code). The group is read again afterwards. |
+| States | Loading the plan fails: the Hub's text as an error line under the buttons. A job in progress or one that ends: the job strip (3.5); the group is read again when it ends. A button that needs the setup code asks for it in place (3.2). |
+
+**Arriving from Features.** When Label Reader: On this Hub has just been switched on and the reader is not installed, the
+page opens this group by itself with the install plan of the reader in view, and the toast "Label Reader switched on.
+Install it here to finish." (9.4).
 
 Fields are sent in this order: Engine order, Address, Tier, Records kept, Share corrections (10.5.1), Anthropic API
 key, Claude model, Reads per day, so the two that restart the Hub go last. When either of the last two is among the changes, Save opens a
@@ -1624,8 +1764,9 @@ Description: "How the Hub is reached from the web, by the Weigh Station, and by 
 
 | Field | Type | Key / endpoint | Shown | Notes |
 |---|---|---|---|---|
+| Hub port | Read-only value in `--mono` ("443", or the port in use) with the default button **Change port** | `port` in the group's answer (`G settings/general`); **Change port** opens the dialog of 10.11 and then runs as a job | Always | With port 443 every address of this Hub is shown without a port; with another port it is shown as `https://192.0.2.10:8710/setup`. |
 | Public address | Text, `--mono`, placeholder `https://hub.example/filament` | `web.public_url` → `P settings` (code) `{key, value}` | Always; hint differs when Web access is off | Hint "The https address of the web app and Claude's connector." Off: "Used when Web access is on." Applies in the background (job `apply`). |
-| Weigh Station address | Text, `--mono`, placeholder `http://station.local:5003` | `station.url` → `P settings` (code) | Always | Hint "Where this Hub reads a Weigh Station on another computer. Leave empty for none." Applies in the background. |
+| Weigh Station address | Text, `--mono`, placeholder `https://station.local` | `station.url` → `P settings` (code) | Always | Hint "Where this Hub reads a Weigh Station on another computer. Leave empty for none." Applies in the background. A Weigh Station is called over HTTPS at the port and certificate it told the Hub when it paired (7.3); an address with no port means port 443. |
 | Names for this page | Text, `--mono`, placeholder `hub.example` | `setup.hosts` (list) → `P settings/general` (code) | Always | Hint "Separate them with spaces. The Hub's own names and addresses always work, and so does a local name from your network (one word, .local, .lan, .home.arpa or your network's own domain) that points at this Hub. Add any other name here." |
 | Allow printer changes from the public address | Toggle | `web.printer_changes` → `P settings/general` (code) | Web access on | Hint "Off: the web app at the public address shows printers but cannot add, change or forget them. At home it always can." Saved with the group's Save (no longer on change). |
 | Remote access | Sub-group, Remote access on | | | Text "Spoolwarden never changes your firewall or router. Getting the certificate needs port 80 on your router to reach this Hub while it runs." Default **Show the firewall rules** → `P remote/firewall` (code), result shown in a code block with Copy under the button. Default **Get the certificate** → confirm, job `remote_issue` (code). Remote access off: "Turn on Remote access in Features to get a certificate for the public address." (link) |
@@ -1687,6 +1828,7 @@ No Save button.
 | Catalog go back | "Go back to the previous Filament Catalog?" | "The version before the last update comes back. Your own entries are kept." | Cancel · **Go back** (danger) |
 | Get the certificate | "Get the certificate now?" | "Port 80 on your router must reach this Hub while it runs. Spoolwarden never changes your firewall or router." | Cancel · **Get the certificate** (primary) |
 | Restore (typed word) | "Restore this backup?" | The check summary in short ("Backup of <host> made <created>"), then "This replaces the spools, settings, printers and pairings on this Hub. What is here now is saved as a backup first. The Hub restarts, and afterwards the setup code is the one from the backup." Field "Type restore to go on" (`--mono`, placeholder `restore`) | Cancel · **Restore** (danger, enabled only when the field reads `restore`) → `P job` (code) `{name: "restore", confirm: "restore", sha256: <the checked copy's SHA-256>}` |
+| Change the Hub's port | "Move the Hub to port <number>?" with a field "Port" (a number, `--mono`) | "Phones and the Slicer Sync PC find the Hub again on your network. A Weigh Station on another machine must be paired again." The Hub restarts, runs the change as a job, and this page then opens at the new address. A port that is taken, or that is not 443 or from 1024 to 65535, is refused at the field with the reason. | Cancel · **Change port** (primary) |
 | Remove a storage location | "Remove <name>?" | "<n> spools are recorded there. They keep that location until you move them; it is no longer offered for new spools." ("No spools are recorded there." when n is 0) | Cancel · **Remove** (danger) |
 | Unsaved changes | Section 2.6 | | |
 
@@ -1704,6 +1846,7 @@ The typed word is compared after removing spaces at either end; it must then rea
 | Refused | The field's error with the Hub's reason; the group's result "<Field> was not saved: see the field." |
 | Restart | Section 3.6 |
 | Locked | Saving asks for the code in place, then saves |
+| Hub port changing | The job strip follows the job; the Hub restarts (section 3.6); when it is back, the page opens at the new address |
 
 **Main action:** each group's Save is that group's one primary button; Back up now is the primary of Backups and
 restore, so its Save button is a default button.
@@ -2257,9 +2400,14 @@ column says.
 | Cloud reads used today and the daily limit as numbers in `G state` | Overview Label Reader tile (4.2) | The numbers are taken from the Overview check row that reports them; when that row is missing the tile shows "Reads per day: <limit>" |
 | Share corrections: what the reader can do and its state (it offers sharing, sharing on or off, how many wait), the setting `label_reader.share_corrections` with the job that sets the reader, the corrections waiting (list, thumbnails, remove, remove all, try again, package, send), and each correction handed to the reader when it is saved | Settings > Label Reader (10.5.1, 10.5.2), Recently added (6.2, 6.4), Overview tile (4.2), Features preview (9.4) | The block SHARE CORRECTIONS shows only its paragraph and the line "Not available on this Hub yet."; nothing else of the feature is shown |
 | An event store with `GET api/events?since=&since_at=&alert=&wait=&kinds=&limit=&client=` answering `{events: [{id, at, kind, severity, subject: {type, id, name}, actor: {type, id, name}, data: {}, condition: {key, state} or null, alert: true or false, title, text, action: {place, id}}], next, oldest, gap, test: {title, text} or null, conditions: [the raised ones, same shape]}` (`since` is an id and `since_at` a time, UTC, one of them; `alert=1` returns only events of alert types that are on; `wait` up to 55 s; `alert` in an event says whether an alert type that is on covers it; `oldest` is the lowest id still kept and `gap` is true when `since` is lower than `oldest` minus one, because events between were deleted by age; `test` is the test alert of `POST api/alerts/test` for the caller, given once; `client` is the browser id of the Hub page, kept in `localStorage` `spoolwarden.browser`, and a paired device is known by its token; `title` and `text` are built in the Hub's language) | Alert banners, toasts and the Alerts list on every section (2.8), Settings > Alerts > Recent alerts (10.13) | No banner, toast or Alerts list; the "Recent alerts" link is hidden |
-| `GET api/alerts` answering `{types: [{key, title, on}] (exactly the eight fixed keys `runout`, `paused`, `failed`, `printer_error`, `finished`, `storage`, `running_low`, `device_down`), last_spool_only, running_low_g, storage_warn_percent, storage_bad_percent}` and `P settings/alerts` (code) with the same fields (the names may be adjusted by the Hub; the fields may not) | Settings > Alerts (10.13) | The group is hidden |
+| `GET api/alerts` answering `{types: [{key, title, on}] (exactly the eight fixed keys `runout`, `paused`, `failed`, `printer_error`, `finished`, `storage`, `running_low`, `device_down`), last_spool_only, running_low_g, storage_warn_percent, storage_bad_percent}` and `P settings/alerts` (code) with the same fields (the names may be adjusted by the Hub; the fields may not); the write is the setup code's alone: no route lets a paired phone or the web app change the alert types or thresholds | Settings > Alerts (10.13) | The group is hidden |
 | `POST api/alerts/test`: stores nothing; the Hub keeps one test for the caller (the paired device of the token, or the browser id sent as `client`) for 60 seconds and gives it once as `test: {title, text}` in that caller's next `GET api/events` answer | **Send a test alert** (10.13) | The button is hidden |
 | `POST api/events/web` `{events: [{kind, at, subject, actor, data}]}`, a web-only route for the web unit's own events: the Hub accepts only the `spool.*` kinds, gives the id, keeps the `at` and sets the actor (`device` for the phone web app, `connector` for the connector's tools); only the web unit calls it, with its token | The web unit's spool events (09 Stage 10) | The events of spool changes made through the web unit wait in the web unit's outbox (at most 500) |
 | `GET api/spools/low` answering `{threshold_g, spools: [{id, filament, material, color, remaining_g, location, in_stock, last_one}]}`, least filament first | Overview, Running low card and its dialog (4.2) | No Running low card |
 | `GET api/storage-use` answering `{filesystems: [{path_label, total, free, percent_used, state}], items: [{key, title, bytes}]}` (not `api/storage`, which is the storage locations route) | Overview, Storage row and Storage use panel (4.2) | No Storage row |
 | A stored list of storage locations (`storage.xml` in the Hub's state folder, written by the Hub and read by the web unit) with `GET api/storage` and `P settings/storage` (code): the read answers `{locations: [{id, name, type: "bulk" or "containers", limit or null, count or null, used, free or null, prefix or null, containers: [{name, number, taken}] or null, fill: "none", "any" or "materials", materials: [], overflow, default_overflow, sealed, position}], order_by_material: [{material, locations: [names]}], everything_else: [names]}`; on an Individual containers location `containers` is the whole set in number order (as many as `count`): `name` is the exact location text of a spool in that container ("Storage box 03"), `number` the whole number, `taken` true while a spool's location is that name, and `prefix` is the exact text before the number, for information; both are `null` on Bulk storage, and `used` and `free` equal the counts of `taken`; a client never builds a container name, not from `name` and not from `prefix`: it matches a spool's location text with each location's `name` (taken first) and each `containers[].name`, and to place or move a spool it sends the set's `name` (the Hub takes the lowest free container) or one `containers[].name`; a text that matches nothing (a removed location, a text typed by hand) is shown as it is, under no location; the write takes the whole list `{locations: [...]}` (ids kept for existing rows, none for new ones) and answers the saved list, or `errors` per row and field | Settings > Storage locations (10.4) | The group shows "Could not read the settings. <Hub's text>" with **Try again**, and the list cannot be edited |
+| `GET start` answering `{show, hidden, finished, restore_offer: true or false, done, total, steps: [{id, state: done or next or open, line, target}]}` and `POST start` (code) with `{hide: true or false}` or `{keep: "name", "storage" or "features"}`, served in the Hub process; the step ids are fixed: `name`, `storage`, `features`, `reader`, `key`, `printer`, `slots`, `phone`, `passphrase`, `pc`, `spool`, `backup` (the Restore row is not a step: `restore_offer` says whether it shows); the marks are kept in `firstrun.xml` in the Hub's state folder | Overview, Getting started (4.2) | No Getting started panel and no line; Still to do shows as it always did |
+| The Hub's port in the answer of `G settings/general` (`port`), and the change of it as a job (`P job` (code) with the new port) | Settings > Network and addresses, Hub port (10.7, 10.11) | The Hub port row is hidden |
+| The three values a Weigh Station tells the Hub at every start on `GET api/station/hello`: `fp` (the SHA-256 of its certificate), `port` and `version`, kept with its pairing | The Hub's calls to a Weigh Station (7.3), the Checks row "The Weigh Station <name> is not using HTTPS. Update it." (4.2) | A Weigh Station that sends none is called over plain HTTP as before, and the Checks show that row |
+| Printers announced by Bambu Lab printers, listed by the Hub's own listener for them | Add a printer, step 1 (5.6) | The found list holds Klipper printers only, with the sentence "Bambu Lab printers are added by address." |
+| A Label Reader on another machine that serves HTTPS on its port (a change in the reader's own repository) | Settings > Label Reader, Address and Test (10.5) | The Hub accepts the reader's `http://` address as before and the Checks show the row "The Label Reader at <address> is not using HTTPS." |

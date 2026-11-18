@@ -97,6 +97,7 @@ System
   web              Access from outside the home, and Claude's connector
   remote           Remote access: certificate and firewall rules
   setup-code       The Hub page's address and setup code
+  port             The Hub's port: show or change
   certificate      The Hub's certificate and its fingerprint
   spoolman         Spoolman: its address and Spoolwarden's extra fields
   update           Check, install or roll back Spoolwarden
@@ -203,6 +204,7 @@ parts. The last column names the place on the Hub page that does the same thing,
 | `remote firewall` | Print the firewall rules (changes nothing) | Show the firewall rules |
 | `remote get-certificate` | Get the public certificate now | Get the certificate |
 | `setup-code [--new] [--revoke-trusted]` | Hub page address and setup code | Setup code, Trusted computers |
+| `port [<number>]` | Show the Hub's port, or move the Hub to another (9.19) | Settings > Network and addresses, Hub port |
 | `certificate` | Make the Hub's certificate if missing; print its fingerprint | (none) |
 | `spoolman fields` | Make Spoolwarden's extra fields in Spoolman | Overview, Make the fields |
 | `spoolman address [<url>]` | Show or change the Spoolman in use (checked before saving) | Settings > General, Spoolman address |
@@ -305,12 +307,12 @@ is always shown as a glyph followed by a word, never by colour alone and never b
 | Meaning | Words | Glyph (Unicode) | Glyph (ASCII) | Colour (token, section 6.2) |
 |---|---|---|---|---|
 | Good | `OK`, `connected`, `on`, `set`, `done`, `high`, `confirmed` | `●` | `+` | green (`--ok`) |
-| Off or absent | `off`, `not set`, `not set up`, `found, not added`, `skipped`, `not on label`, `unknown` | `○` | `o` | dim (`--muted`) |
+| Off or absent | `off`, `not set`, `not set up`, `found, not added`, `skipped`, `not on label`, `not yet`, `unknown` | `○` | `o` | dim (`--muted`) |
 | Offline | `offline` | `○` | `o` | red (`--bad`) |
 | Needs a look | `needs a look`, `medium`, `wrong Access Code`, `certificate changed`, `stopped without finishing` | `▲` | `!` | yellow (`--warn`) |
 | Error | `error`, `failed`, `low: check this` | `×` | `x` | red (`--bad`) |
 | Working | `working`, and the progress lines of section 6.6 | `◐` | `~` | cyan (`--accent`) |
-| Note | `note`, `entered by hand` | `◆` | `*` | blue (`--info`) |
+| Note | `note`, `next`, `entered by hand` | `◆` | `*` | blue (`--info`) |
 
 The terminal has no octagon, so the error shape is `×`. Words are lower case except `OK`. Where the table has
 more than one word for a meaning, the word belongs to a kind of thing:
@@ -324,6 +326,7 @@ more than one word for a meaning, the word belongs to a kind of thing:
 | Background work (update, backup, restore, apply) | working · done · failed · stopped without finishing |
 | Read confidence of a field | high · medium · low: check this · not on label |
 | Slot after mapping | confirmed · entered by hand · skipped |
+| Getting started step | done · next · not yet |
 
 The code's own values map onto these words: status rows `ok` / `fail` / `info` / `detail` are OK / needs a look /
 note / detail; printer states follow the printer states table of `02-components.md` 7.1: the badge word as the
@@ -490,6 +493,7 @@ Any step that can take longer than 2 seconds shows a progress line once 2 second
 | Slicer presets build | `◐ Building the Slicer presets…` |
 | Removing Spoolwarden | `◐ Removing Spoolwarden…` |
 | Get the public certificate | `◐ Getting the certificate…` |
+| Move the Hub to another port | `◐ Moving the Hub to port 8710…` |
 | Writing firmware over USB | `◐ Writing the firmware to /dev/ttyACM0… 45 %` |
 | The Hub restarting after a save | `◐ The Hub is restarting…`, then `The Hub is back.` |
 | Waiting for a phone to pair | `◐ Waiting for the phone… (the code works until 14:20)` |
@@ -534,7 +538,7 @@ Any step that can take longer than 2 seconds shows a progress line once 2 second
 
 | Command | JSON shape |
 |---|---|
-| `status`, `web status`, `label-reader status` | `{"rows": [{"group", "state", "text", "fix", "action"}], "summary": {...}}`, the rows of `GET /setup/api/overview` plus `group` (section 13); `status` adds `"storage": ` the answer of `GET api/storage-use` and `"running_low": <number of spools>` |
+| `status`, `web status`, `label-reader status` | `{"rows": [{"group", "state", "text", "fix", "action"}], "summary": {...}}`, the rows of `GET /setup/api/overview` plus `group` (section 13); `status` adds `"storage": ` the answer of `GET api/storage-use`, `"running_low": <number of spools>` and `"getting_started": ` the answer of `GET start` (`{show, hidden, finished, restore_offer, done, total, steps: [{id, state, line, target}]}`, 9.1) |
 | `printer list`, `printer show` | the printer objects of `GET /setup/api/state` (`printers.list`): `serial, name, model, ip, configured, state, pinned, family` and, for Klipper, `host, port, api_key, lane_data` |
 | `printer test` | `{reachable, state, text}`, the reply of `printers/<serial>/test` |
 | `printer map` | the map view of `GET /api/printers/<serial>/map` at its end |
@@ -559,6 +563,8 @@ Any step that can take longer than 2 seconds shows a progress line once 2 second
 | `tag-reader new-token` | `{"ok": true, "id", "name", "token"}` |
 | `setup-code` | `{"address", "code": {"set": true}}` |
 | `setup-code --new` (needs `--yes`) | `{"ok": true, "address", "code"}` |
+| `port` | `{"port", "address"}` |
+| `port <number>` (needs `--yes`) | `{"ok": true, "port", "address"}` |
 | any other action | `{"ok": true, ...}` with the fields its result line names |
 
 `-q` / `--quiet` prints only what the command exists to print: errors, lists and details asked for, and answers
@@ -631,6 +637,7 @@ Every question, word for word (names are examples):
 | `remote get-certificate` | `Get the certificate now? Port 80 on your router must reach this Hub while it runs. Spoolwarden never changes your firewall or router.` | the job runs (9.12) |
 | `setup-code --new` | `Make a new setup code? The old one stops working.` | the new code, then `The old setup code no longer works.` |
 | `setup-code --revoke-trusted` | `Revoke every trusted computer? Each one needs the setup code again.` | `2 trusted computers revoked.` |
+| `port <number>` | `Move the Hub to port 8710? Phones and the Slicer Sync PC find the Hub again on your network. A Weigh Station on another machine must be paired again.` | the change runs (9.19) |
 | `config`, removing the Anthropic API key | `Remove the Anthropic API key? Label Reader: Cloud (Claude) stops reading labels until a new key is set.` | staged until Save (8.3) |
 | `features off` with dependants | `Also turn off Slicer presets? It needs Hub service.` (one question per dependant) | the plan includes it |
 | `features on` with needs | `Also turn on Hub service? Label Reader: Cloud (Claude) needs it.` | the plan includes it |
@@ -1050,8 +1057,8 @@ Nothing is sent unless you choose to. [y/N]
 
 | Command | Prompts, in order | Notes |
 |---|---|---|
-| `printer add` (Bambu) | `IP address or name (e.g. 192.0.2.40 or printer.local): ` · `Access Code (on the printer: Settings > Network/LAN): ` (secret) · `Name (optional): ` · `Serial (optional: read from the printer): ` | Same order as the Hub page's form. An empty Access Code: `No Access Code entered; nothing added.` |
-| `printer add --klipper` | `Address: ` · `Port [7125]: ` · `Name (optional): ` · `Moonraker API key (optional): ` (secret) | |
+| `printer add` (Bambu) | the found list when anything was found (9.2) · `IP address or name (e.g. 192.0.2.40 or printer.local): ` · `Access Code (on the printer: Settings > Network/LAN > Access Code): ` (secret) · `Name (optional): ` · `Serial (optional: read from the printer): ` · after the test and the add, `Map its slots now? [Y/n] ` | Same order as the Hub page's drawer (`03-hub-page.md` 5.6). An empty Access Code: `No Access Code entered; nothing added.` |
+| `printer add --klipper` | the found list when anything was found (9.2) · `Address: ` · `Port [7125]: ` · `Name (optional): ` · `Moonraker API key (optional): ` (secret) · after the test and the add, `Map its slots now? [Y/n] ` | When the test fails: `Add anyway? [y/N] ` (the Hub page's **Add anyway**; `--yes` does not answer it) |
 | `printer address` (Bambu) | `Access Code of Workshop X1 (on the printer: Settings > Network/LAN): ` (secret), after the address is given as the argument | Same as the Hub page's Change address dialog. `--access-code -` reads it from standard input. Empty: `No Access Code entered; nothing changed.` (exit 5). A Klipper printer has no such prompt. |
 | `printer access-code` | `New Access Code for Workshop X1 (on the printer: Settings > Network/LAN): ` (secret) | Empty: `Unchanged.` |
 | `printer forget-certificate` | after the confirmation (section 7): `Access Code of Workshop X1 (on the printer: Settings > Network/LAN): ` (secret) | Same as the web app and the app. `--access-code -` reads it from standard input; `--yes` answers the confirmation, not this prompt. Empty: `No Access Code entered; nothing changed.` (exit 5) |
@@ -1086,9 +1093,20 @@ line, aligned with the text. Detail lines (no glyph) are aligned with the text t
 $ spoolwarden status
 Spoolwarden 0.5.2 · Workshop hub · Hub with Weigh Station
 
+Getting started: 4 of 8 done
+  ● done          Name this Hub
+  ● done          Check storage locations
+  ● done          Choose features
+  ◆ next          Add a printer
+                  sudo spoolwarden printer add
+  ○ not yet       Map its slots
+  ○ not yet       Use a phone
+  ○ not yet       Add your first spool
+  ● done          Make a first backup
+
 Hub
   ● OK            Services running: 6 of 6
-  ● OK            Answering at https://192.0.2.10:8710
+  ● OK            Answering at https://192.0.2.10
   ● OK            Certificate present, fingerprint 1111 2222 3333 4444 …
   ● OK            Storage: 41 GB free of 117 GB (65 % used)
   ◆ note          Running low: 3 spools
@@ -1099,7 +1117,7 @@ Label Reader
   ● OK            Cloud (Claude): the API key works
   ◆ note          Reads used today: 12 of 40
 Weigh Station
-  ● OK            Answering at http://station.local:5003
+  ● OK            Answering at https://station.local
   ▲ needs a look  Scale not seen
                   Fix: check the scale's USB cable, then run this again.
 Devices
@@ -1133,13 +1151,29 @@ Filament Catalog
 | Label Reader | `Cloud (Claude): the API key works` / `Cloud (Claude): no API key` / `Cloud (Claude): the API key was refused` | `sudo spoolwarden config` (Label Reader) |
 | Label Reader | note `Reads used today: N of M` (needs a look when N = M: `No reads left today (M of M)`) | `raise Reads per day in sudo spoolwarden config, or wait until tomorrow` |
 | Label Reader | `On this Hub: answering at <url> (tier: <tier>)` / `On this Hub: not answering at <url>` (only when installed) | `sudo spoolwarden label-reader status` |
+| Label Reader | needs a look `The Label Reader is switched on but not installed.` (only while Label Reader: On this Hub is on and the reader is not installed; no row otherwise) | the command that installs the reader, the one `Next:` names after switching it on (9.6) |
+| Label Reader | needs a look `The Label Reader at <address> is not using HTTPS.` (a reader on another machine whose side does not serve HTTPS yet) | (none) |
 | Label Reader | note `Share corrections: on, 12 waiting` (only while it is on, or while corrections still wait: `Share corrections: off, 12 still waiting`) | `spoolwarden label-reader corrections` |
 | Weigh Station | `Answering at <url>`, `Tag reader seen`, `Scale seen`, `Paired with <address>` / `… not seen`, `Not paired` | per row: check the cable; `sudo spoolwarden pair --weigh-station` |
 | Devices | note `Paired devices: N` | (none) |
+| Devices | needs a look `The Weigh Station <name> is not using HTTPS. Update it.` (a Weigh Station that sent the Hub no fingerprint, which the Hub still calls over plain HTTP) | `sudo spoolwarden update`, run on the Weigh Station's machine |
+| Devices | needs a look `The tag source <address> is not using HTTPS.` (a printer-side tag service that answers only on plain HTTP) | (none) |
+| Devices | needs a look `The certificate of the tag source <address> has changed.` | `Save the tag source again to trust the new certificate.` |
 | Printers | one row per printer with its state word (section 6.1); one needs-a-look row per printer problem | `sudo spoolwarden printer report "<name>"`, or the fix for that state |
 | Slicer presets | `Last build <time>. Presets: N. Problems: none` / `… Problems: M` with each problem as a detail line; note `Slicer Sync last reported <time>` or needs a look `Slicer Sync: not set up`; note for the waiting text | `sudo spoolwarden presets status`; `sudo spoolwarden pair --slicer-sync` |
 | Filament Catalog | `Version <v> (<source>), N local additions` / `Not downloaded yet` / `Last check failed: <why>` | `sudo spoolwarden catalog update` |
 
+- **Getting started.** While steps remain and the list is not hidden on the Hub page, `status` prints the block
+  "Getting started: <n> of <m> done" before the checks, in the Hub page's order (`03-hub-page.md` 4.2): one line per
+  step with its state word, `done`, `next` or `not yet`, and under the `next` line the command that does it
+  (`sudo spoolwarden config` for the name and the Anthropic API key, `sudo spoolwarden locations`,
+  `sudo spoolwarden features`, `sudo spoolwarden printer add`, `sudo spoolwarden printer map "<printer>"`,
+  `sudo spoolwarden pair`, `sudo spoolwarden web passphrase`, `sudo spoolwarden pair --slicer-sync`,
+  `spoolwarden add` for the first spool, `sudo spoolwarden backup create`; the command for installing the Label Reader is the
+  one of 9.6). While no step is done, one quiet line above the steps, "Moving from another computer? Restore its
+  backup", names `sudo spoolwarden restore <zip>`; it is not a step, has no state word and is not counted in
+  "<n> of <m>". The block is not printed when the list is hidden or
+  finished, and not with `--quiet`. Hiding, showing and the Keep buttons are on the Hub page only.
 - A group whose feature is switched off prints one row: `○ off  Switched off in Features.` (no Fix; it is not a
   problem).
 - The summary line counts rows by word; it is omitted with `--quiet`.
@@ -1149,7 +1183,10 @@ Filament Catalog
 - `web status` and `label-reader status` print the rows of their own group in the same form.
 - `status --json` carries the numbers of the Storage row: `storage` is the answer of `GET api/storage-use`
   (`{filesystems: [{path_label, total, free, percent_used, state}], items: [{key, title, bytes}]}`), and
-  `running_low` the number of spools running low.
+  `running_low` the number of spools running low, and `getting_started` the object of `GET start`
+  (`{show, hidden, finished, restore_offer, done, total, steps: [{id, state: done, next or open, line, target}]}`; the
+  step ids are `name`, `storage`, `features`, `reader`, `key`, `printer`, `slots`, `phone`, `passphrase`, `pc`, `spool`,
+  `backup`; the Restore row is not a step, `restore_offer` is true while it shows).
 
 ### 9.2 `printer` and `klipper`
 
@@ -1216,6 +1253,33 @@ A Klipper printer shows `API key  set` and `Lane data  auto` in place of Certifi
 | `printer report` | `Collected a report: <file>.` then the Hub's sentence on what a report never holds | |
 | `printer reports` | table `MADE`, `SIZE`, `NAME` (long column) and the folder they are in / `No report kept for this printer yet.` | |
 | `printer forget-certificate`, `printer forget`, `printer dismiss` | section 7 | |
+
+**`printer add`** asks the questions of the Hub page's guided drawer (`03-hub-page.md` 5.6), in its order: the found
+list, the details, the test, then the slots. Flags answer their questions and skip them.
+
+```
+$ sudo spoolwarden printer add --klipper
+◐ Looking for printers on your network…
+Found on your network:
+  1  mainsailos  Klipper  192.0.2.57:7125
+Use one of these? Number, or Enter to type an address: 1
+Name (optional): Garage Voron
+Moonraker API key (optional):
+◐ Asking mainsailos…
+Added Garage Voron as garage-voron (192.0.2.57:7125).
+Mapping tells the Hub which slot is which. Nothing heats or moves.
+Map its slots now? [Y/n]
+```
+
+- The found list holds the Klipper printers of the search (`printer scan`) and, when the Hub can list them, the Bambu
+  Lab printers it heard announce themselves. Nothing found: `None found. Type its address.` When the Hub cannot list
+  Bambu Lab printers: `Bambu Lab printers are added by address.`
+- The test comes first and is said in words. A Bambu Lab printer whose certificate cannot be read fails with the Hub's
+  text. A Klipper printer that does not answer: `Error: The Hub could not reach a Klipper printer at voron.example:7125.`
+  then `Add anyway? [y/N]` (for a printer that is switched off); nothing is saved unless the answer is yes. Not at a
+  terminal, nothing is saved and the command ends with exit code 1.
+- `Map its slots now?` answers yes by default and then runs the flow of `printer map` (asks, section 7); no ends with
+  `Map them later: sudo spoolwarden printer map "Garage Voron"`.
 
 **`printer map <printer>`** (auto) asks (section 7), then shows the steps as a progress line and ends with the
 result block:
@@ -1304,7 +1368,7 @@ Other
 Read confidence is high unless marked.
 
 Revisions: none.
-Photos open on the Hub page: https://192.0.2.10:8710/setup#recent/35
+Photos open on the Hub page: https://192.0.2.10/setup#recent/35
 ```
 
 - A record with several items prints `Item 1: spool 212 (filament 86); changes apply to all of them` and its
@@ -1463,6 +1527,23 @@ custom choice shows as `custom`.
 | `features apply [--no-pair]` | `Setup: Hub with Weigh Station (Spoolman, Hub, …).`, `Weigh Station answers at: 192.0.2.10`, the apply, and the pairing code of 9.4 unless `--no-pair`; it does not wait for the phone (`pair --no-wait`) |
 | `features units` | One service file name per line (for the installer) |
 
+Switching `label-reader-local` on, when the reader is not installed, ends with `Next: ` and the command that installs
+the reader, alone on its line after the words, and `status` shows the same command as the Fix of its row (9.1):
+
+```
+$ sudo spoolwarden features on label-reader-local
+Features applied: Label Reader: On this Hub.
+Next: <the command that installs the reader>
+```
+
+Switching `remote` on while the Hub holds port 443 is refused before anything is changed:
+
+```
+$ sudo spoolwarden features on remote
+Error: Remote access needs port 443, and the Hub is using it.
+Fix: move the Hub to another port first: sudo spoolwarden port 8710
+```
+
 Refusals use the Hub's text, for example switching the Hub off from the Hub page's own feature:
 `Error: the Hub page belongs to the Hub service; switch it off on the Hub itself.` with
 `Fix: sudo spoolwarden features off hub`.
@@ -1474,7 +1555,7 @@ Refusals use the Hub's text, for example switching the Hub off from the Hub page
 | `weigh-station pair` | Prompts (8.7), then `Paired with the Hub at 192.0.2.10.` |
 | `weigh-station pair --local` | For a Hub with Weigh Station: `The Weigh Station on this machine is paired with this Hub.` |
 | `weigh-station flash-display` | `◐ Stopping the Weigh Station service…`, the list of blank boards found, one question each (section 7), `◐ Writing the firmware to /dev/ttyACM0… 45 %`, `● done  The display answered.`, `Started the Weigh Station service again.` No board: `No blank display board found on USB.` with `Fix: plug the display in with a data cable, then run this again.` |
-| `weigh-station pairing-state` | `paired with 192.0.2.10:8710` / `not paired` / `not checked yet` (the `--json` `state` keeps the values `paired`, `unpaired`, `unchecked` for scripts; see the root wrapper below) |
+| `weigh-station pairing-state` | `paired with 192.0.2.10` / `not paired` / `not checked yet` (the `--json` `state` keeps the values `paired`, `unpaired`, `unchecked` for scripts; see the root wrapper below) |
 | `tag-reader list` | Table `ID`, `NAME` (long column), `MADE`. Empty: `No Tag Reader tokens.` then `Make one: sudo spoolwarden tag-reader new-token --name bench` |
 | `tag-reader new-token` | `New Tag Reader token tr3 (bench):`, the token alone on its line, then `Shown only this once. tag-reader flash puts it on the reader for you.` |
 | `tag-reader revoke` | section 7 |
@@ -1560,7 +1641,7 @@ Label Reader
   ● on            Engine order: On this Hub, then Cloud (Claude)
   ● OK            Cloud (Claude): the API key works
   ◆ note          Reads used today: 12 of 40
-  ● OK            On this Hub: answering at http://192.0.2.10:7915 (tier: cpu)
+  ● OK            On this Hub: answering at http://127.0.0.1:7915 (tier: cpu)
 ```
 
 **`label-reader test <photo>... [--engine cloud|local]`** reads label photos (files on the Hub) with the chosen
@@ -1694,7 +1775,7 @@ Folder: <backup folder on this Hub>
 | `web passphrase` | prompts (8.7), then `Passphrase saved.` |
 | `remote firewall` | `Spoolwarden never changes your firewall or router. These are the rules to add:` then the rules, each on its own line |
 | `remote get-certificate` | section 7, then `Note: certbot listens on port 80 of this Hub now. Spoolwarden does not open it: your router must forward it here.`, `◐ Getting the certificate…`, then `● done  Certificate issued for hub.example.` or `× failed  The certificate was not issued: <why>.` with `Fix: check that hub.example points at this Hub and port 80 reaches it, then run this again.` (exit 1). Remote access off: `Error: Remote access is off.` with `Fix: sudo spoolwarden features on remote` (exit 1) |
-| `setup-code` | At a terminal: `Open https://192.0.2.10:8710/setup  (setup code: 1234-5678)`. Not at a terminal, only the address and `Note: the setup code is shown at a terminal only.` `--json` gives `"code": {"set": true}` (section 6.8). |
+| `setup-code` | At a terminal: `Open https://192.0.2.10/setup  (setup code: 1234-5678)`. Not at a terminal, only the address and `Note: the setup code is shown at a terminal only.` `--json` gives `"code": {"set": true}` (section 6.8). |
 | `setup-code --new` | section 7, then the new code and `The old setup code no longer works.` The new code is printed without a terminal too, and in `--json`: the command was asked to make it (section 6.8). |
 | `setup-code --revoke-trusted` | section 7, then `2 trusted computers revoked. Each needs the setup code again.` |
 | `certificate` | `Certificate present.` or `Made a new certificate.`, then `Fingerprint:` and the groups of four, two lines of eight groups |
@@ -1863,7 +1944,7 @@ ID    TIME              KIND          SUBJECT        WHAT
 ### 9.17 `alerts`
 
 `spoolwarden alerts` shows which alert types are on and the thresholds, as Settings > Alerts does. Reading needs no
-sudo; every change needs sudo, as `config set` does. `<type>` is one of the eight fixed type keys (the `key` of each entry of `GET api/alerts`,
+sudo; every change needs sudo, as `config set` does; no route lets a paired phone or the web app change them. `<type>` is one of the eight fixed type keys (the `key` of each entry of `GET api/alerts`,
 shown in the first column):
 
 | Key | Alert | Events |
@@ -1939,6 +2020,97 @@ Change the limit: sudo spoolwarden alerts set running-low <grams>
   `Last one`, marked with the warn glyph (6.2). When nothing is low: `No spools are running low (at or under 150 g).`
 - `--json` prints the answer of `GET api/spools/low` (6.8).
 
+### 9.19 `port`
+
+`spoolwarden port` shows the port the Hub listens on; `sudo spoolwarden port <number>` moves the Hub to another. It is
+also the way an existing Hub moves to port 443, and the way out of the refusal of Remote access on port 443 (9.6).
+Reading needs no sudo.
+
+```
+$ spoolwarden port
+Hub port: 443
+Address: https://192.0.2.10/setup
+
+$ sudo spoolwarden port 8710
+Move the Hub to port 8710? Phones and the Slicer Sync PC find the Hub again on your network. A Weigh Station on another machine must be paired again. [y/N] y
+◐ Moving the Hub to port 8710…
+● done  The Hub is on port 8710: https://192.0.2.10:8710/setup
+The ufw firewall is on, and Spoolwarden does not change it. For other devices to reach this computer, run:
+  sudo ufw allow 8710/tcp
+```
+
+- A port is allowed when it is 443 or from 1024 to 65535, and free. Otherwise the command says why and changes
+  nothing, exit code 2:
+
+  ```
+  $ sudo spoolwarden port 80
+  Error: port 80 is not allowed: use 443, or a port from 1024 to 65535.
+
+  $ sudo spoolwarden port 8101
+  Error: port 8101 is already in use on this machine.
+  Fix: choose another port: sudo spoolwarden port 8710
+  ```
+
+- It writes the configuration, the unit drop-in that lets the Hub bind a port below 1024 (and removes it for a port of
+  1024 or more), the network advert, the Weigh Station's drop-in when one runs on this machine, restarts the Hub and
+  the web unit, prints the firewall line naming the real port, and says what each paired device needs: the question
+  above is the Hub page's dialog word for word (section 7).
+- The Hub never moves by itself: an update leaves every port as it is.
+- A machine that holds 443 for Remote access refuses `port 443`: `Error: port 443 is already in use on this machine.`
+- `--json`: `{"port", "address"}` when reading; `{"ok": true, "port", "address"}` after a change, which needs `--yes`
+  (section 6.8).
+
+### 9.20 The installer
+
+The installer (`install.sh`) is the first thing a person runs, so what it asks and prints on a first install is part of
+the command line's design. It asks its questions on a terminal only; with no terminal it asks nothing and takes the
+defaults. Addresses it prints have no port when the Hub is on port 443.
+
+**The first question: Guided Setup.** On a first install at a terminal, when no `--mode`, `--modules` or `--restore`
+was given, the first question is:
+
+```
+  y: the Hub is installed with the usual choices; its page takes you through the rest.
+  n: answer the questions here. Also the way to install only a Weigh Station.
+Finish setting up in your browser (Guided Setup)? [Y/n]
+```
+
+- **Yes** (Enter): the installer asks nothing else. The mode is the Hub, the features are the defaults, the display
+  name is the host name, the storage locations are the defaults, no key is asked and the phone step is skipped: what it
+  does without a terminal already. It ends with
+  `Open https://spoolwarden.local/  (setup code: 1234-5678)` and `Guided Setup starts there.` and then the firewall
+  line. The lines `Spoolman: ...` and `Pair another phone: ...` are not printed in this case: the page has both.
+- **No**: today's questions in today's order, unchanged, and the closing lines as they are today with the address
+  written without a port when the Hub is on 443.
+- **No terminal**: no question; today's behaviour. The Hub page still offers Getting started (`03-hub-page.md` 4.2), so
+  an unattended install ends in the same place.
+- An update, `--restore` and the install of only a Weigh Station never ask it.
+- The installer records what it did (which of the name, storage and features questions were answered at the terminal)
+  in the first-run file in the Hub's state folder, so the Hub page knows which steps are already answered.
+
+**The Hub's port.** On a first install, before the port is written, the installer checks whether TCP 443 is free on
+this machine, and whether the chosen features include Remote access, which owns 443 for the public address.
+
+| Case | What the installer does |
+|---|---|
+| 443 is free and Remote access is not chosen | Port 443, no question |
+| 443 is taken, at a terminal | `Port 443 is already in use on this machine.` (followed by ` Remote access uses it for the public address.` when that is the reason), then `Port for the Hub [8710]: `. Enter takes 8710. A typed port must be 1024 to 65535 and free; otherwise the reason is said and the question repeats. When 8710 is itself taken, the port offered is the next free one above it |
+| 443 is taken, no terminal or Guided Setup chosen | The Hub takes 8710 (or the next free port above it) without a question and prints `Port 443 is in use on this machine, so the Hub uses port 8710.` |
+
+The chosen port is written into the configuration file at the first install. An install whose configuration has no
+port keeps 8710 whatever happens, and no update moves an existing Hub. When the port is below 1024 the installer writes
+the unit drop-in that gives the Hub exactly the right to bind it; for a port of 1024 or more the drop-in is removed. The
+pairing link carries the real port and so does the network advert; the firewall line names the real port. To change the
+port later: `sudo spoolwarden port <number>` (9.19).
+
+**A Weigh Station.** A new Weigh Station install takes port 443 when it is free, with the same question and the same
+texts for the Weigh Station (the port offered instead is 5003: `Port for the Weigh Station [5003]: `). On a machine that
+also runs the Hub, 443 is the Hub's, so the station takes 5003 without asking. The station makes its own certificate at
+install and serves HTTPS only; its unit gets the same drop-in when its port is below 1024. A Weigh Station that is
+already installed keeps its port (5003) on update and switches to HTTPS. The printer-side tag service installs the same
+way: a new install takes 443 when it is free and allowed, otherwise 5002, asked like the others; an existing one keeps
+5002.
+
 ## 10. What the command line cannot do
 
 Some features need a camera, NFC or a screen for photos. Where a person might look for them on the command line,
@@ -1948,10 +2120,10 @@ line and the address do not fit the width together, the address goes on the next
 
 | Feature | Command | The line it prints |
 |---|---|---|
-| Live printer view: camera, pause, resume, stop, light, load and unload a spool | `printer live <printer>` | `Camera and controls are in the web app: https://192.0.2.10:8710/intake#printers` |
-| Add spools, from label photos or by hand | `add` | `Add spools in the web app, app or Weigh Station: https://192.0.2.10:8710/intake` |
-| Open a spool, link a tag, set its weight, move it, mark it empty, search spools, filament used, add a filament line | `spool` | `Spools are opened and tagged in the web app or app: https://192.0.2.10:8710/intake` |
-| The photos of a Recently added record | `recent show <record>` | `Photos open on the Hub page: https://192.0.2.10:8710/setup#recent/35` (`--photos` adds their file paths) |
+| Live printer view: camera, pause, resume, stop, light, load and unload a spool | `printer live <printer>` | `Camera and controls are in the web app: https://192.0.2.10/intake#printers` |
+| Add spools, from label photos or by hand | `add` | `Add spools in the web app, app or Weigh Station: https://192.0.2.10/intake` |
+| Open a spool, link a tag, set its weight, move it, mark it empty, search spools, filament used, add a filament line | `spool` | `Spools are opened and tagged in the web app or app: https://192.0.2.10/intake` |
+| The photos of a Recently added record | `recent show <record>` | `Photos open on the Hub page: https://192.0.2.10/setup#recent/35` (`--photos` adds their file paths) |
 | Light / Dark / System, a device's own theme | (none) | The terminal's own colours apply (section 6.2); `config theme` sets only the Hub's theme for new devices |
 
 Flashing a device from the computer in front of the person (Web Serial on the Hub page) has no command-line
@@ -2047,6 +2219,10 @@ this design.
 | Alerts: send a test alert | new | new | new | N | new (`alerts test`) | none |
 | Spools running low | new | new | new | N | new (`spools low`, `status`) | none |
 | Storage use of the Hub's disk | N | new | N | N | new (`status`, `status --json`) | app, web app: the banner and the Alerts list only |
+| Getting started: what is left to set up | N | new | N | N | new (`status`, `status --json`) | app, web app: a one-line summary comes later; Hide, Show and Keep: Hub page only |
+| Add a printer, guided (found list, test, slots) | N | new | N | N | new (`printer add` in the guided order) | app, web app: the guided order comes later |
+| The Hub's port: show, change | N | new | N | N | new (`port`) | app, web app: remain on purpose (Hub settings are on the Hub page) |
+| Installer: the first question (Guided Setup), the port | N | N | N | Y (the installer's own questions) | new (9.20) | command line only, by design |
 
 Gaps marked "remains" outside the command-line column are specified in the documents of those interfaces.
 
@@ -2085,3 +2261,5 @@ The command line calls the same code as the Hub page's routes (`/setup/api/...`)
    exist `events`, `alerts` and `spools low` say `Error: this Hub does not keep events yet.` with the Fix
    `sudo spoolwarden update`, `status` has no Storage row and no Running low note, and the Alerts group is not shown
    in `config`.
+9. **Getting started.** The route `GET start` (`03-hub-page.md` section 15), which `status` reads for its Getting
+   started block. Until it exists `status` has no Getting started block and no `getting_started` key.
