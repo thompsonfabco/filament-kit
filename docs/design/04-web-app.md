@@ -960,8 +960,8 @@ sends it for real. Line under the slot: "Unloaded eSUN ABS+ White from A3. Moved
 `printers/<id>/slots/<slot>/clear` with `dry_run: true`), then opens the sheet "Clear slot A3?" (12.1). Confirming sends
 it for real. Line under the slot: "Cleared slot A3. Spool 211 is back on Shelf B." (without a spool: "Cleared slot
 A3."); when a
-waiting assignment ended too: "No spool is waiting for A3 any more."; on a Bambu Lab printer whose answer says
-`printer_cleared: false`: "The printer still shows the old filament for this slot until a spool is loaded."
+waiting assignment ended too: "No spool is waiting for A3 any more."; on a Bambu Lab printer, where `printer_cleared`
+is always false: "The printer still shows the old filament for this slot until a spool is loaded."
 
 ### 6.6 Filament used
 
@@ -1493,7 +1493,19 @@ The segmented control takes the full content width; each theme tile is a radio t
 The alert itself (from the service worker) has the Hub's title (default "Printer"), body and tag: for every alert type
 the title and one-line body of the table in 02-components 8.8, one notification per event (a condition notifies when
 it is raised, not again while it lasts); tapping it brings an open Spoolwarden window forward or opens the web app at
-the place of the alert's action.
+the place of the alert's action. A condition's notification has the tag `sw-condition-<key>`, where `<key>` is the
+condition's key; a moment's keeps a tag of its own per event and is never replaced.
+
+**When an alert is over.** Every push the web unit sends ends in a shown notification: there is no push that only
+closes one. An alert that is over replaces its notification: the push carries the notification of the event that ended
+it (for example "Print resumed" with its text), with the same tag as the alert it ends, `silent: true` and
+`renotify: false`. This is done only for print paused or filament ran out (ended by resumed, finished or failed) and
+device stopped answering (ended by answering again); nothing is pushed when storage almost full or spool running low
+end. Every alert push and its replacement carry the header `Topic` (a hash of the tag, at most 32 characters), and a
+replacement has a time to live of 1 hour; the header is left out if a push service refuses it. The service worker shows
+a notification on every path of its push handler, also for a payload it does not understand (a plain "Spoolwarden"
+notification that opens the app). When the web app is opened or comes to the front it closes its own notifications
+whose alert is no longer raised.
 
 ### 9.3 The Hub screen (`#hub`)
 
@@ -1592,7 +1604,7 @@ reached.
 A service worker (`sw.js`, scope the web app's path) keeps a copy of the page, its stylesheet, its scripts, the icon
 and the manifest, under a cache named after the web app's version. Pages load network first and fall back to the
 copy; requests to the Hub's `api` are never cached. When a new version is found the new copy is used on the next
-load (no prompt). The same worker keeps handling print alerts.
+load (no prompt). The same worker keeps handling alerts and shows a notification for every push (9.2).
 
 ### 10.3 "Cannot reach the Hub"
 
@@ -1722,7 +1734,7 @@ left and receives focus first.
 |---|---|---|---|---|
 | Stop the print? | "Stop <job> on <printer>? It cannot be resumed." | "Keep printing" · "Stop print" (danger) | "Stop print" (6.4) | POST `printers/<id>/command` `{action: "stop", confirm: true}` |
 | Unload from <slot>? | "Unload <spool name> from <slot>? It goes back to <location or its previous place>." and then, on a Bambu Lab printer, "Only the inventory changes; the printer's slot setting stays as it is.", on a Klipper printer, "The slot's setting on the printer is cleared." | "Cancel" · "Unload" | "Unload" (6.5), after the preview | POST `printers/<id>/slots/<slot>/unload` |
-| Clear slot <label>? | "The Hub forgets the spool recorded here. <Spool> goes back to <place>." (the second sentence only when a spool is recorded) | "Cancel" · "Clear slot" (danger) | "Clear slot" (6.5), after the preview | POST `printers/<id>/slots/<slot>/clear` |
+| Clear slot <label>? | "The Hub forgets the spool recorded here. <Spool> goes back to <place>." (the second sentence only when a spool is recorded) and then, on a Bambu Lab printer, "The printer still shows the old filament for this slot until a spool is loaded." | "Cancel" · "Clear slot" (danger) | "Clear slot" (6.5), after the preview | POST `printers/<id>/slots/<slot>/clear` |
 | Put it back on the spool? | "Put <g> g back on the spool? (<job>, <slot>, <time>)" | "Keep" · "Put it back" | "Undo" in Filament used (6.6) | POST `printers/<id>/usage/<entry>/undo` |
 | Map the slots of <printer>? | "The printer changes its slot colours briefly and runs a short job with no motion. The colours are put back afterwards." | "Cancel" · "Map slots" | "Map slots" (6.7) | POST `printers/<id>/map` |
 | Forget <printer>? | Bambu: "Spoolwarden stops connecting to it and deletes its Access Code. To use it again, add it again." Klipper: "Spoolwarden stops connecting to it and deletes its Moonraker API key, if one is saved." | "Cancel" · "Forget printer" (danger) | "Forget printer" (6.8) | POST `printers/<id>/forget` |
@@ -1811,6 +1823,7 @@ right column is left out or falls back as described there.
 | The Hub screen: a twin of the kit route `GET api/hub` under the web app's own base (`GET hub`), answering `{name, version, newest: {version, checked_at}?, update_available, checks: [{group, state: "ok", "look", "note" or "off", text, fix?}], getting_started: {done, total, hidden, finished}, features: [{id, name, on}], catalog: {version?, checked_at?}, backup: {last_at?, nightly}, reader: {engine, key_set}, devices: [{name, kind, version?, last_seen?, out_of_date, this}], records_kept, spoolman_url?, hub_page?}`; `hub_page` and `spoolman_url` are built from the host the caller used and are absent where the thing cannot be reached | 5.6, 9.1, 9.3 | No Hub screen, no Getting started line and no Open Spoolman; "Open the Hub page" uses the page attribute |
 | Twins for the catalog form and for adding a printer: `GET library/local`, `POST library/local` (the form's values; 400 `{error: "invalid_entry", problems: [{field, text}]}`), `POST library/local/{id}/remove`, `POST printers/scan` with `{subnet?}` and `POST printers/{id}/slots/{label}/clear` (`{dry_run}`; answers `{slot, spool?, moved_back?, waiting_ended, printer_cleared, dry_run}`); each passes the kit route on unchanged, with the guards the neighbouring twins have; the unload answer gains `waiting_ended` | 6.5, 6.9, 8 | No form and no list under Slicer presets; "Search" and "Clear slot" are not offered |
 | The header `X-Spoolwarden-Client: web/<version>` on every call of the web app | 9.3 | The Hub shows the web app without a version |
+| The kit route `POST api/readers/web/seen` (a web token only), `{readers: [{id, build?, seen_at}]}`, answered `{ok: true}`: the web unit sends a Tag Reader's build when it changes and otherwise its last call at most once a minute per reader, and while the Hub does not answer keeps only the newest value per reader in memory | 9.3 | The Hub shows a Tag Reader without a build or a last seen |
 
 ---
 

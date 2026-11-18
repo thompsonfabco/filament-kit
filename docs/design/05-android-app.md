@@ -584,7 +584,7 @@ Drafts), right (Printers, Slicer presets), each up to `column-max`.
 | Getting started line | Only while steps remain on the Hub and the Hub page's list is not hidden (`getting_started` of `GET api/hub`): one quiet line "Getting started on the Hub: 4 of 8 done" with a trailing chevron. Tapping opens the Hub screen (12.8). Gone when the steps are finished or the list is hidden. | `GET api/hub` | Notice line |
 | Add spools panel | Title "Add spools". Text "Photograph each label, check what was read, then add. Nothing is saved until you add." Main button "Add from label photos" (camera icon) starts a new draft at `add/{id}/photos`. Other button "Add by hand" starts a new draft at `add/{id}/review` with the filament picker (6.4). When the Label Reader is off on the Hub, "Add by hand" is the main button, the photo button is absent, and one line says "The Label Reader is switched off. Add the spool by hand, or switch it on in Features on the Hub page." | `GET api/info` (`labelReading`) | Panel, `Button`, `OutlinedButton` |
 | Drafts panel | Only when drafts exist. Title "Drafts" with the count. One row per draft, newest first: headline the relative time ("3 minutes ago"; exact time on long-press), supporting line "2 photos · note: 3 of the grey ones · tag <tag ID>" (only the parts that exist), trailing chevron. Tapping resumes the draft where it stopped. The row's overflow offers "Discard": dialog "Discard this add?" / "Its photos and edits are removed from this phone." / "Keep" / "Discard" (danger); then the snackbar "Add discarded." | none (drafts live on the phone) | Panel, `ListItem`, `DropdownMenu` |
-| Printers panel | Title "Printers" with the count; header action "All printers" selects the Printers destination. One row per configured printer, at most 4, then "and 2 more": status shape and word, name, and the job when printing ("Printing · 42 % · 1 h 12 min left"). Tapping a row opens `printers/{id}` in the Printers destination. Empty: "No printers yet." with the text button "Add a printer" (selects Printers). Absent when the printers Feature is off. | `GET api/printers` (with each connection check) | Panel, `ListItem` |
+| Printers panel | Title "Printers" with the count; header action "All printers" selects the Printers destination. One row per configured printer, at most 4, then "and 2 more": status shape and word, name, and the job when printing ("Printing · 42 % · 1 h 12 min left"); no slot swatches (those, with the waiting ring, are on the Printers list only, 9.1). Tapping a row opens `printers/{id}` in the Printers destination. Empty: "No printers yet." with the text button "Add a printer" (selects Printers). Absent when the printers Feature is off. | `GET api/printers` (with each connection check) | Panel, `ListItem` |
 | Running low line | Only when at least one spool is running low: a row with the warn triangle and "<n> spools running low" ("1 spool running low"), chevron; tapping opens Spools with the Running low filter on (7.1). It sits under the Printers panel. | `GET api/spools/low` | `ListItem` |
 | Slicer presets panel | 11.1 | `GET api/profiles/status` | Panel |
 
@@ -1276,15 +1276,17 @@ slot's setting on the printer is cleared.", buttons "Cancel" and "Unload" (main)
 "Unload" means "I took this spool out". "Clear slot" means "the Hub forgets which spool is in this slot": for a spool
 the Hub does not know, or a record that is simply wrong. It is offered on every slot. It runs the dry run and opens the
 dialog: title "Clear slot A1?", body "The Hub forgets the spool recorded here. Polymaker PolyTerra PLA Charcoal Black
-goes back to Shelf A." (the second sentence only when a spool is recorded), buttons "Cancel" and "Clear slot" (danger,
-filled). Both do the same, in this order: a spool waiting for the slot is no longer waiting; the spool recorded in the
-slot goes back where it was before it was loaded; on a Klipper printer the slot's setting on the printer is cleared
-when the printer is online and can do it; on a Bambu Lab printer what the printer shows for the slot is left as it is.
-Afterwards the slot has no spool: filament used from it is logged with no spool and taken off none, until the next load,
-the next scanned assignment or the slot's own tag sets a spool again. Results, as notice lines under the slots: "Cleared
-slot A1. Spool 214 is back on Shelf A." (without a spool: "Cleared slot A1."); "No spool is waiting for A1 any more."
-when a waiting assignment ended; and, when the answer says `printer_cleared: false` on a Bambu Lab printer, "The printer
-still shows the old filament for this slot until a spool is loaded."
+goes back to Shelf A." (the second sentence only when a spool is recorded; on a Bambu Lab printer it ends with "The
+printer still shows the old filament for this slot until a spool is loaded."), buttons "Cancel" and "Clear slot"
+(danger, filled). Both do the same, in this order: a spool waiting for the slot is no longer waiting; the spool recorded
+in the slot goes back where it was before it was loaded; on a Klipper printer the slot's setting on the printer is
+cleared when the printer is online and can do it; on a Bambu Lab printer what the printer shows for the slot is left as
+it is, and the answer of Clear slot says `printer_cleared: false`. Afterwards the slot has no spool: filament used from
+it is logged with no spool and taken off none, until the next load, the next scanned assignment or the slot's own tag
+sets a spool again. Results, as notice lines under the slots: "Cleared slot A1. Spool 214 is back on Shelf A." (without
+a spool: "Cleared slot A1."); "No spool is waiting for A1 any more." when a waiting assignment ended; and, on a Bambu
+Lab printer (where `printer_cleared` is always false), "The printer still shows the old filament for this slot until a
+spool is loaded."
 
 ### 9.6 Pick a spool for a slot (`printers/{id}/slots/{slot}/pick`)
 
@@ -1952,6 +1954,7 @@ The design above works with the Hub as it is. These additions to the Hub's paire
 | A per-record confidence summary (the lowest level and the fields concerned) in `GET api/intake/history`. | 10.1 "To check" filter and row marks | The filter and the row marks are absent. |
 | Share corrections on the paired API: `sharing` and `corrections_waiting` in `GET api/intake/history`; the corrections waiting with thumbnails, and remove. | 10.1, 10.3, 10.4, 6.3, 10.6 | No Share corrections lines and no Corrections waiting screen. |
 | A single spool by number: `GET api/spools/{id}` with location, remaining and net weight, tag, sealed or opened, filament number, empty spool weight and lot. | 7.2 Details, deep links, restoring after the app was stopped | The spool screen shows the fields the search or tag answer carries; after a restart it shows the last summary and refreshes after the first change. |
+| `PATCH api/spools/{id}` takes `{"auto_location": true, "dry_run": ...}` as a fourth kind of change beside `gross`, `remaining`, `location` and `empty` (one per call): the Hub moves the spool where its placement rule puts it; the answer is unchanged. | Not used by the app: 7.4 names its locations. The Hub page and the command line use it. | Nothing in the app changes. |
 | Phone-callable Slicer presets actions: list filaments without a preset line, add them to a line, create a line, build presets now (today these exist only under `api/profiles/web/`, which phones may not call). | 11.2 | 11.2 points to the Hub page and the web app. |
 | The Hub's default theme ("Theme for new devices", F6.2) in `GET api/info` as the field `look` (for example `"look": "console"`). | 12.2 first start | The app starts on Console. |
 | `GET api/storage` on the paired API: the locations in fill order `{id, name, type, limit, count, used, free, prefix, containers: [{name, number, taken}], fill, materials, overflow, default_overflow, sealed, position}` (`prefix` and `containers` are `null` for bulk; `used` and `free` equal the counts of `taken`), with `order_by_material` and `everything_else`; `GET api/locations` keeps its answer (a list of names). | 6.3 Location field, 6.5 rows, 7.4 Move | The Location field and the "Move to" sheet list the names from `GET api/locations` without how full, and "Automatic" shows no reason. |

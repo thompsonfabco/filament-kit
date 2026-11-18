@@ -2117,7 +2117,11 @@ Server builder · Depends on: EA3 · Beside: EA5
   to the subscriptions; the web unit hands its spool events to the Hub (`POST api/events/web`, the outbox
   `events-outbox.xml` of at most 500 in its own folder); the subscriptions move from `push.json` to `push.xml`, in the
   web unit's own folder; a start never fails because `push.xml` cannot be written; the web twins pass the Hub's
-  routes of EA3 on.
+  routes of EA3 on. Every push ends in a shown notification; when an alert is over, the push replaces its notification
+  (the event that ended it, the alert's tag, `silent: true`, `renotify: false`) for print paused, filament ran out and
+  device stopped answering only, and never for storage almost full or spool running low; every alert push and its
+  replacement carry the header `Topic` (a hash of the tag, at most 32 characters, left out if a push service refuses
+  it) and a replacement has a time to live of 1 hour; a condition's tag is `sw-condition-<key>` (02 8.8).
 - **Keep:** the limits of today's push: the optional push package, internet from the Hub to the phone maker's push
   service, and the web app opened at an address the phone trusts.
 - **Other interfaces:** EA7 reads the web twins.
@@ -2159,7 +2163,10 @@ Klipper builder · Depends on: EA4, EA5 · Beside: EA6, EA8
 - **Files today:** `server/filament_kit/web/static/app.js`, `web/static/printers.js`, `web/static/sw.js`, its CSS.
 - **Change:** 04 3.8 (banners, toast, the Alerts list as a sheet), 5.5 (the Running low filter and its rows), 9.2 (the
   panel "Alerts on this phone" with "Recent alerts"; the switch is the push subscription; the three texts that said
-  "print alerts" say "alerts"), and the service worker's notification for every alert type.
+  "print alerts" say "alerts"), and the service worker's notification for every alert type: it shows a notification on
+  every path of its push handler, also for a payload it does not understand (a plain "Spoolwarden" notification that
+  opens the app), and the web app closes its own notifications whose alert is no longer raised when it is opened or
+  comes to the front.
 - **Keep:** the push switch, the test button (it keeps today's push test) and their limits as they are.
 - **Other interfaces:** none.
 - **Check:** AUT-5 on the shell with alerts, the Spools chip and the Settings sheet.
@@ -2459,10 +2466,11 @@ under `/intake/api/` that passes a kit route on.
 - **Clear slot is one rule in four interfaces.** The Hub forgets which spool is in the slot. In this order: a spool
   waiting for the slot is no longer waiting; a spool recorded in the slot goes back where it was before it was loaded
   (exactly as Unload moves it); on a Klipper printer the slot's setting on the printer is cleared when the printer is
-  online and can do it; on a Bambu Lab printer what the printer shows for the slot is left as it is. Afterwards the slot
-  has no spool, and filament used from it is logged with no spool and taken off none. Unload keeps its meaning, "I took
-  this spool out", and now also ends a waiting assignment; it is offered only when a spool is recorded, and Clear slot is
-  offered on every slot.
+  online and can do it; on a Bambu Lab printer what the printer shows for the slot is left as it is. There Clear slot's
+  `printer_cleared` is always false, and its confirmation and its result both add "The printer still shows the old
+  filament for this slot until a spool is loaded." Afterwards the slot has no spool, and filament used from it is logged
+  with no spool and taken off none. Unload keeps its meaning, "I took this spool out", and now also ends a waiting
+  assignment; it is offered only when a spool is recorded, and Clear slot is offered on every slot.
 - **One function builds a catalog entry.** The Hub builds an owner's own entry from the form's values; the page, the
   apps and the command line send values and never an entry's text. The Catalog token field leaves the Hub page and the
   `config` menu; a stored token keeps working and is not deleted by an update, and `spoolwarden catalog token` stays.
@@ -2482,6 +2490,7 @@ existing shape.
 | Route | Body / query | Answer |
 |---|---|---|
 | `POST /api/printers/{id}/slots/{label}/clear` | `{dry_run: true}` (default true) | `{slot: <label>, spool: <spool view>?, moved_back: <location>?, waiting_ended: bool, printer_cleared: bool, dry_run: bool}` |
+| `PATCH /api/spools/{id}` (changed) | one kind of change per call: `gross`, `remaining`, `location`, `empty`, or new `{"auto_location": true, "dry_run": ...}` | as today; for `auto_location` the Hub moves the spool where its placement rule puts it |
 | `POST /api/printers/{id}/slots/{label}/unload` (changed) | as today | as today plus `waiting_ended: bool` |
 | `POST /api/printers/{id}/slots/{label}/load` (unchanged) | | already answers `pending: true` for a waiting load; clients must read it |
 | `GET /api/hub` | - | the object below |
@@ -2490,6 +2499,7 @@ existing shape.
 | `DELETE /api/library/local/{id}` | - | `{removed: true}`; 404 when unknown |
 | `POST /api/library/local` (unchanged) | an entry's text | kept for the command line's file form |
 | `GET /api/spools` (changed) | adds `filter=sealed\|opened\|loaded\|low` (one value; absent = all not empty) | each spool also carries `view` (the spool view); the answer adds `spoolman_url` |
+| `POST /api/readers/web/seen` (new; a web token only) | `{readers: [{id, build?, seen_at}]}` | `{ok: true}`; the Hub keeps the newest values with the reader's entry |
 | every kit route | header `X-Spoolwarden-Client: <kind>/<version>` | recorded with the pairing; never required |
 
 `GET /api/hub`: `{name, version, newest: {version, checked_at}?, update_available: bool, checks: [{group, state: "ok" |
@@ -2502,16 +2512,21 @@ the caller used and are absent where the thing cannot be reached.
 The spool view is `inventory.spool_view` as it is, `{id, location, remaining_g, net_g, tare_g, tag, state: "sealed" |
 "opened" | "empty", filament_id, vendor, name, material, color_hex, lot}`, plus two new fields: `loaded: {printer_id,
 printer, slot}?` and `low: bool`. What a web token may call gains exactly: `POST /api/printers/{id}/slots/{label}/clear`,
-`POST /api/printers/scan`, `GET /api/hub`, `GET /api/library/local`, `POST /api/library/local/form` and
-`DELETE /api/library/local/{id}`.
+`POST /api/printers/scan`, `GET /api/hub`, `GET /api/library/local`, `POST /api/library/local/form`,
+`DELETE /api/library/local/{id}` and `POST /api/readers/web/seen`; only a web token may call the last.
 
 **Client headers.** Every client of ours sends `X-Spoolwarden-Client: <kind>/<version>` on every call, with the kind
 `android`, `slicer-sync`, `weigh-station` or `web`. A Weigh Station also gives its version on its hello call. A Tag
-Reader sends `X-Reader-Build: <number>` with its token; the Hub keeps the build and a last-seen time for each reader.
+Reader sends `X-Reader-Build: <number>` with its token to the web unit, and the web unit hands the build and the time of
+the reader's last call to the Hub with `POST /api/readers/web/seen`; the Hub keeps the newest values with the reader's
+entry. The web unit sends a reader's values when its build changes and otherwise at most once a minute per reader; while
+the Hub does not answer it keeps only the newest value per reader in memory.
 
 **Page routes.** Under `/setup/api/`: the rows of 03 section 15 for the Spools section, the live view, the catalog form,
 Devices and the station's page passed through. Their answers are the kit routes' answers; the lock of each is in 03
-5.10, 7.10, 10.9 and 16.
+5.10, 7.10, 10.9 and 16. The live view's camera has one more: `POST printers/{id}/camera/ticket` with the setup code,
+answering `{ticket, expires_in: 60}`; on a computer that is not trusted the stream's address takes `?ticket=<ticket>`,
+and a ticket starts one stream within 60 seconds, for that printer only; the stream runs until it is closed.
 
 **Twins** (under `/intake/api/`; EV6a and EV6b): `GET hub` (the kit object), `GET library/local`, `POST library/local`
 (the form), `POST library/local/{id}/remove`, `POST printers/scan` and `POST printers/{id}/slots/{label}/clear`. Each
@@ -2564,10 +2579,10 @@ Server builder · Depends on: none · Beside: every other EV step except for its
   `profiles_api.py`, `pairing.py`, `reader_tokens.py`, `web/reader.py`, new `hub_view.py`, tests. Registry file: `api.py`,
   after AF5 is merged.
 - **Change:** Clear slot and the changed Unload, `GET /api/hub`, the catalog form, list and remove, the spool view's two
-  fields and `filter`, kind and version per device, the reader's build and last seen, what a web token may call, the camera
-  source handed to the page.
+  fields and `filter`, `auto_location` on `PATCH /api/spools/{id}`, kind and version per device, the reader's build and
+  last seen (`POST /api/readers/web/seen`), what a web token may call, the camera source handed to the page.
 - **Other interfaces:** every other EV step builds against these routes with stubs.
-- **Check:** prove first (items 1 and 2 of the list below). Then the route and inventory tests.
+- **Check:** prove first (item 1 of the list below). Then the route and inventory tests.
 
 ### EV2 Hub: the command line, the Devices check and the texts
 Server builder · Depends on: none · Beside: every other EV step except for its registry files
@@ -2586,7 +2601,7 @@ Server builder · Depends on: none · Beside: every other EV step
 - **Change:** the station's page, its settings file, the lamp mapping, the 5-minute check-in, `version` in `/state`, and
   the Hub's pass-through client.
 - **Other interfaces:** EV4c reads the pass-through client.
-- **Check:** prove first (items 3 and 4 of the list below).
+- **Check:** prove first (items 2 and 3 of the list below).
 
 ### EV4a Hub page: the Spools section
 Bug-bash 1 · Depends on: none · Beside: every other EV step
@@ -2600,7 +2615,7 @@ Bug-bash 1 · Depends on: none · Beside: every other EV step
 - **Starts after:** AF3 is merged, for `setup_printers.js`.
 - **Files today:** new `setup_console/printer_live_tab.py`, new `setup_static/setup_printer_live.js` and `.css`,
   `setup_static/setup_printers.js`, `setup_static/setup_printers.css`.
-- **Change:** 03 5.10: the live view, the slot actions, waiting in the slot strip.
+- **Change:** 03 5.10: the live view, the slot actions, waiting in the slot strip, the camera's ticket.
 - **Other interfaces:** EV5 mounts it.
 
 ### EV4c Hub page: Devices
@@ -2609,7 +2624,7 @@ Bug-bash 1 · Depends on: none · Beside: every other EV step
   `setup_console/webapp_tab.py` (the Open button's address).
 - **Change:** 03 7.2, 7.4, 7.9 and 7.10: kind, version, out of date, Open, the device detail and the pass-through.
 - **Other interfaces:** reads EV3's pass-through client; EV5 mounts the pass-through path.
-- **Check:** prove first (item 4 of the list below).
+- **Check:** prove first (item 3 of the list below).
 
 ### EV4d Hub page: the catalog form
 Bug-bash 1 · Depends on: none · Beside: every other EV step except for its registry file
@@ -2651,9 +2666,9 @@ App builder · Depends on: EV7a's row of calls and models · Beside: every other
 - **Files today:** `ui/printers/PrintersScreen.kt`, `PrintersViewModel.kt`, `PrinterScreen.kt`, `PrinterViewModel.kt`,
   `ui/spool/LoadScreens.kt`, `LoadViewModel.kt`, `ui/search/SearchScreen.kt`, `ui/profile/AddProfileScreen.kt`,
   `AddProfileViewModel.kt`.
-- **Change:** the guided add, Clear slot, waiting on the Load screen and the swatches, Open Spoolman, the catalog form
-  and list.
-- **Check:** prove first (item 5 of the list below).
+- **Change:** the guided add, Clear slot, waiting on the Load screen and the swatches of the printers list, Open
+  Spoolman, the catalog form and list.
+- **Check:** prove first (item 4 of the list below).
 
 ### EV8 Slicer Sync: the client header
 Klipper builder · Depends on: AF8 merged · Beside: every other EV step
@@ -2664,7 +2679,7 @@ Klipper builder · Depends on: AF8 merged · Beside: every other EV step
 To be assigned · Depends on: none · Beside: every other EV step
 - **Files today:** `reader/src/main.cpp`, `reader/firmware/VERSION` and what a firmware change needs.
 - **Change:** the firmware sends its build as `X-Reader-Build`.
-- **Check:** prove first (item 6 of the list below).
+- **Check:** prove first (item 5 of the list below).
 
 ### EV10 Documents
 Design + docs · Depends on: EV1 to EV9 merged
@@ -2688,20 +2703,17 @@ the Spools section's files again for those functions, and a later stage translat
 
 Each has a fallback.
 
-1. **EV1: a Bambu Lab slot's setting can be cleared on the printer.** If a recorded printer answer shows a command that
-   resets a slot's filament setting without moving anything, Clear slot sends it and `printer_cleared` is true. Otherwise
-   it stays false and the text adds "The printer still shows the old filament for this slot until a spool is loaded."
-2. **EV1: an entry built from Brand, Name and Material alone passes the catalog's check and gives a usable preset.** The
+1. **EV1: an entry built from Brand, Name and Material alone passes the catalog's check and gives a usable preset.** The
    check wants `fields` (`library.py:83-88`); the Hub fills them from the catalog's values for that material. If no
    sensible values exist for a material ("Other"), the form asks nozzle and bed temperatures for it.
-3. **EV3: a proof for setting changes.** Assumed: the station and the Hub can both derive a secret from the station's
+2. **EV3: a proof for setting changes.** Assumed: the station and the Hub can both derive a secret from the station's
    pairing without sending the token itself. If the Hub keeps nothing it can derive from, the station's pairing gains a
    second secret at its next hello, sent over the pinned channel.
-4. **EV4c with EV3: passing the station's page through the Hub** works with relative addresses only (the station's page
+3. **EV4c with EV3: passing the station's page through the Hub** works with relative addresses only (the station's page
    uses no absolute paths) and with the page's lock on the Hub's side.
-5. **EV7b: the dashed ring** is drawable with the app's swatch component; else the waiting slot's swatch gets a small
+4. **EV7b: the dashed ring** is drawable with the app's swatch component; else the waiting slot's swatch gets a small
    clock mark.
-6. **EV9: a reader in the field takes the new firmware** only when its owner holds the knob; until then its build is "not
+5. **EV9: a reader in the field takes the new firmware** only when its owner holds the knob; until then its build is "not
    known" and nothing breaks.
 
 **Out of scope:** adding spools on the Hub page; quick find and colour-name search (the Spoolman link is the answer); the

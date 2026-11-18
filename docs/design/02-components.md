@@ -2352,7 +2352,8 @@ sentence carries the content, "3 of 4 loaded" is visible.
 slot instead of swatches; rows: only "3 of 4 loaded" in the row's sub-line. Full form in every `detail`.
 
 **Android.** Full: `Column` of rows (swatch, texts, `LinearProgressIndicator(progress)`, `TextButton`s Load,
-Unload and Clear slot); compact: a `Row` of swatches with a `semantics { contentDescription = … }` sentence.
+Unload and Clear slot); compact: a `Row` of swatches with a `semantics { contentDescription = … }` sentence, on the
+printers list only (Home has no swatches).
 
 **HTML.**
 ```html
@@ -3102,6 +3103,14 @@ Android app; no screen draws its own.
   on that device only; it comes back if it gets worse (warn to bad) or is raised again later.
 - A moment's banner (print failed, printer error) stays until it is dismissed on that device, at most 24 hours. The
   banners read the events of the last 24 hours with `alert=1`.
+- The tag of a notification. A notification for a condition has the tag `sw-condition-<key>` everywhere (the Hub
+  page's browser notifications, Web Push, the web app's tidy-up), where `<key>` is the condition's key; a notification
+  for a moment keeps a tag of its own per event and is never replaced.
+- When an alert is over, Web Push replaces its notification: the push carries the notification of the event that ended
+  it (for example "Print resumed" with its text), with the same tag as the alert it ends, `silent: true` and
+  `renotify: false`. This is done only for print paused or filament ran out (ended by resumed, finished or failed) and
+  device stopped answering (ended by answering again); nothing is pushed when storage almost full or spool running low
+  end.
 - Titles and sentences, the one table every interface uses (`<...>` is filled from the values of the event):
 
   | Event | Title | Sentence | Action |

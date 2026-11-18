@@ -240,8 +240,9 @@ open the Alerts list of 02 section 8.9 as a dialog.
 - **Notifications outside the page.** With Settings > Alerts > "Notifications in this browser" on, the page also shows
   a browser notification for each new alert while a Hub page tab is open in that browser (the tab may be in the
   background). Nothing is sent when no tab is open. A notification has the title of the alert, one line of body and,
-  when chosen, opens the place of its action. One per event; a condition notifies when it is raised, not again while
-  it lasts; clearing sends nothing.
+  when chosen, opens the place of its action. A condition's notification has the tag `sw-condition-<key>` (02 section
+  8.8); a moment's has a tag of its own per event. One per event; a condition notifies when it is raised, not again
+  while it lasts; clearing sends nothing.
 
 ---
 
@@ -984,7 +985,7 @@ itself when the printer shows the load, or by **Unload** or **Clear slot**.
 | **Resume** | Paused | Primary | Result "Resumed." | `{action: "resume"}` |
 | **Stop print** | Printing, Paused or Preparing | Danger, apart at the end of the row | Opens "Stop the print?"; result "Stopped." | `{action: "stop", confirm: true}` |
 | **Turn the light on** / **Turn the light off** | The printer reports a light | Ghost; the label says what pressing does | Result "Light on." / "Light off." | `{action: "light_on"}` / `{action: "light_off"}` |
-| **Show camera** / **Hide camera** | The printer has a camera | Default | Shows or closes the box; closing the region, leaving the section or hiding the tab stops the stream | `G printers/<id>/camera.mjpeg` or `G printers/<id>/camera/<name>` (code) |
+| **Show camera** / **Hide camera** | The printer has a camera | Default | Shows or closes the box; closing the region, leaving the section or hiding the tab stops the stream | `G printers/<id>/camera.mjpeg` or `G printers/<id>/camera/<name>` (code; on a computer that is not trusted, with `?ticket=<ticket>` from `P printers/<id>/camera/ticket`, see Lock) |
 | **Load** | Every slot | Default | Opens the Load dialog (below) | `P printers/<id>/slots/<slot>/load` (code) `{spool_id, dry_run}` |
 | **Unload** | A spool is recorded in the slot | Default | Runs the dry run, then opens "Unload from <slot>?" | `P printers/<id>/slots/<slot>/unload` (code) `{dry_run}` |
 | **Clear slot** | Every slot, whether a spool is recorded there or not | Ghost | Runs the dry run, then opens "Clear slot <label>?" | `P printers/<id>/slots/<slot>/clear` (code) `{dry_run}` |
@@ -999,7 +1000,8 @@ busy, slot in use, certificate changed, needs Developer Mode, no preset, write r
 the Hub does not know, or a record that is simply wrong. **Unload** is "I took this spool out". Both do this, in this
 order: a spool waiting for the slot is no longer waiting; the spool recorded in the slot goes back where it was before
 it was loaded; on a Klipper printer the slot's setting on the printer is cleared when the printer is online and can do
-it. On a Bambu Lab printer what the printer shows for the slot is left as it is. Afterwards the slot has no spool:
+it. On a Bambu Lab printer what the printer shows for the slot is left as it is, and Clear slot's `printer_cleared` is
+always false there. Afterwards the slot has no spool:
 filament used from it is logged with no spool and taken off none, until the next Load, the next scanned assignment or
 the slot's own tag sets a spool again.
 
@@ -1007,7 +1009,7 @@ the slot's own tag sets a spool again.
 |---|---|---|---|
 | Stop the print | "Stop the print?" | "Stop <job> on <printer>? It cannot be resumed." (without a job name: "Stop the print on <printer>? It cannot be resumed.") | Cancel (focused first) · **Stop print** (danger) |
 | Unload | "Unload from <slot>?" | "Unload <spool name> from <slot>? It goes back to <place>." and then, on a Bambu Lab printer, "Only the inventory changes; the printer's slot setting stays as it is.", on a Klipper printer, "The slot's setting on the printer is cleared." | Cancel · **Unload** (primary) |
-| Clear slot | "Clear slot <label>?" | "The Hub forgets the spool recorded here. <Spool> goes back to <place>." (the second sentence only when a spool is recorded) | Cancel · **Clear slot** (danger) |
+| Clear slot | "Clear slot <label>?" | "The Hub forgets the spool recorded here. <Spool> goes back to <place>." (the second sentence only when a spool is recorded) and then, on a Bambu Lab printer, "The printer still shows the old filament for this slot until a spool is loaded." | Cancel · **Clear slot** (danger) |
 | Put it back | "Put it back on the spool?" | "Put <g> g back on the spool? (<job>, <slot>, <time>)" | Keep · **Put it back** (primary) |
 | Load into <slot> | "Load into <slot>" | The button **Use the last tapped tag**, "or", a search field "Brand, colour, material" with rows of opened and sealed spools. Before a pick: "Pick a spool: tap its tag on a reader, or search." After a pick, the plan lines of the dry run: "Load <spool> into <slot>", "Preset: <name or none>", "Nozzle: <mm> mm" ("Nozzle size not reported by the printer; assuming <mm> mm"), "Spool <n> now in <slot> goes back to <place>", and the Hub's problems as error lines. The tag lines: "Tag <id> is not linked to a spool." / "No tag read yet: tap one." | Cancel · **Load** (primary; disabled with "Pick a spool first." or "Working out the plan…") |
 
@@ -1018,11 +1020,15 @@ the slot's own tag sets a spool again.
 | Unloaded | OK | "Unloaded <spool name> from <slot>. Moved back: spool <n> to <place>." |
 | Slot cleared | OK | "Cleared slot <label>. Spool <n> is back on <place>." (without a spool: "Cleared slot <label>.") |
 | A waiting assignment ended | Note | "No spool is waiting for <slot> any more." |
-| Cleared, the answer says `printer_cleared: false` on a Bambu Lab printer | Note | "The printer still shows the old filament for this slot until a spool is loaded." |
+| Cleared on a Bambu Lab printer (`printer_cleared` is always false there) | Note | "The printer still shows the old filament for this slot until a spool is loaded." |
 | Filament put back | OK | "Put <g> g back on the spool." |
 
 **Lock.** Looking needs nothing: state, slots, waiting and filament used show on a Locked page. The camera, the print
 controls, the light and every slot action need the page Unlocked or Trusted (section 2.1) and ask for the code in place.
+**The camera's address.** On a trusted computer the page asks for the stream directly. Otherwise it first asks
+`P printers/<id>/camera/ticket` with the setup code and gets `{ticket, expires_in: 60}`; the stream's address takes
+`?ticket=<ticket>`. A ticket starts one stream within 60 seconds, for that printer only; the stream runs until it is
+closed.
 **State is read** every 2 seconds while the detail is open and the tab is visible (`G printers/<id>/live`, section 2.7);
 the Printers list keeps its 10 seconds.
 
@@ -1321,7 +1327,9 @@ Title "Trusted computers" with status badge "On" or "Off".
 **How the Hub learns kind and version.** Every client of ours sends one header on every call,
 `X-Spoolwarden-Client: <kind>/<version>`, with the kind `android`, `slicer-sync`, `weigh-station` or `web`; the Hub keeps
 the newest value with the pairing, beside "last seen". A Weigh Station also gives its version on its hello call. A Tag
-Reader sends `X-Reader-Build: <number>` with its token, and the Hub keeps the build and a last-seen time for each reader.
+Reader sends `X-Reader-Build: <number>` with its token to the web unit, which hands the build and the time of the
+reader's last call to the Hub; the Hub keeps the newest values with the reader's entry. The web unit does this when a
+reader's build changes and otherwise at most once a minute per reader, so a reader's "last seen" can be a minute old.
 A device that sends nothing shows "Version not known"; a pairing without a kind shows its name alone.
 
 **Check-in.** A Weigh Station calls its hello every 5 minutes, so its "Last seen" says that it is running, not that
@@ -2602,8 +2610,8 @@ column says.
 | The three values a Weigh Station tells the Hub at every start on `GET api/station/hello`: `fp` (the SHA-256 of its certificate), `port` and `version`, kept with its pairing | The Hub's calls to a Weigh Station (7.3), the Checks row "The Weigh Station <name> is not using HTTPS. Update it." (4.2) | A Weigh Station that sends none is called over plain HTTP as before, and the Checks show that row |
 | Printers announced by Bambu Lab printers, listed by the Hub's own listener for them | Add a printer, step 1 (5.6) | The found list holds Klipper printers only, with the sentence "Bambu Lab printers are added by address." |
 | A Label Reader on another machine that serves HTTPS on its port (a change in the reader's own repository) | Settings > Label Reader, Address and Test (10.5) | The Hub accepts the reader's `http://` address as before and the Checks show the row "The Label Reader at <address> is not using HTTPS." |
-| The page routes of the Spools section, under `/setup/api/`: `GET spools` (`q`, `filter`, `offset`, `limit`; answer `{spools, total, offset, has_more, spoolman_url?}`, `filter` one of `sealed`, `opened`, `loaded`, `low`, none meaning every spool that is not empty), `GET spools/{id}` (`{spool, last_use: {at, printer, grams}?}`), `POST spools/{id}` (`{gross` or `remaining` or `location` or `empty`, `dry_run}` → `{spool, before, dry}`), `GET spools/last-tag` (`{tag: {uid, read_at, source}?}`), `POST spools/{id}/link` (`{tag, dry_run}` → `{spool, before, dry}`); a spool carries `loaded` and `low` besides the spool view; the three changes need the page unlocked | Spools (16) | The section shows the error state "Could not read the spools. <Hub's text>" with **Try again** |
-| The page routes of the live view: `GET printers/{id}/live` (`{summary, status}` as `GET api/printers/{id}` gives them, the slots with `pending`), `POST printers/{id}/command` (`{action}`: `pause`, `resume`, `stop` with `confirm: true`, `light_on`, `light_off`), `POST printers/{id}/slots/{label}/load`, `unload` and `clear` (`{spool_id?, dry_run}`; `clear` answers `{slot, spool?, moved_back?, waiting_ended, printer_cleared, dry_run}`), `GET printers/{id}/usage` (`days`), `POST usage/{entry}/undo`, `GET printers/{id}/camera.mjpeg` and `camera/{name}`; they call the same printer code as the kit routes, in the Hub's process, and not the web app's routes; the state and usage reads are open, and every other route, the camera included, needs the page unlocked | Printers, the live view (5.10) | The expansion shows the facts of 5.3 and no live view |
+| The page routes of the Spools section, under `/setup/api/`: `GET spools` (`q`, `filter`, `offset`, `limit`; answer `{spools, total, offset, has_more, spoolman_url?}`, `filter` one of `sealed`, `opened`, `loaded`, `low`, none meaning every spool that is not empty), `GET spools/{id}` (`{spool, last_use: {at, printer, grams}?}`), `POST spools/{id}` (`{gross` or `remaining` or `location` or `auto_location: true` or `empty`, `dry_run}` → `{spool, before, dry}`), `GET spools/last-tag` (`{tag: {uid, read_at, source}?}`), `POST spools/{id}/link` (`{tag, dry_run}` → `{spool, before, dry}`); a spool carries `loaded` and `low` besides the spool view; the three changes need the page unlocked | Spools (16) | The section shows the error state "Could not read the spools. <Hub's text>" with **Try again** |
+| The page routes of the live view: `GET printers/{id}/live` (`{summary, status}` as `GET api/printers/{id}` gives them, the slots with `pending`), `POST printers/{id}/command` (`{action}`: `pause`, `resume`, `stop` with `confirm: true`, `light_on`, `light_off`), `POST printers/{id}/slots/{label}/load`, `unload` and `clear` (`{spool_id?, dry_run}`; `clear` answers `{slot, spool?, moved_back?, waiting_ended, printer_cleared, dry_run}`), `GET printers/{id}/usage` (`days`), `POST usage/{entry}/undo`, `GET printers/{id}/camera.mjpeg` and `camera/{name}` (on a computer that is not trusted, with `?ticket=<ticket>` from `POST printers/{id}/camera/ticket`, which takes the setup code and answers `{ticket, expires_in: 60}`: a ticket starts one stream within 60 seconds, for that printer only); they call the same printer code as the kit routes, in the Hub's process, and not the web app's routes; the state and usage reads are open, and every other route, the camera included, needs the page unlocked | Printers, the live view (5.10) | The expansion shows the facts of 5.3 and no live view |
 | The Hub page's part of the catalog form: `GET library/local` (`{entries: [{id, brand, name, material, added}]}`), `POST library/local` (the form's values; 400 `{error: "invalid_entry", problems: [{field, text}]}`) and `POST library/local/{id}/remove` (`{removed: true}`); the Hub builds the entry from the values with one function | Settings > Filament Catalog (10.9) | The group shows its state and the update buttons only |
 | Devices: `GET devices` (`{devices: [{id, name, kind, version?, newest?, out_of_date, advice?, paired?, last_seen?, reachable?, built_in, page}]}`, `kind` one of `phone`, `pc`, `station`, `web`, `reader`, `builtin`; the Tag Readers are rows of it), `GET device/{id}` (`{device, status?, settings?: [{id, label, kind, value, choices?, min?, max?}]}`) and `POST device/{id}/settings` (code); the Hub keeps each client's `X-Spoolwarden-Client: <kind>/<version>` and each reader's `X-Reader-Build` with its pairing, and a Weigh Station's hello gives its version every 5 minutes; `GET state` keeps its `devices` and `readers` fields | Devices (7.2, 7.9) | The list is the one of `G state`, without Kind, Version and out-of-date lines |
 | The station's own page passed through: `/setup/device/{id}/` and what is under it, over the Hub's own pinned HTTPS call to the station (relative addresses only), with this page's lock deciding: looking open, saving a setting unlocked | Devices, **Open** (7.10) | **Open** on a Weigh Station shows the detail of 7.10 only |
@@ -2712,7 +2720,7 @@ the page Unlocked or Trusted, like every change on the Hub page (2.1); looking d
 | Control | Does | Endpoint |
 |---|---|---|
 | **Update weight** | Opens a small form in place: a segmented choice "Weight with the spool" / "Filament left" and a number field in g. A valid number shows the preview "Remaining changes from 620 g to 482 g."; then the primary **Save weight**. Result "Weight updated: 482 g left." | `P spools/<id>` (code) `{gross or remaining, dry_run}` |
-| **Move** | Opens a menu "Move to": "Automatic" first, then every storage location in fill order with how full it is (as 10.4 and `04-web-app.md` 5.4 give them; a full one stays choosable and says "Full"). A choice shows the preview "Spool 214 would move to Shelf B." with **Move**. Result "Moved to Shelf B." | `P spools/<id>` (code) `{location, dry_run}` |
+| **Move** | Opens a menu "Move to": "Automatic" first, then every storage location in fill order with how full it is (as 10.4 and `04-web-app.md` 5.4 give them; a full one stays choosable and says "Full"). A choice shows the preview "Spool 214 would move to Shelf B." with **Move**. Result "Moved to Shelf B." | `P spools/<id>` (code) `{location, dry_run}`; for "Automatic" `{auto_location: true, dry_run}` (the Hub moves the spool where its placement rule puts it) |
 | **Link the last tapped tag** | Shows the last tag ("Tag <id>, tapped <age> on the Tag Reader", read when the detail opens and every 3 s while it is open) and the preview "Tag <id> would be linked to spool 214." with **Link tag**. With no tag read the button is disabled with "No tag read yet: tap the spool's tag on a reader." Result "Tag linked." | `G spools/last-tag` (view); `P spools/<id>/link` (code) `{tag, dry_run}` |
 | **Mark empty** | Dry run, then the dialog "Mark spool <id> empty?". Result "Marked empty." | `P spools/<id>` (code) `{empty: true, dry_run}` |
 

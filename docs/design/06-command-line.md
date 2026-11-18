@@ -570,7 +570,7 @@ Any step that can take longer than 2 seconds shows a progress line once 2 second
 | `locations` | the answer of `GET api/storage`: `{locations: [{id, name, type: "bulk" or "containers", limit or null, count or null, used, free or null, prefix or null, containers: [{name, number, taken}] or null, fill: "none", "any" or "materials", materials: [], overflow, default_overflow, sealed, position}], order_by_material: [{material, locations: [names]}], everything_else: [names]}` |
 | `spools` | the answer of `GET api/spools`: `{spools: [{id, location, remaining_g, net_g, tare_g, tag, state: "sealed", "opened" or "empty", filament_id, vendor, name, material, color_hex, lot, loaded: {printer_id, printer, slot}?, low, view}], spoolman_url?}` |
 | `spool show` | `{spool, last_use: {at, printer, grams}?}` |
-| `spool weigh`, `spool move`, `spool empty` (need `--yes`) | `{spool, before, dry}`, the spool view after and before the change |
+| `spool weigh`, `spool move`, `spool empty` (need `--yes`) | `{spool, before, dry}`, the spool view after and before the change; the same for `spool move <n> auto` |
 | `printer clear` (needs `--yes`) | the answer of `POST api/printers/<id>/slots/<slot>/clear`: `{slot, spool?, moved_back?, waiting_ended, printer_cleared, dry_run}` |
 | `printer load`, `printer unload` (need `--yes`) | the answers of the routes `.../slots/<slot>/load` and `.../unload`; `unload` adds `waiting_ended`, and a load for a printer that has not shown it yet says `pending: true` |
 | `printer usage` | the answer of `GET api/printers/<id>/usage` |
@@ -657,7 +657,7 @@ Every question, word for word (names are examples):
 | `devices set` | the preview, for example `Volume would change from 70 to 40.`, then `Apply?` | `Saved: volume 40.` |
 | `printer load` | the plan lines (`Load Polymaker PolyTerra PLA Charcoal Black into A4`, `Preset: …`, `Nozzle: 0.4 mm`, `Spool 211 now in A4 goes back to Shelf B.`), then `Load it?` | `Loaded into A4.`, `Sent to A4. The printer accepted it but hasn't shown the change yet.` or `Waiting for the spool to load in A4.` |
 | `printer unload` | `Unload from A3? Unload eSUN ABS+ White from A3? It goes back to Shelf B. Only the inventory changes; the printer's slot setting stays as it is.` (on a Klipper printer the last sentence is `The slot's setting on the printer is cleared.`) | `Unloaded eSUN ABS+ White from A3. Moved back: spool 211 to Shelf B.` |
-| `printer clear` | `Clear slot A3? The Hub forgets the spool recorded here. eSUN ABS+ White (211) goes back to Shelf B.` (the second sentence only when a spool is recorded) | `Cleared slot A3. Spool 211 is back on Shelf B.` (without a spool `Cleared slot A3.`; also `No spool is waiting for A3 any more.` when a waiting assignment ended, and, when the Hub says the printer was not cleared, `The printer still shows the old filament for this slot until a spool is loaded.`) |
+| `printer clear` | `Clear slot A3? The Hub forgets the spool recorded here. eSUN ABS+ White (211) goes back to Shelf B.` (the second sentence only when a spool is recorded; on a Bambu Lab printer it ends with `The printer still shows the old filament for this slot until a spool is loaded.`) | `Cleared slot A3. Spool 211 is back on Shelf B.` (without a spool `Cleared slot A3.`; also `No spool is waiting for A3 any more.` when a waiting assignment ended, and, on a Bambu Lab printer, `The printer still shows the old filament for this slot until a spool is loaded.`) |
 | `spool weigh` | `Remaining changes from 620 g to 482 g.`, then `Apply?` | `Weight updated: 482 g left.` |
 | `spool move` | `Spool 214 would move to Shelf B.`, then `Apply?` | `Moved to Shelf B.` |
 | `spool empty` | `Mark spool 214 empty? Polymaker PolyTerra PLA Charcoal Black will be marked as used up.` | `Marked empty.` |
@@ -2152,8 +2152,8 @@ The installer (`install.sh`) is the first thing a person runs, so what it asks a
 the command line's design. It asks its questions on a terminal only; with no terminal it asks nothing and takes the
 defaults. Addresses it prints have no port when the Hub is on port 443.
 
-**The first question: Guided Setup.** On a first install at a terminal, when no `--mode`, `--modules` or `--restore`
-was given, the first question is:
+**The first question: Guided Setup.** On a first install at a terminal, when none of `--mode`, `--modules`, `--set`,
+`--server` or `--restore` was given (the flags win), the first question is:
 
 ```
   y: the Hub is installed with the usual choices; its page takes you through the rest.
@@ -2170,7 +2170,7 @@ Finish setting up in your browser (Guided Setup)? [Y/n]
   written without a port when the Hub is on 443.
 - **No terminal**: no question; today's behaviour. The Hub page still offers Getting started (`03-hub-page.md` 4.2), so
   an unattended install ends in the same place.
-- An update, `--restore` and the install of only a Weigh Station never ask it.
+- An update, `--restore`, any of the flags above and the install of only a Weigh Station never ask it.
 - The installer records what it did (which of the name, storage and features questions were answered at the terminal)
   in the first-run file in the Hub's state folder, so the Hub page knows which steps are already answered.
 
@@ -2213,8 +2213,9 @@ Spoolman: http://192.0.2.10:7912
 
 - `spools [<words>]`: every word must be found in the brand, name, material, location, spool number or tag (the Hub's
   word match). `--sealed`, `--opened`, `--loaded` (in a printer) and `--low` (running low) narrow the list; one at a
-  time, and they work with the words. `spools low` is the command of 9.18 and keeps its own output; the word "low" alone
-  is that command, and `spools --low` is the filter. Spools that are empty are not listed.
+  time, and they work with the words. `spools low` stays the command of 9.18 and keeps its own output; any other words
+  search. To search for the word itself, write `spoolwarden spools -- low`. `spools --low` is the filter. Spools that
+  are empty are not listed.
 - The last line is `Spoolman: <address>` (the Hub's `spoolman_url`; the command never builds it). It is left out when
   the Hub gives none.
 - Nothing matches: `No spools match.` No spools at all: `No spools yet. Add your first one from your phone.`
@@ -2251,7 +2252,7 @@ Marked empty.
 |---|---|---|
 | `spool show <n>` | One spool: its facts, where it is, its tag, the last filament taken off it | `--json`: `{spool, last_use?}` |
 | `spool weigh <n> <grams with the spool>` | Records a scale reading with the spool | Grams above 0, or `Error: enter grams above 0.` |
-| `spool move <n> <location\|auto>` | Moves it; `auto` lets the Hub choose | An unknown location stops with exit code 2 and its Fix line lists the Hub's locations |
+| `spool move <n> <location\|auto>` | Moves it; `auto` sends `{"auto_location": true}` and the Hub moves the spool where its placement rule puts it | An unknown location stops with exit code 2 and its Fix line lists the Hub's locations |
 | `spool empty <n>` | Marks it as used up | |
 
 `spool` with no word prints these four commands and the line of section 10 for what still needs a phone: a tag is linked
