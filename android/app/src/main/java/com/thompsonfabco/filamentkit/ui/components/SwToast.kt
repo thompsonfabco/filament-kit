@@ -51,6 +51,11 @@ internal class SwToastState {
     internal val host = SnackbarHostState()
     private val turn = Mutex()
 
+    /** Takes the toast on screen away now (an answer to what it offered, given somewhere else, must not wait behind it). */
+    fun dismiss() {
+        host.currentSnackbarData?.dismiss()
+    }
+
     /**
      * Shows [message] and returns when it is gone; [SnackbarResult.ActionPerformed] when the action was pressed.
      * [holdMs] replaces the usual hold, but never shortens it.

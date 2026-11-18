@@ -21,4 +21,7 @@ object HistoryTexts {
 
     /** Undo did not reach the Hub, or the Hub failed without saying why. */
     const val UNDO_FAILED = "Nothing was undone. Try again."
+
+    /** The title of a spool's last events (R84 section 2). */
+    const val ACTIVITY_TITLE = "Recent activity"
 }

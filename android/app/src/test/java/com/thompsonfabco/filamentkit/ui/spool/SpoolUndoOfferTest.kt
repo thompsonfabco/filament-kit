@@ -109,4 +109,48 @@ class SpoolUndoOfferTest {
         assertEquals(listOf(31L), backend.undone)
         assertNull(vm.state.value.result)
     }
+
+    // ---- the spool's last ten events (R84 section 2) ----
+
+    private fun row(id: Long, kind: String = UndoKinds.MOVED, possible: Boolean = false) =
+        ActivityEvent(id, "2026-11-17T04:00:00Z", now - 500, kind, "Pixel", "Moved to Shelf B.", "spool:214", UndoState(possible, null, null), false, null)
+
+    @Test fun theLastTenEventsLoadWhenTheScreenOpensAndAreKeptNewestFirst() = runTest(dispatcher) {
+        backend.events = (1L..12L).map { row(it) }
+        val vm = vm()
+        advanceUntilIdle()
+        assertEquals(10, vm.state.value.activity.size)
+    }
+
+    @Test fun anOlderHubWithNoEventsLeavesTheSectionEmpty() = runTest(dispatcher) {
+        val vm = vm()
+        advanceUntilIdle()
+        assertEquals(emptyList<ActivityEvent>(), vm.state.value.activity)
+    }
+
+    @Test fun theListIsReadAgainAfterAnAction() = runTest(dispatcher) {
+        backend.fake.updateAnswer = { _, location, _, _ -> spoolJson(214, location = location) }
+        val vm = vm()
+        advanceUntilIdle()
+        assertEquals(0, vm.state.value.activity.size)
+        backend.events = listOf(row(7, possible = true))
+        vm.openMove()
+        advanceUntilIdle()
+        vm.move("Shelf B")
+        advanceUntilIdle()
+        assertEquals(listOf(7L), vm.state.value.activity.map { it.id })
+        assertEquals(true, vm.state.value.activity.single().canUndo)
+    }
+
+    @Test fun undoOnARowAsksTheHubOnceAndReadsTheSpoolAndListAgain() = runTest(dispatcher) {
+        backend.fake.spools = listOf(spoolJson(214))
+        backend.events = listOf(row(7, possible = true))
+        val vm = vm()
+        advanceUntilIdle()
+        val outcome = vm.undoRow(vm.state.value.activity.single())
+        advanceUntilIdle()
+        assertEquals(UndoOutcome.Done("Put back."), outcome)
+        assertEquals(listOf(7L), backend.undone)
+        assertNull(vm.state.value.undoing)
+    }
 }

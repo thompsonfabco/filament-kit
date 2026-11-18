@@ -65,6 +65,7 @@ import com.thompsonfabco.filamentkit.ui.components.SwMenuItem
 import com.thompsonfabco.filamentkit.ui.components.SwProgress
 import com.thompsonfabco.filamentkit.ui.components.SwSheet
 import com.thompsonfabco.filamentkit.ui.components.SwSkeletonRows
+import com.thompsonfabco.filamentkit.ui.history.ActivityList
 import com.thompsonfabco.filamentkit.ui.history.showUndoable
 import com.thompsonfabco.filamentkit.ui.history.spoolResultToastText
 import com.thompsonfabco.filamentkit.ui.history.undoHoldMs
@@ -143,6 +144,13 @@ fun SpoolScreen(
                     ui.result?.let { ResultLine(it) }
                     Actions(vm, ui, online, printersOn, onLoad)
                     Details(spool)
+                    ActivityList(
+                        ui.activity, ui.undoing, enabled = online && !ui.writing,
+                        onUndo = { event ->
+                            toast?.dismiss()
+                            scope.launch { vm.undoRow(event).text.takeIf { it.isNotBlank() }?.let { toast?.show(it) } }
+                        },
+                    )
                 }
             }
         }
