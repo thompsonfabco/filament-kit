@@ -492,6 +492,74 @@ const reading = async (answer) => { stub('read', answer); await give(2); button(
 """
 
 READY = {
+    "alerts_banner": r"""
+  await waitPage();
+  const now = Date.now(), at = (m) => new Date(now - m * 60000).toISOString().replace(/\.\d+Z$/, 'Z');
+  const ev = (id, kind, sev, m, data, cond) => ({ id, at: at(m), kind, severity: sev, subject: { type: 'printer', id: 'p-3', name: 'Workshop X1' }, actor: { type: 'hub' }, data,
+    condition: cond ? { key: cond, state: 'raised' } : null, alert: true, title: '', text: '', action: { place: 'printer', id: 'p-3' } });
+  const mine = [ev(5, 'print.runout', 'warn', 3, { job: 'bracket.3mf', percent: 41 }, 'print-paused:p-3')];
+  let answer = { events: mine, next: 5, conditions: mine };
+  stub('events', () => reply(answer));
+  startAlerts();
+  await until('the banner', () => $('.alert-host .banner'));
+  need('the host is at the top of the page, before the heading', $('.page').firstElementChild === $('.alert-host'));
+  need('the banner names the alert, its sentence and the time', text('.alert-host .banner').includes('Filament ran out on Workshop X1') && text('.alert-host .banner').includes('bracket.3mf is paused at 41 %') && /since \d\d:\d\d/.test(text('.alert-host .banner')));
+  need('one banner', $$('.alert-host .banner').length === 1);
+  const more = [ev(6, 'print.failed', 'bad', 2, { job: 'cube.3mf', percent: 10, reason: 'cancelled' }), ev(7, 'storage.low', 'warn', 1, { free: 3e9, total: 20e9, percent: 85 }, 'storage-low')];
+  answer = { events: [...mine, ...more], next: 7, conditions: [mine[0], more[1]] };
+  await SW_ALERTS.poll();
+  await until('the third alert is one line', () => $('.alert-host .alert-more'));
+  need('two banners and one line for the rest', $$('.alert-host .banner').length === 2 && text('.alert-more') === '1 more alert');
+  need('the most serious first', text('.alert-host .banner').includes('Print stopped on Workshop X1'));
+  $('.alert-more button').click();
+  await until('the list', () => $('dialog[open] .alert-list'));
+  need('the Alerts list holds the raised conditions and the moments', $$('dialog[open] .alert-row').length >= 3 && text('dialog[open]').includes('Storage on the Hub is almost full'));
+  $('dialog[open]').close();
+  const g = alertsGroup((title, ...kids) => { const x = document.createElement('section'); x.append(...kids.filter(Boolean)); return x; });
+  const recent = button('Recent alerts', g);
+  need('Settings has the Recent alerts button', !!recent);
+  document.body.append(g); recent.click();
+  await until('the list from Settings', () => $('dialog[open] .alert-list')); $('dialog[open]').close(); g.remove();
+""",
+    "alerts_clear": r"""
+  await waitPage();
+  const now = Date.now(), at = (m) => new Date(now - m * 60000).toISOString().replace(/\.\d+Z$/, 'Z');
+  const raised = { id: 5, at: at(3), kind: 'print.runout', severity: 'warn', subject: { type: 'printer', id: 'p-3', name: 'Workshop X1' }, actor: { type: 'hub' },
+    data: { job: 'bracket.3mf', percent: 41 }, condition: { key: 'print-paused:p-3', state: 'raised' }, alert: true, title: '', text: '', action: { place: 'printer', id: 'p-3' } };
+  let answer = { events: [raised], next: 5, conditions: [raised] };
+  stub('events', () => reply(answer));
+  startAlerts();
+  await until('the banner', () => $('.alert-host .banner'));
+  // the clearing event is not an alert (alert false) and still reaches the page; the condition is gone from the raised ones
+  const clearing = { id: 6, at: at(0), kind: 'print.resumed', severity: 'ok', subject: raised.subject, actor: { type: 'hub' }, data: {},
+    condition: { key: 'print-paused:p-3', state: 'cleared' }, alert: false, title: '', text: '', action: null };
+  answer = { events: [raised, clearing], next: 6, conditions: [] };
+  await SW_ALERTS.poll();
+  await until('the banner closes on its clearing event', () => !$('.alert-host .banner'));
+  need('the clearing event was kept by the page, not filtered out', SW_ALERTS.state().events.some((e) => e.id === 6 && e.kind === 'print.resumed'));
+""",
+    "alerts_restored_hub": r"""
+  await waitPage();
+  const now = Date.now(), at = (m) => new Date(now - m * 60000).toISOString().replace(/\.\d+Z$/, 'Z');
+  const ev = (id, printer) => ({ id, at: at(2), kind: 'print.failed', severity: 'bad', subject: { type: 'printer', id: 'p-' + id, name: printer }, actor: { type: 'hub' },
+    data: { job: 'cube.3mf', percent: 10, reason: 'cancelled' }, condition: null, alert: true, title: '', text: '', action: { place: 'printer', id: 'p-' + id } });
+  let answer = { events: [ev(50, 'Before the restore')], next: 50, conditions: [] };
+  stub('events', () => reply(answer));
+  startAlerts();
+  await until('the first banner', () => text('.alert-host .banner').includes('Before the restore'));
+  need('the page holds the cursor 50', SW_ALERTS.state().cursor === 50);
+  answer = { events: [ev(2, 'After the restore')], next: 2, conditions: [] };      // a restored or reinstalled Hub: its ids start again, lower
+  await SW_ALERTS.poll();
+  await until('the page starts over and shows the new Hub\'s alert', () => text('.alert-host .banner').includes('After the restore') && SW_ALERTS.state().cursor === 2);
+  need('nothing of the old Hub is kept', !SW_ALERTS.state().events.some((e) => e.id === 50));
+""",
+    "alerts_none": r"""
+  await waitPage();
+  stub('events', () => reply({ error: 'not found' }, 404));
+  startAlerts(); await sleep(500);
+  need('a Hub without the events route shows no banner and no line', !$('.alert-host .banner') && !$('.alert-host .alert-more'));
+  need('an empty host takes no room', getComputedStyle($('.alert-host')).display === 'none');
+""",
     "empty": r"""
   await waitPage();
   need('the intro', text('.add__intro').includes('Nothing is saved until you preview and press Add.'));
@@ -1230,6 +1298,30 @@ const FRESH = () => localStorage.removeItem('spoolwarden.sealedOnly');
 """
 
 SP_READY = {
+    "running_low": r"""
+  await waitPage();
+  need('no chip while the Hub has no list', !$$('.spools__low').some((b) => !b.classList.contains('hidden')));
+  stub(/^spools\/low$/, () => reply({ threshold_g: 150, spools: [
+    { id: 11, filament: 'Elegoo PLA Red', material: 'PLA', color: 'C0392B', remaining_g: 80, location: 'Rack 1', in_stock: 2, last_one: false },
+    { id: 12, filament: 'Bambu Lab PETG Orange', material: 'PETG', color: 'F2762E', remaining_g: 140, location: 'Dry bin 1', in_stock: 0, last_one: true }] }));
+  tabs.spools.enter();
+  const chip = await until('the chip', () => button('Running low (2)'));
+  need('the chip is off', chip.getAttribute('aria-pressed') === 'false' && !search().closest('.hidden'));
+  chip.click();
+  await until('the rows', () => $$('.spools__row').length === 2 && text('.spools__row-text').includes('Elegoo PLA Red'));
+  const rows = $$('.spools__row').map((r) => r.textContent.replace(/\s+/g, ' '));
+  need('the first row: filament, spool, place, grams, others', /Elegoo PLA Red/.test(rows[0]) && /Spool 11/.test(rows[0]) && /Rack 1 · 80 g left · 2 more in stock/.test(rows[0]));
+  need('the last one is marked and has no stock line', /Last one/.test(rows[1]) && !/more in stock/.test(rows[1]) && /140 g left/.test(rows[1]) && !!$('.spools__last'));
+  need('the chip is on, the search is out of the way', chip.getAttribute('aria-pressed') === 'true' && search().closest('.hidden'));
+  chip.click();
+  await until('the search is back', () => !search().closest('.hidden') && chip.getAttribute('aria-pressed') === 'false');
+  location.hash = '#spools/low';
+  await until('the address turns the filter on', () => $$('.spools__row').length === 2 && chip.getAttribute('aria-pressed') === 'true');
+  stub(/^spools\/low$/, () => reply({ threshold_g: 150, spools: [] }));
+  tabs.spools.enter();
+  await until('nothing low', () => text('.spools__none') === 'Nothing is running low.');
+  need('the chip stays while the filter is on', chip.getAttribute('aria-pressed') === 'true');
+""",
     "list": r"""
   await waitPage();
   need('the intro', text('.spools > p').startsWith("Tap the spool's tag on a reader"));

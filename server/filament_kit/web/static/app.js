@@ -825,7 +825,7 @@ function settingsBody(wide) {
   return [h("div", { class: "settings" },
     group(SW.t("appearance_title"), appearanceControl({ wide: true, name: null }), h("p", { class: "muted" }, SW.t("settings_saved_on_phone")), live()),
     group(SW.t("appearance_theme_title"), SW.themePicker(), h("p", { class: "muted" }, SW.t("settings_theme_help")), live()),
-    PUSH && typeof alertsPanel === "function" ? group(SW.t("settings_alerts_title"), alertsPanel(() => installSheet())) : null,
+    alertsGroup(group),
     group(SW.t("settings_this_hub"), HUB ? h("p", { class: "settings__hub" }, HUB) : null,
       h("p", { class: "settings__address" }, location.origin + location.pathname), hubPageLink()),
     wide && !installed() ? group(SW.t("nav_more_home_screen"), h("p", { class: "muted" }, SW.t("nav_more_home_screen_summary", { product: PRODUCT })),
@@ -916,6 +916,63 @@ function navigation() {
   nav.append(moreBtn);                                       // after SW.shell: this More has its own sheet
   paintMore();
   matchMedia("(max-width: 600px)").addEventListener("change", () => route());   // Settings: a sheet or a page
+}
+
+// ----- Alerts (R80 section 5, EA7): the banners at the top of the page, the Alerts list, a toast per new alert. The shared script
+// (shared/alerts.js, EA5) is loaded here so the page's own markup stays as it is; a Hub that does not serve it, or has no events
+// route yet, shows no banner and nothing else changes. -----
+// Texts of this step that the string catalogue does not hold yet (the catalogue step lists them in the keys file); the catalogue's own
+// text wins as soon as it has the key. The table is inside the function: the tabs are built before the constants below exist.
+function tt(key, vars) {
+  const STUB = {
+    settings_alerts_recent: "Recent alerts",
+    running_low_chip: "Running low ({count})",
+    running_low_left: "{grams} g left",
+    running_low_in_stock: { one: "{count} more in stock", other: "{count} more in stock" },
+    running_low_last_one: "Last one",
+    running_low_empty: "Nothing is running low.",
+  };
+  const v = SW.t(key, vars);
+  if (v !== key) return v;
+  let f = STUB[key];
+  if (f == null) return key;
+  if (typeof f === "object") f = f[new Intl.PluralRules("en").select(Number(vars && vars.count))] || f.other;
+  return vars ? f.replace(/\{([a-z][a-z0-9_]*)\}/g, (m, n) => (vars[n] != null ? String(vars[n]) : m)) : f;
+}
+const alertHost = h("div", { class: "alert-host" });
+page.prepend(alertHost);
+// where an alert's action goes in this app (null: no button): the printer and the running-low list are here; storage use and Devices
+// are Hub page places and are left out on an address that has no Hub page link (R80 section 11)
+function alertHref(a) {
+  const hubPage = HUB_PAGE ? HUB_PAGE.replace(/#.*$/, "") : "";
+  if (a.place === "printer") return PRINTERS ? "#printers" + (a.id ? "/" + encodeURIComponent(a.id) : "") : null;
+  if (a.place === "running-low") return "#spools/low";
+  if (a.place === "storage-use" || a.place === "storage") return hubPage ? hubPage + "#overview/storage-use" : null;
+  if (a.place === "devices") return hubPage ? hubPage + "#devices" : null;
+  return null;
+}
+function startAlerts() {
+  if (!window.SW_ALERTS) return;
+  SW_ALERTS.start({ host: alertHost, interval: 10000, href: alertHref,
+    api: async (path) => {
+      if (document.hidden) throw new Error("hidden");                                      // nothing is asked while the page is hidden
+      const res = await api(path), have = SW_ALERTS.state().cursor;
+      // a Hub whose ids are lower than the cursor was restored or reinstalled: ask again from the start (the cursor is kept only in the page)
+      if (res && res.next != null && have != null && Number(res.next) < have) setTimeout(startAlerts, 0);
+      return res;
+    },
+    onError: (e) => { if (e && e.status === 404) SW_ALERTS.stop(); } });                    // a Hub without the events route: stop asking
+}
+{
+  const link = document.createElement("link"), script = document.createElement("script");
+  link.rel = "stylesheet"; link.href = BASE + "/shared/alerts.css";
+  script.src = BASE + "/shared/alerts.js"; script.onload = startAlerts;
+  document.head.append(link); document.body.append(script);
+}
+function alertsGroup(group) {
+  const panel = PUSH && typeof alertsPanel === "function" ? alertsPanel(() => installSheet()) : null;
+  const recent = window.SW_ALERTS ? SW.btn(tt("settings_alerts_recent"), { cls: "btn--ghost", action: "alerts-recent", run: (e) => SW_ALERTS.openList(e.currentTarget) }) : null;
+  return panel || recent ? group(SW.t("settings_alerts_title"), panel, recent) : null;
 }
 
 // ----- the shell kept by sw.js, and "Cannot reach the Hub" (04 10.2, 10.3) -----
@@ -1928,8 +1985,40 @@ function openTab() {
   });
   let foundAt = 0;                                           // when the list last came from the Hub
   const findLine = resultLine(), resultsBox = hubGroup(h("div", { class: "spools__results" }), () => foundAt);
+  // ----- Running low (R80 section 7): a filter chip with the count; on, the list is the Hub's spools/low (least filament first) -----
+  let low = false, lowRows = null;
+  const lowBtn = h("button", { class: "btn spools__low hidden", type: "button", "aria-pressed": "false", on: { click: () => setLow(!low) } });
+  function paintLow() {
+    const n = lowRows ? lowRows.length : 0;
+    lowBtn.classList.toggle("hidden", !lowRows || (n === 0 && !low));       // a Hub without the list, or nothing low: no chip
+    lowBtn.textContent = tt("running_low_chip", { count: n });
+    lowBtn.setAttribute("aria-pressed", String(low));
+    searchField.classList.toggle("hidden", low); sealedBox.classList.toggle("hidden", low);
+  }
+  function lowRow(r) {
+    const colour = hexOf(r.color), more = Number(r.in_stock) || 0;
+    const kept = [r.location || "?", tt("running_low_left", { grams: grams(r.remaining_g) }), r.last_one ? null : tt("running_low_in_stock", { count: more })].filter(Boolean).join(" · ");
+    return h("button", { class: "spools__row", type: "button", on: { click: (e) => openSheet(r.id, e.currentTarget) } },
+      SW.swatch(colour, {}),
+      h("span", { class: "spools__row-text" }, h("b", { textContent: r.filament || SW.t("spool_title", { id: r.id }) }),
+        h("span", { class: "muted mono", textContent: SW.t("spool_title", { id: r.id }) }),
+        h("span", { class: "muted", textContent: kept }), r.last_one ? h("span", { class: "spools__last", textContent: tt("running_low_last_one") }) : null),
+      SW.icon("chevron", "icon--s spools__chevron"));
+  }
+  function drawLow() {
+    if (!lowRows) { resultsBox.replaceChildren(h("p", { class: "muted", textContent: SW.t("common_working") })); return; }
+    resultsBox.replaceChildren(lowRows.length ? h("ul", { class: "spools__rows" }, ...lowRows.map((r) => h("li", {}, lowRow(r))))
+      : h("p", { class: "spools__none", textContent: tt("running_low_empty") }));
+  }
+  async function loadLow() {
+    try { lowRows = (await api("spools/low")).spools || []; foundAt = Date.now(); }
+    catch (e) { if (lowRows == null && low) { low = false; find(lastQ); } }      // no list on this Hub: back to the search
+    paintLow(); if (low) drawLow();
+  }
+  function setLow(on) { low = on; paintLow(); if (on) { drawLow(); loadLow(); } else find(lastQ); }
   async function find(q) {
     lastQ = q;
+    if (low) { loadLow(); return; }
     const mine = ++findStamp;
     if (!asked && !firstLoad) firstLoad = SW.loading(resultsBox, { thing: SW.t("nav_spools"), items: 3 });
     searchField._busy(true);
@@ -2233,7 +2322,7 @@ function openTab() {
 
     const dlg = SW.sheet({ title: SW.t("spool_title", { id }), body: h("div", { class: "spools__sheet" }, sum, openPart, other), onClose: () => {
       if (sheet && sheet.dlg === dlg) sheet = null;            // a sheet that was replaced by another one closes after the new one is set
-      if (changed) { changed = false; if (shown && asked) find(lastQ); }
+      if (changed) { changed = false; if (shown && (asked || low)) find(lastQ); }
       if (shellView) shellView.paint(false);
     } });
     if (how === "push") history.pushState({ sheet: true }, "", `#spools/${id}`);
@@ -2272,7 +2361,7 @@ function openTab() {
   const el = h("section", { class: "hidden" }, h("div", { class: "spools" },
     h("p", { class: "muted", textContent: SW.t("spools_intro") }),
     group(SW.t("spools_last_tag"), tagBody, tagLine),
-    h("div", { class: "spools__find" }, searchField, sealedBox, findLine), resultsBox,
+    h("div", { class: "spools__find" }, searchField, sealedBox, lowBtn, findLine), resultsBox,
     locsList));
   return {
     el,
@@ -2284,11 +2373,13 @@ function openTab() {
       }
       if (!document.hidden) startPoll();
       find(asked ? lastQ : "");
+      if (!low) loadLow();                                     // the chip's count
     },
     leave() { shown = false; stopPoll(); closeSheet(); },
     address(more, initial) {                                   // #spools or #spools/<id> (04 2.4)
       const id = /^\d+$/.test(more) ? Number(more) : null;
-      if (id == null) closeSheet(); else openSheet(id, null, initial ? "direct" : "entry");
+      if (more === "low") { closeSheet(); if (!low) setLow(true); }      // #spools/low: an alert's "Show running low"
+      else if (id == null) closeSheet(); else openSheet(id, null, initial ? "direct" : "entry");
     },
     sheetTitle: () => (sheet ? SW.t("spool_title", { id: sheet.id }) : null),
   };
