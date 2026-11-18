@@ -11,7 +11,8 @@ the Hub page · 5 Stage 2: Hub page sections · 6 Stage 3: the web app · 7 Stag
 line · 9 Stage 6: Themes · 10 Stage 7: wording · 11 Hub API additions · 12 Dependencies and the first ten steps ·
 13 Open points · 14 Coverage · 15 Stage 8: Share corrections · 16 Stage 9: Storage locations · 17 Stage 10: Events
 and alerts · 18 Stage 11: Address and first run · 19 Stage 12: Every function in every version · 20 Stage 13:
-History, data and safety, and Home Assistant
+History, data and safety, and Home Assistant · 21 Stage 14: Reach: the rest of the data as XML, languages, demo mode
+and spool labels
 
 ---
 
@@ -1398,6 +1399,13 @@ Stage 13  HD0 to HD10 from the start, against the contracts of the stage      HD
           EV5 > HD7e (setup_page.py, setup.js, setup_overview.js)      EA5 > HD7e (components.js, components.css)
           files held by earlier steps: EV6a + EV6b > HD8      EV7a + EV7b > HD9
           (every step but HD8, HD9 and HD11 can start at once; HD2 files the string keys of the other steps)
+
+Stage 14  RC0 to RC10 from the start, against the contracts of the stage      RC2 > RC11
+          registry files: HD1 > RC9 (api.py)      HD2 > RC2 (the string catalogue's form) > RC9 (cli.py, status.py, the
+          string catalogue)      HD7e > RC3 (setup_page.py, setup.js, components.js, components.css)
+          EV4d > RC3 (setup_settings.js)      EA2 > RC6 (__main__.py)
+          files held by earlier steps: HD8 > RC4      HD9 > RC5
+          (every step but RC4, RC5 and RC11 can start at once; RC9 files the string keys of the other steps)
 ```
 
 Stages 3 and 4 do not wait for Stages 1 and 2: once Stage 0 is done they run beside them, each needing only the Hub
@@ -2285,17 +2293,19 @@ station's hello call, the found Bambu Lab printers and the remote reader's HTTPS
   `127.0.0.1` stays as it is. The Weigh Station makes its own certificate with the Hub's existing `pairing.make_cert`.
   At every start it tells the Hub `fp`, `port` and `version` on `GET /api/station/hello`, over the connection it already
   has; the Hub then calls it over HTTPS at that port, accepts only that certificate and does not fall back to plain
-  HTTP. A station that has not been updated sends no fingerprint and is called over plain HTTP as before; the Checks
-  show it. The printer-side tag service is pinned the first time the Hub reads its address (trust on first use). A Label
-  Reader on another machine is the exception until its own software can serve HTTPS: an `http://` address of it is
-  accepted and used as today, an `https://` address is pinned at Test, and the Checks show one Note row, "The Label
-  Reader at <address> is not using HTTPS. A later Label Reader version adds it.", with no Fix line. From the release
-  that turns the rule on (only together with a reader version that serves HTTPS; it is not a setting), saving an
-  `http://` address that is not 127.0.0.1 is refused with "A Label Reader on another machine needs an https address."; a
-  stored one keeps working and its row becomes Needs a look: "The Label Reader at <address> is not using HTTPS." with
-  the Fix "Update the Label Reader on that machine, then change its address to https:// in Settings > Label Reader."
-  Spoolman is not ours: its page stays `http://<host>:7912`. Nothing listens on port 80, so a bare name typed without
-  `https://` shows nothing.
+  HTTP. A station that has not been updated sends no fingerprint and is called over plain HTTP as before; so is a
+  station that cannot make its certificate, which serves plain HTTP as before and logs why; the Checks show a row for
+  either. The Hub never goes back to plain HTTP for a station whose certificate it has pinned: for such a station a
+  missing or changed certificate is an error row, never a reason to downgrade. The printer-side tag service is pinned
+  the first time the Hub reads its address (trust on first use). A Label Reader on another machine is the exception
+  until its own software can serve HTTPS: an `http://` address of it is accepted and used as today, an `https://`
+  address is pinned at Test, and the Checks show one Note row, "The Label Reader at <address> is not using HTTPS. A
+  later Label Reader version adds it.", with no Fix line. From the release that turns the rule on (only together with a
+  reader version that serves HTTPS; it is not a setting), saving an `http://` address that is not 127.0.0.1 is refused
+  with "A Label Reader on another machine needs an https address."; a stored one keeps working and its row becomes Needs
+  a look: "The Label Reader at <address> is not using HTTPS." with the Fix "Update the Label Reader on that machine,
+  then change its address to https:// in Settings > Label Reader." Spoolman is not ours: its page stays
+  `http://<host>:7912`. Nothing listens on port 80, so a bare name typed without `https://` shows nothing.
 - **Existing satellites keep their ports** (5003 for the Weigh Station, 5002 for the printer-side tag service) and switch
   to HTTPS on update; only new installs take 443. "The printer station" in the code is that tag service, because the
   Printer Station / Tag Reader device itself listens on nothing.
@@ -2582,9 +2592,17 @@ device's detail: `GET device/{id}` (open) answers `{device, status?, settings?, 
 bool}`; `GET device/{id}/photo` (open) answers `image/jpeg`; `POST device/{id}/settings` needs the page unlocked; `POST
 device/{id}/open` needs the page unlocked, makes the Hub ask the station for a one-time ticket and answers `{address:
 "<own_page>#ticket=<ticket>"}`. The live view's camera has one more: `POST printers/{id}/camera/ticket` with the setup
-code, answering `{ticket, expires_in: 60}`; on a computer that is not trusted the stream's address takes
-`?ticket=<ticket>`, and a ticket starts one stream within 60 seconds, for that printer only; the stream runs until it is
-closed.
+code, answering `{ticket, expires_in: 60}`; on a computer that is not trusted the first camera request (the stream, or
+the playlist) takes `?ticket=<ticket>`, spends the ticket within 60 seconds and gets a cookie that is the camera
+session: valid only for that printer's camera routes (`/setup/api/printers/<id>/camera`), HttpOnly, Secure and
+SameSite=Strict, naming a session the Hub keeps in memory for that printer for 10 minutes, moved forward by every
+camera request that carries it (a Bambu Lab printer with an RTSP camera is served as a playlist with many segment
+requests; a Bambu Lab P1 or A1 and every Klipper camera are one stream; the rule is the same for both). The cookie lets
+its holder do nothing but ask that camera. The session ends at `POST printers/{id}/camera/close` (needs only the cookie;
+answers `{closed: true}`), after 10 minutes with no camera request, when the Hub restarts and when the printer is
+removed. Locking the page again does not cut a running picture; the next Show camera needs the code again. At most 8
+camera sessions run at a time: the ninth ticket is refused with "Too many camera views are open. Close one first." A
+trusted computer needs no ticket.
 
 **Twins** (under `/intake/api/`; EV6a and EV6b): `GET hub` (the kit object), `GET library/local`, `POST library/local`
 (the form), `POST library/local/{id}/remove`, `POST printers/scan` and `POST printers/{id}/slots/{label}/clear`. Each
@@ -2679,7 +2697,8 @@ Bug-bash 1 · Depends on: none · Beside: every other EV step
 - **Starts after:** AF3 is merged, for `setup_printers.js`.
 - **Files today:** new `setup_console/printer_live_tab.py`, new `setup_static/setup_printer_live.js` and `.css`,
   `setup_static/setup_printers.js`, `setup_static/setup_printers.css`.
-- **Change:** 03 5.10: the live view, the slot actions, waiting in the slot strip, the camera's ticket.
+- **Change:** 03 5.10: the live view, the slot actions, waiting in the slot strip, the camera's ticket (asked before the
+  first camera request and put on that address only) and the camera's close call.
 - **Other interfaces:** EV5 mounts it.
 
 ### EV4c Hub page: Devices
@@ -2800,9 +2819,10 @@ condition`, served with `title`, `text` and `action`, kept 400 days in month fil
 
 ### The rules of the stage
 
-- **All steps start at once**, each against the contracts below and in 03 section 15, 04 section 14, 05 section 16 and 06
-  section 13. A registry file waits for the merge of the step named for it, and nothing else waits. New kit routes live
-  in new modules that give their routes as a list; one step, HD1, mounts them in `api.py`, so `api.py` has one holder.
+- **All steps start at once**, each against the contracts below and in 03 section 15, 04 section 14, 05 section 16 and
+  06 section 13. A registry file waits for the merge of the step named for it, and nothing else waits. New kit routes
+  live in new modules that give their routes as a list; one step, HD1, mounts them in `api.py`, so `api.py` has one
+  holder.
 - **Every action leaves an event, with who did it.** The kinds, their data and the actor rule are in Stage 10's catalogue
   and event store. A data value is never a secret: a changed key says that it changed, never its value. A spool change
   carries complete before-values so that it can be put back.
@@ -3086,3 +3106,367 @@ Each has a fallback.
 **Out of scope:** a second place for backups; a restore drill; quiet hours; undo for settings; charts beyond the monthly
 bars; controlling a printer from Home Assistant; importing filament-used history, events or preset lines; exporting
 secrets in any form.
+
+---
+
+## 21. Stage 14: Reach: the rest of the data as XML, languages, demo mode and spool labels
+
+The rest of the Hub's own data is kept as XML like `printers.xml` already is; the string catalogue becomes XML and
+language packs follow its form, so the interfaces can speak more than one language; the whole product can run on
+made-up data for a person who only wants to look; and a spool gets a label with a QR code that opens it. The parts
+that specify it are 02 7.13 and 8.8, 03 3.9, 4.2, 6.3, 10.2, 10.3, 15 and 16, 04 1.2, 2.4, 5.4, 9.2 and 14, 05 2.5, 3.7,
+4.4, 7.1, 7.10, 12.2 and 16, 06 3.1, 6.4, 9.1, 9.20, 9.21, 9.27, 9.28 and 13, 07 SR-1 and LNG-8, and 08 section 12. The
+words "kit route", "page route" and "twin" are used as Stage 12 uses them. It starts from the Hub as Stage 13 leaves it,
+with the shared XML helper (`bridge/xmlfile.py`: a safe parser, a declared shape per file, a size cap, the last good
+data kept) and the files `printers.xml`, `storage.xml`, `firstrun.xml`, `alerts.xml`, `push.xml` and the event store
+already in XML.
+
+### The rules of the stage
+
+- **All steps start at once**, each against the contracts below and in 03 section 15, 04 section 14, 05 section 16 and
+  06 section 13. A registry file waits for the merge of the step named for it, and nothing else waits. New kit routes
+  live in new modules that give their routes as a list; one step, RC9, mounts them in `api.py`, so `api.py` has one
+  holder.
+- **Data as XML: what moves.** Every file that Spoolwarden's own programs keep as stored data or settings: the Hub's
+  settings file `config.json`; the pairing files; `reads.json`; the slicer-preset state (`lines.json`, `updates.json`,
+  `current.json`, `installed.json`, `deleted.json`, `owner-edits.json`, `build-state.json`, `pc-heartbeat.json`,
+  `live/meta.json`, and the build marker files `BUILD.json`, `SLICER.json` and `KEPT.json`); the Filament Catalog's own
+  state (`current.json`, `previous.json`, `last_check.json`, `rolled_back.json`) and the owner's own entries
+  (`library-local`); the Recently added records and their pending reads; the share queue; the Bambu Lab printers'
+  per-printer files (`usage.jsonl`, `mapping.json`, `slotmap.json`, `slottest-snapshot.json`); `station-requests.json`;
+  `reader-setup.json`; the Label Reader's `installed.json` and `plan.json`; `releases/state.json`; the web unit's
+  `oauth.json`; the Weigh Station's `station_server.json` and `pair/request.json`; the Slicer Sync program's own files.
+- **Data as XML: what does not move, and why.** What a slicer reads (the generated presets: the slicers' format). What a
+  device in the field reads (the Tag Reader firmware's update manifest). What is sent between programs (API bodies, the
+  pairing link, the printers' and Spoolman's protocols). What comes from elsewhere and is only stored as it arrived (the
+  downloaded Filament Catalog versions, the Label Reader's own manifest, the voice model's description). The command
+  line's `--json` output, which stays. The Android app's settings, which are not JSON files.
+- **One way to do it,** the one `printers.xml`, `storage.xml` and `firstrun.xml` already use: the shared XML helper, the
+  atomic write with the Hub's owner and mode (`pairing._write_atomic`), and a version on the root element. Element and
+  attribute names are lower-case with hyphens; a single value is an attribute, a list is repeated child elements, free
+  text is element text; no file mixes text and elements. The exact shape of each file is declared in the code with the
+  helper, and the step that makes the file writes it into "The shapes of the files" below; a step may not invent a
+  second way.
+- **Moving a file.** At the first start (or first use) with this version, a file that exists as JSON and not as XML is
+  read, written as XML, and from then on only the XML is used. A start never fails for it: a JSON file that cannot be
+  read is left where it is, the Hub works with what that file's code does today for a missing file, and the Checks show
+  one row, group Hub, Needs a look: "<What it is> could not be converted (<reason>)." with the Fix the code can name
+  (03 4.2, 06 9.1). An XML file that cannot be read is never overwritten: it is kept as `<name>.unreadable` on the next
+  save, as today.
+- **Going back one version** (`update --rollback`). The JSON files are left on disk as they were at the move and are not
+  deleted for one release. Two are also kept up to date in that time, because losing them on a rollback is real harm:
+  the Hub's settings and the list of paired devices, written in both forms, XML first, the way `printers.json` is
+  today (`bridge/registry.py:225-274`). For the others a rollback sees the state at the move. The release after next
+  deletes the left-over JSON files.
+- **The settings file** becomes `/etc/filament-kit/config.xml`, with the same owner, mode and read grant for the web
+  unit. The three shell scripts that read JSON with sed or Python (`install/install.sh`, `install/uninstall.sh`,
+  `install/spoolwarden-cli.sh`) read the XML through the Hub's Python instead of parsing it themselves.
+- **The Bambu Lab filament-used log** is one growing line file today; it becomes one XML file per month per printer
+  (`usage/<yyyy-mm>.xml`), as the event store has. Klipper's is XML already.
+- **Files two programs share** (the build marker files that the Hub writes and Slicer Sync reads) change in one step on
+  both sides, and Slicer Sync reads both forms for one release, so a new Hub with an old Slicer Sync or the other way
+  round still installs presets.
+- **Backup and restore.** A backup made before this version holds JSON; after such a restore the first start moves the
+  files as above.
+- **The string catalogue** becomes `strings/en.xml` and `strings/en.json` goes. The generator (`tokens/build_tokens.py`)
+  reads the XML and writes what it writes today: the web copies and Android's resources. The form is the one of 08
+  section 12 (`<strings language="en" name="English" for="0.7.0">` with `<text key="…">`, plural forms as `<one>` and
+  `<other>`, `{name}` placeholders as they are, an optional `note="…"` for the translator). Nothing a person sees
+  changes by this step alone: the texts are the same.
+- **Languages.** The first packs are Russian and German; German is machine-translated and shown everywhere as "Deutsch
+  (machine-translated)" until a speaker of German has read it and the pack is marked reviewed. A pack is one XML file in
+  the catalogue's form with the English beside each text, so a translator needs nothing but a text editor (08 section
+  12); an empty translation means "use the English". `spoolwarden language template <code>` writes a pack, and
+  `spoolwarden language check <file>` says in plain sentences what is wrong and how much is translated (06 9.27). Packs
+  live in the repository as `strings/packs/<code>.xml` and with each release as `spoolwarden-lang-<code>.xml`; English
+  is always inside the product. On the Hub, Settings > General > Language lists English, the installed languages and
+  **Get more languages**; choosing one downloads it as a job like the Filament Catalog's update, checks it with the
+  rules of `language check` (a pack that fails is not installed) and keeps it in `<state>/languages/<code>.xml`. An
+  update of the Hub fetches the matching pack of each installed language; until it has it, the old pack is used and
+  new texts are English. At install the installer reads `LANG`; if the release has a pack for it, it downloads it,
+  makes it the Hub's language and prints one line (06 9.20); no question is asked.
+- **Which language a person gets.** Each interface has "Language: Automatic" by default: the device's language if the
+  Hub has that pack, else the Hub's language; it can be set per device to any installed language (the Hub page: Settings
+  > Appearance, kept in that browser; the web app: Settings, kept on that phone; the Android app: Settings > Appearance,
+  Android's own per-app language; the command line: `--lang <code>` or the shell's `LANG`, else the Hub's). Every text
+  the Hub writes (alert titles and texts, Checks rows, refusals) carries `key` and `params` beside `text`; `text` is
+  in the language the caller asked for (`Accept-Language`, or `?lang=`), falling back to the Hub's language and then to
+  English. A notification sent to a phone is in that phone's language: the web app's push subscription and the Android
+  app send their language. The Android app carries every language of its release inside the app, as generated resources
+  per language, and downloads no pack; a pack newer than the app reaches it with the next app update. Dates and numbers
+  follow the chosen language in each interface: pages set their `lang`, and plural rules come from the language, not
+  from "en" (`web-shared/components.js:13`).
+- **Not translated in this stage:** the installer's lines and the command line's option help (they are not in the
+  catalogue; about 31 and 234 texts), the Weigh Station's spoken and panel texts, the Tag Reader's display, and the
+  documents. The command line's results that come from the catalogue are translated. Right-to-left languages are not
+  supported.
+- **Demo mode** is the whole product running on made-up data with pretend printers, in every interface. The data is the
+  sample set of `mockups/CONTENT-SPEC.md` ("Workshop hub": 64 spools, three printers and one found, a print running at
+  42 %). It can be switched on only while the Hub has no spool and no printer; otherwise it is refused with "The demo is
+  for an empty Hub. This Hub has real data." It is offered in Getting started ("Just looking? Try the demo"), in
+  Settings > General, and as `sudo spoolwarden demo on`, and switching it on needs the page unlocked.
+- **Demo mode touches nothing real.** The Hub talks to a demo inventory instead of Spoolman and to pretend printers
+  instead of real ones, and keeps everything it records (events, filament used, storage locations, Recently added) in a
+  folder of its own inside its state folder. It does none of these, and each answers "Not in the demo.": reach a
+  printer, write to Spoolman, call the Label Reader's cloud, download from GitHub (updates, the catalog, language
+  packs), send a push, make or restore a backup, flash a device, change system settings through the root helper. Pairing
+  a phone or a PC works, so the demo can be seen on them.
+- **Demo mode moves.** The pretend printers print and can be paused, resumed and stopped; slots can be loaded and
+  unloaded; filament used is recorded; and one scripted alert ("Filament ran out" on the Klipper printer) shows two
+  minutes after the demo starts or restarts. There is no camera picture ("No camera in the demo.").
+- **Demo mode is always visible, and it ends cleanly.** Every screen of every interface shows the banner "Demo data.
+  Nothing here is real." with **Leave demo** (the Hub page and the web app; the Android app's notice card; the command
+  line prints "Demo data." above every result), and a test holds that no screen lacks it. Leaving asks once ("Leave
+  the demo? Everything in it is deleted."), deletes the demo's folder and brings the Hub back as it was: empty. Getting
+  started is not marked by anything done in the demo. Every answer that says what the Hub is (`GET /api/info`,
+  `GET /api/hub`, the page's state) carries `demo: true` while it is on.
+- **Spool labels.** A spool has a short address, `https://<hub>/s/<number>`. Opening it in a browser goes to the spool:
+  in the web app when that is on (`/intake#spools/<number>`), else on the Hub page's Spools section. The Android app
+  understands the same address: **Scan a label** in Spools (the QR scanner that pairing already has) opens the spool
+  whatever Hub address is printed on the label, because only the number after `/s/` is used; a phone's own camera opens
+  the browser at the printed address. The label is drawn by the Hub as SVG: the QR code, the spool's number large,
+  brand, name, material, a box in the filament's colour with its hex value, the lot, the date it was added, the net
+  weight, and the nozzle and bed temperatures when the filament has them. Sizes: 62 x 29 mm (a 62 mm roll), 50 x 30 mm,
+  and a sheet of 24 (A4 or Letter by the browser's paper). Black on white; the colour box is the only colour.
+- **Labels are printed through the browser's or Android's print dialog.** **Print a label** on a spool (the Hub page's
+  Spools detail, the web app's spool sheet) and **Print labels** for several (the selected spools; a Recently added
+  record's spools) open a print page with the size choice and a preview, then the system's print dialog; Android does
+  the same through its print service. No label printer is driven directly and no PDF is made. The QR code holds the
+  Hub's home address (`https://<name>.local[:port]/s/<number>`): if the Hub is renamed or its port changes, old labels
+  still work in the Android app's scanner and stop working from a phone's camera, and the print page says so in one
+  line. Spool numbers are Spoolman's own and survive a restore. The command line writes the SVG:
+  `spoolwarden spool label <number>... [--size 62x29|50x30|sheet24] --out <file.svg>`.
+- **Texts.** Only RC9 opens the string catalogue for the new texts of this stage; RC2 changes its form and the
+  generator. Every other step sends RC9 its keys and English texts before it files.
+- **No file is opened by two RC steps.** A step that finds it needs another step's file stops and says so. Two cases are
+  known: the demo's stops for the Filament Catalog's download and for push live in files that RC1d and RC4 hold
+  (`library.py`, `web/push.py`), and the pending read's `meta.json` lives in `intake.py`, which RC1b holds; RC7 and
+  RC1d name the lines to those steps instead of opening the files. A step that changes a file lists the readers of that
+  file it finds before it changes it.
+
+### The contracts
+
+All JSON except where the file is named. A field marked `?` may be absent. Times are ISO 8601 with offset.
+
+**Kit routes** (RC2, RC6 and RC8 as marked).
+
+| Route | Query / body | Answer | Owner |
+|---|---|---|---|
+| `GET /api/languages` | - | `{hub: "<code>", languages: [{code, name, reviewed: bool, installed: bool, complete: <0-100>}]}` | RC2 |
+| `GET /api/strings/{code}.js` | - | the texts of that language as the web pages load them (English filled in where a translation is empty) | RC2 |
+| every route that answers a text made by the Hub | header `Accept-Language` or `?lang=<code>` | the object gains `key` and `params` beside `text` | RC2 |
+| `GET /api/info`, `GET /api/hub` (changed) | - | gain `demo: bool` and `language: "<code>"` | RC6, RC2 |
+| `GET /s/{id}` | - | a redirect to the spool (`/intake#spools/<number>` when the web app is on, else the Hub page's Spools section); 404 for an unknown number | RC8 |
+| `GET /api/spools/{id}/label.svg` | `size=62x29\|50x30\|sheet24` (default 62x29) | `image/svg+xml` | RC8 |
+
+A web token may call `GET /api/languages`, `GET /api/strings/{code}.js` and `GET /api/spools/{id}/label.svg`.
+
+**Page routes** (under `/setup/api/`).
+
+| Route | Body / query | Answer | Lock | Owner |
+|---|---|---|---|---|
+| `GET languages` | - | as the kit route, plus `available: [{code, name, reviewed, complete}]` (the release's packs; empty when the list could not be fetched, with `problem: <text>`) | open | RC2 |
+| `POST languages/{code}/install` | - | starts the job | unlocked | RC2 |
+| `POST languages/{code}/remove` | - | `{removed: true}` | unlocked | RC2 |
+| `POST settings/language` | `{hub: "<code>"}` | `{hub}` | unlocked | RC2 |
+| `POST demo` | `{on: true\|false}` | `{demo: bool}`; 409 `{error: "not_empty", text}` | unlocked | RC6 |
+| `GET labels` | `ids=<n,n,...>&size=` | the print page (HTML; the labels as inline SVG) | open | RC8 |
+| `GET spools/{id}/label.svg` | `size` | as the kit route | open | RC8 |
+
+**Twins** (under `/intake/api/`; RC4): `GET languages` and `GET spools/{id}/label.svg`; the web app's print page is
+`/intake/labels?ids=&size=`. RC9 mounts all of these.
+
+**The command line** (RC2 for `language`, RC6 for `demo`, RC8 for `label`; all mounted by RC9): `spoolwarden language
+[list]`; `sudo spoolwarden language add <code>`; `sudo spoolwarden language remove <code>`; `sudo spoolwarden language
+set
+<code>`; `spoolwarden language template <code> [--out <file>]`; `spoolwarden language check <file>`; the global option
+`--lang <code>`; `sudo spoolwarden demo on|off` and `spoolwarden demo` (says whether it is on); `spoolwarden spool label
+<number>... [--size ...] --out <file.svg>`. Each with `--json` where it has an object.
+
+**Files.** `config.xml` has the root `<config version="1">`; each settings group is one child element named as the
+group's key, scalars as attributes, lists as repeated children. A language pack and the catalogue have the form of 08
+section 12. Installed packs are `<state>/languages/<code>.xml`; the Hub's language is `language` in the settings.
+
+### The shapes of the files
+
+Each RC1 step adds the shape of every file it makes to this table before it merges, in the form of "One way to do it"
+above.
+
+| File | Root and shape | Made by |
+|---|---|---|
+| `/etc/filament-kit/config.xml` | `<config version="1">`; one child element per settings group, named as the group's key; scalars as attributes, lists as repeated children | RC1a |
+
+### Which files the stage shares with the stages before it
+
+Each registry file below is opened by exactly one RC step, and that step starts only after the step that has the file
+open is merged. A step whose only wait is a registry file builds everything else first and adds its registry lines last.
+
+| Registry file | Opened by | Opened before by | Merge first |
+|---|---|---|---|
+| `api.py` | RC9 | EA3, AF5, EV1, then HD1 | HD1 |
+| `cli.py`, `status.py` | RC9 | EA3, AF5, EV2, then HD2 | HD2 |
+| the string catalogue and its copies | RC2 (its form and the generator), then RC9 (the new texts) | EA3, AF5, EV2, then HD2 | HD2; RC9 also after RC2: the step that changes the file's form merges after every other holder |
+| `setup_page.py`, `setup_static/setup.js` | RC3 | EA6, AF6, EV5, then HD7e | HD7e |
+| `setup_static/setup_settings.js` | RC3 | AF6, then EV4d | EV4d |
+| `shared_static/components.js`, `shared_static/components.css` | RC3 | EA5, then HD7e | HD7e |
+| `__main__.py` | RC6 | EA2 | HD1 (EA2 is merged before it) |
+
+### RC0 Design text
+Design + docs · Depends on: none · Beside: every other RC step
+- **Files today:** `docs/design/*.md`.
+- **Change:** the design text of this stage: 02 to 09 (this stage).
+- **Keep:** every other part.
+- **Other interfaces:** every RC step reads it.
+- **Check:** the design's own tests.
+
+### RC1a Hub: the settings file as XML
+Server builder · Depends on: none · Beside: every other RC step
+- **Files today:** `config.py`, `web_access.py`, `install/install.sh`, `install/uninstall.sh`,
+  `install/spoolwarden-cli.sh`, `updates.py` (its state file).
+- **Change:** `config.json` becomes `config.xml`, kept in both forms for one release; the three shell scripts read the
+  XML through the Hub's Python; the moving of the file and its Checks row.
+- **Check:** prove first (item 2 of the list below).
+
+### RC1b Hub: pairing files, reads and the reader's install files
+Server builder · Depends on: none · Beside: every other RC step
+- **Files today:** `pairing.py`, `intake.py`, `station_requests.py`, `reader_flash.py`, `local_intake_install.py`.
+- **Change:** the pairing files (both forms for one release), `reads.json`, `station-requests.json`,
+  `reader-setup.json`, the Label Reader's `installed.json` and `plan.json`, each as XML.
+
+### RC1c Slicer presets and Slicer Sync: state and build marker files
+Klipper builder · Depends on: none · Beside: every other RC step
+- **Files today:** `profiles/lines.py`, `profiles/builds.py`, `profiles/updates.py`, `pc-sync/fksync/store.py`,
+  `pc-sync/fksync/installer.py`.
+- **Change:** the slicer-preset state and the build marker files as XML, on the Hub and in Slicer Sync, in one step on
+  both sides; Slicer Sync reads both forms for one release; Slicer Sync's own files.
+- **Check:** prove first (item 1 of the list below).
+
+### RC1d Hub: the Filament Catalog's state, Recently added and the share queue
+Server builder · Depends on: none · Beside: every other RC step
+- **Files today:** `library.py`, `intake_history.py`, `share_queue.py`.
+- **Change:** the Filament Catalog's own state and the owner's entries, the Recently added records and the share queue,
+  each as XML.
+
+### RC1e Hub: the Bambu Lab printers' files and the end of the `printers.json` mirror
+Server builder · Depends on: none · Beside: every other RC step
+- **Files today:** `bridge/usage.py`, `bridge/mapping.py`, `bridge/ams.py`, `bridge/snapshot.py`, `bridge/registry.py`.
+- **Change:** the per-printer files as XML, the monthly filament-used files (`usage/<yyyy-mm>.xml`), and the end of the
+  `printers.json` mirror.
+
+### RC1f Web unit and Weigh Station: their files
+Server builder · Depends on: none · Beside: every other RC step
+- **Files today:** `web/auth.py`, `web/app.py`, `station/server_api.py`, `station/pair_request.py`,
+  `install/systemd/filament-kit-station-pair.path`.
+- **Change:** the web unit's `oauth.json`; the Weigh Station's two files and its path unit.
+
+### RC2 Hub: the catalogue as XML, languages and `key` and `params`
+Server builder · Depends on: none · Beside: every other RC step except for its registry file
+- **Files today:** `strings/en.xml` (and the removal of `en.json`), `tokens/build_tokens.py`, new `strings/packs/`, new
+  `language.py`, new `language_cli.py`, `alerts_api.py`, `storage_api.py`, new `setup_console/language_tab.py`,
+  `tools/make_release.sh` (packs as release files), tests. Registry file: the string catalogue, after HD2 is merged; it
+  changes the file's form, so every other holder must be merged first.
+- **Change:** the catalogue as XML and the generator (also Android's resources per language); packs: template, check,
+  download, install; `key` and `params`; the routes of the contracts above for languages.
+- **Other interfaces:** every other step builds against these routes with stubs.
+- **Check:** prove first (item 3 of the list below).
+
+### RC3 Hub page: Language, the demo and Getting started
+Bug-bash 1 · Depends on: none · Beside: every other RC step except for its registry files
+- **Files today:** `setup_static/setup_start.js`. Registry files: `setup_page.py`, `setup_static/setup.js`,
+  `setup_static/setup_settings.js`, `shared_static/components.js` and `.css`, after HD7e is merged.
+- **Change:** 03 10.2 and 10.3: Language in Settings (General and Appearance), the page's `lang`, plural rules by
+  language, the demo banner and Leave demo, Try the demo in Getting started.
+
+### RC4 Web app: Language, the demo banner and Print a label
+Klipper builder · Depends on: none · Beside: every other RC step
+- **Starts after:** HD8 is merged: it has these files open in Stage 13.
+- **Files today:** `web/static/app.js`, `web/static/printers.js`, `web/intake_app.py`, `web/pages.py`, `web/push.py`
+  (the subscription's language).
+- **Change:** 04: Language in Settings, `lang`, the demo banner, Print a label, the print page.
+
+### RC5 App: Language, the demo notice, Scan a label and Print a label
+App builder · Depends on: none · Beside: every other RC step
+- **Starts after:** HD9 is merged: it has these files open in Stage 13.
+- **Files today:** `ui/settings/AppearanceSettings.kt`, `ui/components/NoticeCard.kt`, `MainActivity.kt`,
+  `ui/search/SearchScreen.kt`, `ui/spool/SpoolScreen.kt`, `ui/pair/QrScanner.kt`, `net/Api.kt`, `net/Models.kt`,
+  `AndroidManifest.xml`.
+- **Change:** 05: Language in Settings (the system's per-app language), the demo notice on every screen, Scan a label,
+  Print a label.
+- **Check:** prove first (item 4 of the list below).
+
+### RC6 Hub: demo mode
+Server builder · Depends on: none · Beside: every other RC step except for its registry file
+- **Files today:** new package `demo/` (the sample data as XML), `spoolman.py` (the place a client is made),
+  `bridge/connection.py` and `bridge/klipper/manager.py` only where a printer's connection is made, new `demo_cli.py`.
+  Registry file: `__main__.py` (how the Hub starts in demo), after HD1 is merged.
+- **Change:** the demo inventory, the pretend printers, the demo's own folder, the stops of the rules above, the
+  scripted alert, and `demo: true`.
+- **Check:** prove first (item 5 of the list below).
+
+### RC7 Hub: the demo's stops in the modules that reach outside
+Server builder · Depends on: none · Beside: every other RC step
+- **Files today:** `release.py`, `backup.py`, `setup_helper.py`, `web/reader.py`.
+- **Change:** the stops "Not in the demo." in these modules.
+
+### RC8 Hub: labels and the short address
+Server builder · Depends on: none · Beside: every other RC step
+- **Files today:** new `labels.py`, new `qr.py`, new `setup_console/labels_tab.py`.
+- **Change:** the label as SVG in three sizes, `GET /s/{id}`, the print page.
+- **Check:** prove first (item 6 of the list below).
+
+### RC9 Hub: the registry, the command line and the texts
+Server builder · Depends on: none · Beside: every other RC step except for its registry files
+- **Files today:** none of its own. Registry files: `api.py`, `cli.py`, `status.py` and the string catalogue, after HD1,
+  HD2 and RC2 are merged.
+- **Change:** the mounts of the routes of RC2, RC6 and RC8; the command line of the contracts above; the Checks row of
+  "Moving a file"; and ALL new texts of this stage.
+- **Other interfaces:** every other step names its keys to this one before it files.
+- **Check:** the command tests; the catalogue and wording tests (08 test 7).
+
+### RC10 Hub page: Print a label and Print labels
+Bug-bash 1 · Depends on: none · Beside: every other RC step
+- **Files today:** `setup_static/setup_spools.js`, `setup_static/setup_intake.js`, new `setup_static/setup_labels.css`
+  (the print rules).
+- **Change:** 03 16 and 6.3: Print a label and Print labels in Spools and Recently added.
+
+### RC11 Documents and the first packs
+Design + docs · Depends on: RC2 merged, for the packs' form
+- **Files today:** `strings/packs/de.xml`, `strings/packs/ru.xml`, `docs/*.md`, `release-notes/next.md`.
+- **Change:** the German pack (machine-translated, marked so); the Russian pack as a template for its translator; the
+  user documents and the release notes.
+- **Keep:** the wording of the other sections.
+
+**Order.** RC0 to RC10 now (RC4 and RC5 after their holders). RC11 after RC2. Registry files, one after the other, per
+file: `api.py`: EA3 > AF5 > EV1 > HD1 > RC9. `cli.py` and `status.py`: EA3 > AF5 > EV2 > HD2 > RC9. The string
+catalogue: EA3 > AF5 > EV2 > HD2 > RC2 (form) > RC9 (new texts). `setup_page.py` and `setup.js`: EA6 > AF6 > EV5 > HD7e
+> RC3. `setup_settings.js`: AF6 > EV4d > RC3. `shared_static/components.js` and `components.css`: EA5 > HD7e > RC3.
+`__main__.py`: EA2 > RC6.
+
+**How far the map is checked.** From two reads of the code. Not looked at: every reader of each JSON file (the steps
+name their files; a step lists the readers it finds before it changes a file), the Android stores `AlertsStore.kt` and
+`DraftStore.kt`, how the Hub's Python texts outside `alerts_api.py` are looked up, where a printer's connection is made
+in both families, and the size of the largest files.
+
+### To prove first, in the step that meets it
+
+Each has a fallback.
+
+1. **RC1c: a new Hub with an old Slicer Sync, and the other way round, still installs presets** (both forms read for one
+   release). If the older program cannot be served, the Hub keeps writing the JSON marker files for one release beside
+   the XML.
+2. **RC1a: every reader of the settings file is found** (the web unit, three shell scripts, the backup, the update). A
+   reader missed shows as a failing upgrade run; the fallback is the both-forms rule of "Going back one version", which
+   keeps an old reader working for one release.
+3. **RC2: a translator can edit the pack in a plain text editor without breaking it.** Tried by running the check
+   command on a pack with typical slips (a deleted `>`, a translated placeholder name, an `&`); if its sentences do not
+   lead to the fix, the form of 08 section 12 changes before any translating starts.
+4. **RC5: Android's per-app language works on the oldest Android the app supports;** else the app follows the phone's
+   language only and the setting is not shown there.
+5. **RC6: the demo's stops are complete.** A test starts the Hub in demo with the network refused and the real state
+   folder read-only and walks every route; anything that fails or writes outside the demo's folder is a missing stop.
+6. **RC8: a QR code with the Hub's address at 62 x 29 mm is readable** by a phone camera at the error level the Hub's QR
+   code uses (L today); else the level is raised or the code gets more of the label.
+
+**Out of scope:** right-to-left languages; translating the installer, the option help, speech, device displays and
+documents; units other than grams and Celsius; driving label printers; PDF; a camera picture in the demo; changing the
+downloaded catalogue's or the slicers' formats; removing `--json`.

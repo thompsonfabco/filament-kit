@@ -97,7 +97,8 @@ Rules:
   "This computer is no longer trusted. Enter the setup code to go on." and opens the unlock dialog for the action
   that failed.
 - **The camera is the one thing that only looks and still needs the code** (5.10): a picture from inside a home can
-  be as private as an address, so the camera, like every control of a printer, waits for Unlocked or Trusted.
+  be as private as an address, so the camera, like every control of a printer, waits for Unlocked or Trusted. A picture
+  that is running is not cut when the page locks again (5.10).
 - **Questions are never skipped.** Unlocked or trusted, every confirmation dialog of this document is still asked.
 - **Lockout.** When the Hub answers "too many wrong setup codes", the unlock dialog shows the Hub's own wording at
   the field (as `02-components.md` section 3.2 gives for too many tries); Unlock stays enabled, and pressing it before the wait is over shows the
@@ -515,10 +516,55 @@ address. Reload the page and try again."
   app in a new tab (`G webapp`, 7.4). It is on every section and is shown only while the web app's feature is on. On the
   sections that offer a file (Printers, Spools, Recently added, Slicer presets and Logs > Activity) it also holds
   **Download as CSV** and, on Spools, **Import from CSV** (2.10).
+- While the demo is on, the demo banner (3.9) is the first thing in `main`, above the alert banners and the page header.
 - Moving to another section scrolls to the top and focuses the page title (`tabindex="-1"`).
 - Content is at most 1400 px wide on desktop with `--s5` gutters; `--s4` on tablet and phone.
 - Cards: a title row (`--fs-l`, weight 650, optional icon, optional status badge, optional
   actions at the right), body, optional footer for the group's Save. Cards are separated by `--s4`.
+
+### 3.9 The demo
+
+**What it is.** The whole product running on made-up data with pretend printers, so that a person can look around
+without owning anything. The data is the sample set of `mockups/CONTENT-SPEC.md`, "Workshop hub": 64 spools, three
+printers and one found, and a print running at 42 %. The pretend printers move: they print, pause, resume and stop,
+slots can be loaded and unloaded, filament used is recorded, and two minutes after the demo starts or restarts one
+scripted alert, "Filament ran out" on the Klipper printer (the alert of 2.8), shows what an alert looks like. There is
+no camera picture: the live view says "No camera in the demo."
+
+**Switching it on.** Only on an empty Hub, one with no spool and no printer: otherwise the Hub refuses with "The demo is
+for an empty Hub. This Hub has real data." It is offered in Getting started ("Just looking? Try the demo", 4.2) and as
+**Try the demo** in Settings > General (10.3), and needs the page Unlocked or Trusted. The command line has `sudo
+spoolwarden demo on` (`06-command-line.md` 9.28). Result "The demo is on."
+
+**The banner.** Every screen shows the demo banner of `02-components.md` 8.8 (kind info, "Demo data. Nothing here is
+real." with **Leave demo**) in the global chrome, at the top of `main`, also on a Locked page and in the error states.
+It cannot be dismissed. A test holds that no section, dialog page or state lacks it while the demo is on.
+
+**Leave demo** asks once, in a destructive dialog (`02-components.md` 9.1):
+
+| Dialog | Title | Body | Buttons |
+|---|---|---|---|
+| Leave demo | "Leave the demo?" | "Everything in it is deleted." | Cancel (focused first) · **Leave demo** (danger) |
+
+It calls `P demo` `{on: false}` (code), deletes the demo's own folder and brings the Hub back as it was, empty. Result
+"The demo is off." Getting started is not marked by anything done in the demo.
+
+**Nothing real is touched.** In the demo the Hub talks to a demo inventory instead of Spoolman and to pretend printers
+instead of real ones, and keeps everything it records (events, filament used, storage locations, Recently added) in a
+folder of its own. These do nothing and answer "Not in the demo." where the person pressed the control (the inline
+result of 2.3, the toast, or the job strip):
+
+- reaching a printer;
+- writing to Spoolman;
+- calling the Label Reader's cloud;
+- downloading from GitHub: updates, the Filament Catalog and language packs (Get more languages, 10.3);
+- sending a push;
+- making a backup or restoring one;
+- flashing a device;
+- changing system settings through the Hub's root helper.
+
+Pairing a phone or a PC works, so the demo can be seen on them. Every answer that says what the Hub is (`G state`,
+`GET api/info`, `GET api/hub`) carries `demo: true` while it is on, and the page draws the banner from it.
 
 ---
 
@@ -632,6 +678,12 @@ is not a step. It is a quiet row above the steps, shown only while no step is do
 It has no state word: it is never "Next" and never "Done", and it is not counted in "<n> of <m>". The Hub's answer
 carries it as `restore_offer` (section 15).
 
+**The demo row.** "Just looking? Try the demo" with the default button **Try the demo** (`P demo` `{on: true}`, code;
+3.9) is a second quiet row above the steps. It is shown only while the Hub has no spool and no printer and the demo is
+not on, it is not a step, has no state word and is not counted in "<n> of <m>". When the Hub has real data the Hub
+refuses it with "The demo is for an empty Hub. This Hub has real data." Nothing done inside the demo marks a step done
+(3.9).
+
 The setup code is not a step: a Hub installed by the installer always has one. The Still to do card keeps its row for
 the rare Hub without one, and while Getting started shows, that row is the only part of the card drawn.
 
@@ -725,13 +777,21 @@ cannot be read. Grams under 1000 read "640 g".
 
   | Group | Status | Row | Fix |
   |---|---|---|---|
-  | Devices | Needs a look | "The Weigh Station <name> is not using HTTPS. Update it." (a Weigh Station that has not been updated sends no fingerprint, and the Hub keeps calling it over plain HTTP until it is) | none: the text is the fix |
+  | Devices | Needs a look | "The Weigh Station <name> is not using HTTPS. Update it." (a Weigh Station that sends no fingerprint because it has not been updated, or because it could not make its certificate and logged why in its own log; the Hub keeps calling it over plain HTTP, and only if it has no pinned certificate) | none: the text is the fix; the station's log (`sudo spoolwarden logs` on its machine) says why when it is already updated |
+  | Devices | Needs a look | "The Weigh Station <name> does not show the certificate the Hub saved for it." (a Weigh Station whose certificate the Hub has pinned and which now sends none or another one; the Hub does not call it over plain HTTP) | "Unpair it in Devices, then link it again." |
   | Devices | Needs a look | "<n> devices are out of date." ("1 device is out of date.") | **Open Devices** → `#devices` (the Hub does not update a satellite itself, 7.2) |
   | Devices | Needs a look | "The tag source <address> is not using HTTPS." (a printer-side tag service that answers only on plain HTTP, which the Hub still reads) | none |
   | Devices | Needs a look | "The certificate of the tag source <address> has changed." | "Save the tag source again to trust the new certificate." |
   | Label Reader | Note | "The Label Reader at <address> is not using HTTPS. A later Label Reader version adds it." (a reader on another machine at an `http://` address, until the reader's own software can serve HTTPS) | none |
   | Label Reader | Needs a look | "The Label Reader at <address> is not using HTTPS." (from the release that turns the rule on, for a stored `http://` address of a reader on another machine, 10.5) | "Update the Label Reader on that machine, then change its address to https:// in Settings > Label Reader." |
   | Label Reader | Needs a look | "The Label Reader is switched on but not installed." | The command that installs the reader, as a code block with Copy |
+- **Rows for the Hub's own files.** At the first start with this version the Hub moves each of its stored-data and
+  settings files from JSON to XML (`09-implementation-order.md` Stage 14). The Hub always starts. A JSON file that
+  cannot be read is left where it is, and the Hub works with what it does for a missing file; the Checks then show one
+  row for it, in group Hub, Needs a look: "<What it is> could not be converted (<reason>)." ("The list of paired devices
+  could not be converted (the file is damaged).") with the Fix the Hub can name. The same row is in `spoolwarden status`
+  (`06-command-line.md` 9.1). An XML file that cannot be read is never overwritten: the next save keeps it as
+  `<name>.unreadable`, as `storage.xml` does (10.4).
 - Row action `ensure_fields`: primary button **Make the fields** (code) → `P fields`, the page's main action while
   its check needs a look (4.3; a default button while Getting started shows a Next step); inline result "Made the fields: <made>." or, when `made` is 0, "The fields were
   already there." It is the only row action.
@@ -1110,7 +1170,7 @@ itself when the printer shows the load, or by **Unload** or **Clear slot**.
 | **Resume** | Paused | Primary | Result "Resumed." | `{action: "resume"}` |
 | **Stop print** | Printing, Paused or Preparing | Danger, apart at the end of the row | Opens "Stop the print?"; result "Stopped." | `{action: "stop", confirm: true}` |
 | **Turn the light on** / **Turn the light off** | The printer reports a light | Ghost; the label says what pressing does | Result "Light on." / "Light off." | `{action: "light_on"}` / `{action: "light_off"}` |
-| **Show camera** / **Hide camera** | The printer has a camera | Default | Shows or closes the box; closing the region, leaving the section or hiding the tab stops the stream | `G printers/<id>/camera.mjpeg` or `G printers/<id>/camera/<name>` (code; on a computer that is not trusted, with `?ticket=<ticket>` from `P printers/<id>/camera/ticket`, see Lock) |
+| **Show camera** / **Hide camera** | The printer has a camera | Default | Shows or closes the box; closing the region, leaving the section or hiding the tab stops the stream | `G printers/<id>/camera.mjpeg` or `G printers/<id>/camera/<name>` (code; on a computer that is not trusted, with `?ticket=<ticket>` from `P printers/<id>/camera/ticket` on the first request, see Lock); **Hide camera** also calls `P printers/<id>/camera/close` |
 | **Load** | Every slot | Default | Opens the Load dialog (below) | `P printers/<id>/slots/<slot>/load` (code) `{spool_id, dry_run}` |
 | **Unload** | A spool is recorded in the slot | Default | Runs the dry run, then opens "Unload from <slot>?" | `P printers/<id>/slots/<slot>/unload` (code) `{dry_run}` |
 | **Clear slot** | Every slot, whether a spool is recorded there or not | Ghost | Runs the dry run, then opens "Clear slot <label>?" | `P printers/<id>/slots/<slot>/clear` (code) `{dry_run}` |
@@ -1157,9 +1217,21 @@ own slot setting; the answer says "Put back. The printer still shows what it was
 **Lock.** Looking needs nothing: state, slots, waiting and filament used show on a Locked page. The camera, the print
 controls, the light and every slot action need the page Unlocked or Trusted (section 2.1) and ask for the code in place.
 **The camera's address.** On a trusted computer the page asks for the stream directly. Otherwise it first asks
-`P printers/<id>/camera/ticket` with the setup code and gets `{ticket, expires_in: 60}`; the stream's address takes
-`?ticket=<ticket>`. A ticket starts one stream within 60 seconds, for that printer only; the stream runs until it is
-closed.
+`P printers/<id>/camera/ticket` with the setup code and gets `{ticket, expires_in: 60}`; the first camera request takes
+`?ticket=<ticket>` (the stream's address, or the playlist's). That request spends the ticket, and the Hub answers it
+with a cookie that is the **camera session**.
+
+- **The cookie** is valid only for that printer's camera routes (its path is `/setup/api/printers/<id>/camera`) and is
+  HttpOnly, Secure and SameSite=Strict. It names a session that the Hub keeps in memory for that printer for 10 minutes.
+  Every camera request that carries it (a segment, the playlist again) moves the 10 minutes forward. It lets its holder
+  do nothing but ask that camera. A Bambu Lab printer with an RTSP camera is served as a playlist with many segment
+  requests; a Bambu Lab P1 or A1 and every Klipper camera are one stream. The rule is the same for both.
+- **It ends** when the page closes the camera (**Hide camera**, closing the region, leaving the section or hiding the
+  tab call `P printers/<id>/camera/close`, which needs only the cookie and answers `{closed: true}`), when 10 minutes
+  pass with no camera request, when the Hub restarts, or when the printer is removed. Locking the page again does not
+  cut a running picture; the next **Show camera** needs the setup code again.
+- **At most 8 camera sessions** run at a time. A ninth ticket is refused with "Too many camera views are open. Close one
+  first.", shown in place of the picture.
 **State is read** every 2 seconds while the detail is open and the tab is visible (`G printers/<id>/live`, section 2.7);
 the Printers list keeps its 10 seconds.
 
@@ -1241,7 +1313,7 @@ Phone:  list rows become cards (photo left, name, time, state badge, confidence 
 
 | Card | Content |
 |---|---|
-| Header | Breadcrumb with the list as link; title "<vendor> <name>" (x<n>), or "No spools" for a record with no spools (its photos, fields and revisions still show; a change the Hub refuses because the spools are gone shows the Hub's text at the Save or Accept button); meta: time, source, state badge, spools. Actions: ghost **Back** (to `#recent`), icon buttons "Newer record" and "Older record" (disabled at the ends) |
+| Header | Breadcrumb with the list as link; title "<vendor> <name>" (x<n>), or "No spools" for a record with no spools (its photos, fields and revisions still show; a change the Hub refuses because the spools are gone shows the Hub's text at the Save or Accept button); meta: time, source, state badge, spools. Actions: ghost **Back** (to `#recent`), ghost **Print labels** (only when the record has spools: opens the print page of 16.5 for all of the record's spools, every item), icon buttons "Newer record" and "Older record" (disabled at the ends) |
 | Item choice | Only when the record has several items: segmented choice "Item 1", "Item 2", … with the line "Spools <ids> (filament <id>). Changes apply to all of them." |
 | Photos | Photo thumbnails (96 px); pressing one opens the photo viewer (full width, Left and Right between photos, Escape closes, "Photo <n> of <m>"). No photo: "No photo was taken for this addition." |
 | Fields | Key-value list in four groups. Identity: Brand, Name, Material, Colour (filament swatch and hex). Weights: Net weight, Empty spool weight, Density. Temperatures: Nozzle, Bed, Nozzle range, Bed range. Other: Price per kg, Line. Empty values read "(empty)" in `--muted`. Per-field confidence display next to the value when it is not high. Card action: default **Edit by hand**. |
@@ -1383,7 +1455,10 @@ A paired Weigh Station serves HTTPS with a certificate it made itself. At every 
 fingerprint, its port and its version over the connection it already has, and the Hub then calls it only at that port
 and accepts only that certificate; nobody types an address or a fingerprint for it. A Weigh Station on this Hub's own
 machine is called at `http://127.0.0.1:5003`, which never leaves the machine. A station that has not been updated sends
-no fingerprint and is still called over plain HTTP; the Checks show it (4.2). A paired Weigh Station also calls the Hub
+no fingerprint and is still called over plain HTTP; so is a station that cannot make its certificate: it serves plain
+HTTP as before and logs why in its own log. The Checks show a row for it (4.2). The Hub never goes back to plain HTTP
+for a station whose certificate it has pinned: for such a station a missing or changed certificate is an error, and the
+Checks show it (4.2). A paired Weigh Station also calls the Hub
 every 5 minutes (`GET api/station/hello`), so its "Last seen" in Devices (7.2) means that it is running.
 
 ### 7.4 The web app on a phone
@@ -1796,27 +1871,54 @@ Phone:  Settings opens on the list of groups (a collection of rows: group name, 
 
 ### 10.2 Appearance
 
-Description: "How this page looks on this device." Per device; needs no setup code, except the last field.
+Description: "How this page looks and which language it uses on this device." Per device; needs no setup code, except
+the last field.
 
 | Field | Type | Does | Stored / endpoint |
 |---|---|---|---|
 | Light, dark or system | Appearance control (segmented choice with icons), hint "System follows this device's light or dark setting." | Applies at once | `localStorage` `spoolwarden.appearance` (foundations section 5) |
 | Theme | Theme picker: four preview tiles Console "Dense and technical", Workbench "Calm cards", Palette "Colourful and roomy", Panes "Simple lists"; the current one checked | Applies at once, no reload | `localStorage` `spoolwarden.look` (foundations section 6.2) |
+| Language | Select: **Automatic** (the default), then every language installed on the Hub, each named as its own language names it ("English", "Русский", "Deutsch (machine-translated)"); hint "Automatic uses this browser's language if the Hub has it, otherwise the Hub's language." | Applies at once: the page loads that language's texts and draws itself again | `localStorage` `spoolwarden.language`; the texts from `GET api/strings/<code>.js` (section 15) |
 | Theme for new devices | Select of the four themes, hint "Used by browsers and phones that have not chosen a theme." | Saved with the group's Save | Section 15 (no endpoint yet) |
 
 Save: **Save theme for new devices** (only this field needs it; the button is enabled only while it changed).
-Inline result for the two device fields: none (the change is the feedback); screen reader "Theme: <name>."
+Inline result for the three device fields: none (the change is the feedback); screen reader "Theme: <name>." and
+"Language: <name>." The page's `lang` is the code of the language in use, and its plural forms, dates and numbers follow
+that language (`07-accessibility.md` SR-1); where the Hub has no pack for a person's language, Automatic shows the Hub's
+language. Which language the Hub itself uses is set in General (10.3). Right-to-left languages are not supported.
 
 ### 10.3 General
 
-Description: "The Hub's name and its Spoolman database."
+Description: "The Hub's name, its language and its Spoolman database."
 
 | Field | Type | Key / endpoint | Notes |
 |---|---|---|---|
 | Display name | Text | `server_name` → `P settings/general` (code) | Shown in the top bar and the document title. Required: "Enter a name for the Hub." |
 | Spoolman address | Text, `--mono`, placeholder `http://spoolman.example:7912`; only when Spoolman runs on another machine (`spoolman_external`) | `P settings/spoolman` (code) `{url}` | Shows the address in use (hidden parts as the Hub sends them). Hint "A new address must answer as Spoolman before it is saved. Spoolwarden then uses that database for everything." Saved by the group's Save, after the other field; the Hub checks it first, the field shows "Checking that Spoolman answers…" meanwhile. Refusal at the field: "Nothing was changed: no Spoolman answered at that address (<why>)." Success applies in the background (job `apply`). |
+| Language | Select: "English" and every language installed on the Hub, named as in 10.2; hint "The language of the Hub's own texts and of devices set to Automatic." | `P settings/language` (code) `{hub}` | The language the Hub's own texts (alert titles and texts, Checks rows, refusals) are written in, and the default of every interface set to Automatic (10.2). It applies at once with its own inline result "Language: <name>." and is not part of **Save general**. |
+| Get more languages | Ghost button, opens the dialog below | `G languages` (view) | Lists the languages of this Hub's release that are not installed yet. |
+| Demo | While off, the default button **Try the demo**, hint "Look around the whole product on made-up data. Only on a Hub with no spools and no printers."; while on, the line "The demo is on." and **Leave demo** | `P demo` (code) `{on}` | Rules, banner, question and what answers "Not in the demo." are in 3.9. It has its own inline result and is not part of **Save general**. |
 
-Save: **Save general**.
+Save: **Save general** (Display name and Spoolman address).
+
+**Get more languages.** A dialog (a sheet on a phone) titled "Get more languages". It lists, from `G languages`
+(`available`, the packs of this Hub's release), one row per language: its name, with "(machine-translated)" after it
+when no speaker of the language has read the pack yet, how much is translated ("<n> % translated"), and the default
+button **Install**. A language that is installed shows the badge "Installed" and a ghost button **Remove**; English is
+inside the product and is never listed. **Install** (`P languages/<code>/install`, code) starts a job, as the Filament
+Catalog's update does, and the job strip follows it. The Hub checks the pack by the rules of `spoolwarden language
+check` (`06-command-line.md` 9.27) before it keeps it in its state folder; a pack that fails is not installed and the
+result is "<name> was not installed: <the check's first sentence>." On success "<name> installed." **Remove** (`P
+languages/<code>/remove`, code) answers "<name> removed." and the pack can be installed again. An update of the Hub
+fetches the matching pack of each installed language; until it has it, the old pack is used and the new texts are in
+English.
+
+| State | Text |
+|---|---|
+| Loading | Three skeleton rows |
+| Nothing to get | "This release has no other languages." |
+| The list could not be fetched (`problem`) | "Could not read the list of languages. <the Hub's text>" with **Try again** |
+| In the demo | "Not in the demo." (3.9) |
 
 ### 10.4 Storage locations
 
@@ -2795,6 +2897,7 @@ and meaning, possibly reworded; "Moved to" a new place; "Merged into" combined w
 | (none) | Added | Appearance group: Light / Dark / System, Theme, Theme for new devices (10.2) |
 | (none) | Added | Label Reader engine order, On this Hub address, Test and tier (10.5) |
 | (none) | Added | Alerts group: alert switches, running-low and storage thresholds, notifications in this browser, test alert, recent alerts (10.13) |
+| (none) | Added | Language in Appearance (this browser) and in General (the Hub), **Get more languages**, and **Try the demo** (10.2, 10.3, 3.9) |
 
 ### 14.9 Updates
 
@@ -2835,6 +2938,7 @@ and meaning, possibly reworded; "Moved to" a new place; "Merged into" combined w
 | (none) | Added | Header link **Open Spoolman** (16.2) |
 | (none) | Added | A spool's last ten events (16.3); Undo toasts (2.9); Download as CSV and Import from CSV (2.10) |
 | (none) | Added | Section Analytics: the month in sentences, the months as bars and tables (17) |
+| (none) | Added | **Print a label** on a spool, **Print labels** on selected spools and on a Recently added record, the print page (16.5, 6.3) |
 
 ---
 
@@ -2867,11 +2971,11 @@ column says.
 | A stored list of storage locations (`storage.xml` in the Hub's state folder, written by the Hub and read by the web unit) with `GET api/storage` and `P settings/storage` (code): the read answers `{locations: [{id, name, type: "bulk" or "containers", limit or null, count or null, used, free or null, prefix or null, containers: [{name, number, taken}] or null, fill: "none", "any" or "materials", materials: [], overflow, default_overflow, sealed, position}], order_by_material: [{material, locations: [names]}], everything_else: [names]}`; on an Individual containers location `containers` is the whole set in number order (as many as `count`): `name` is the exact location text of a spool in that container ("Storage box 03"), `number` the whole number, `taken` true while a spool's location is that name, and `prefix` is the exact text before the number, for information; both are `null` on Bulk storage, and `used` and `free` equal the counts of `taken`; a client never builds a container name, not from `name` and not from `prefix`: it matches a spool's location text with each location's `name` (taken first) and each `containers[].name`, and to place or move a spool it sends the set's `name` (the Hub takes the lowest free container) or one `containers[].name`; a text that matches nothing (a removed location, a text typed by hand) is shown as it is, under no location; the write takes the whole list `{locations: [...]}` (ids kept for existing rows, none for new ones) and answers the saved list, or `errors` per row and field | Settings > Storage locations (10.4) | The group shows "Could not read the settings. <Hub's text>" with **Try again**, and the list cannot be edited |
 | `GET start` answering `{show, hidden, finished, restore_offer: true or false, done, total, steps: [{id, state: done or next or open, line, target}]}` and `POST start` (code) with `{hide: true or false}` or `{keep: "name", "storage" or "features"}`, served in the Hub process; the step ids are fixed: `name`, `storage`, `features`, `reader`, `key`, `printer`, `slots`, `phone`, `passphrase`, `pc`, `spool`, `backup` (the Restore row is not a step: `restore_offer` says whether it shows); the marks are kept in `firstrun.xml` in the Hub's state folder | Overview, Getting started (4.2) | No Getting started panel and no line; Still to do shows as it always did |
 | The Hub's port in the answer of `G settings/general` (`port`), and the change of it as a job (`P job` (code) with the new port) | Settings > Network and addresses, Hub port (10.7, 10.11) | The Hub port row is hidden |
-| The three values a Weigh Station tells the Hub at every start on `GET api/station/hello`: `fp` (the SHA-256 of its certificate), `port` and `version`, kept with its pairing | The Hub's calls to a Weigh Station (7.3), the Checks row "The Weigh Station <name> is not using HTTPS. Update it." (4.2) | A Weigh Station that sends none is called over plain HTTP as before, and the Checks show that row |
+| The three values a Weigh Station tells the Hub at every start on `GET api/station/hello`: `fp` (the SHA-256 of its certificate), `port` and `version`, kept with its pairing | The Hub's calls to a Weigh Station (7.3), the Checks row "The Weigh Station <name> is not using HTTPS. Update it." (4.2) | A Weigh Station that sends none (not updated, or it could not make its certificate) is called over plain HTTP as before, and the Checks show that row; a station whose certificate is pinned is never called over plain HTTP, and the Checks show the error row "The Weigh Station <name> does not show the certificate the Hub saved for it." |
 | Printers announced by Bambu Lab printers, listed by the Hub's own listener for them | Add a printer, step 1 (5.6) | The found list holds Klipper printers only, with the sentence "Bambu Lab printers are added by address." |
 | A Label Reader on another machine that serves HTTPS on its port (a change in the reader's own repository) | Settings > Label Reader, Address and Test (10.5) | The Hub accepts the reader's `http://` address as before and the Checks show the Note "The Label Reader at <address> is not using HTTPS. A later Label Reader version adds it." |
 | The page routes of the Spools section, under `/setup/api/`: `GET spools` (`q`, `filter`, `offset`, `limit`; answer `{spools, total, offset, has_more, spoolman_url?}`, `filter` one of `sealed`, `opened`, `loaded`, `low`, none meaning every spool that is not empty), `GET spools/{id}` (`{spool, last_use: {at, printer, grams}?}`), `POST spools/{id}` (`{gross` or `remaining` or `location` or `auto_location: true` or `empty`, `dry_run}` → `{spool, before, dry, event_id?}`), `GET spools/last-tag` (`{tag: {uid, read_at, source}?}`), `POST spools/{id}/link` (`{tag, dry_run}` → `{spool, before, dry, event_id?}`); a spool carries `loaded` and `low` besides the spool view; the three changes need the page unlocked; a change answers `event_id`, the id of its event, absent on a dry run (2.9) | Spools (16) | The section shows the error state "Could not read the spools. <Hub's text>" with **Try again** |
-| The page routes of the live view: `GET printers/{id}/live` (`{summary, status}` as `GET api/printers/{id}` gives them, the slots with `pending`), `POST printers/{id}/command` (`{action}`: `pause`, `resume`, `stop` with `confirm: true`, `light_on`, `light_off`), `POST printers/{id}/slots/{label}/load`, `unload` and `clear` (`{spool_id?, dry_run}`; `clear` answers `{slot, spool?, moved_back?, waiting_ended, printer_cleared, dry_run}`; each of the three also answers `event_id`, absent on a dry run), `GET printers/{id}/usage` (`days`), `POST usage/{entry}/undo`, `GET printers/{id}/camera.mjpeg` and `camera/{name}` (on a computer that is not trusted, with `?ticket=<ticket>` from `POST printers/{id}/camera/ticket`, which takes the setup code and answers `{ticket, expires_in: 60}`: a ticket starts one stream within 60 seconds, for that printer only); they call the same printer code as the kit routes, in the Hub's process, and not the web app's routes; the state and usage reads are open, and every other route, the camera included, needs the page unlocked | Printers, the live view (5.10) | The expansion shows the facts of 5.3 and no live view |
+| The page routes of the live view: `GET printers/{id}/live` (`{summary, status}` as `GET api/printers/{id}` gives them, the slots with `pending`), `POST printers/{id}/command` (`{action}`: `pause`, `resume`, `stop` with `confirm: true`, `light_on`, `light_off`), `POST printers/{id}/slots/{label}/load`, `unload` and `clear` (`{spool_id?, dry_run}`; `clear` answers `{slot, spool?, moved_back?, waiting_ended, printer_cleared, dry_run}`; each of the three also answers `event_id`, absent on a dry run), `GET printers/{id}/usage` (`days`), `POST usage/{entry}/undo`, `GET printers/{id}/camera.mjpeg` and `camera/{name}` (on a computer that is not trusted, with `?ticket=<ticket>` from `POST printers/{id}/camera/ticket`, which takes the setup code and answers `{ticket, expires_in: 60}`: the first camera request that carries `?ticket=` spends the ticket and gets a camera-session cookie, valid only for that printer's camera routes and for 10 minutes after the last camera request; at most 8 sessions, the ninth ticket is refused with "Too many camera views are open. Close one first."), `POST printers/{id}/camera/close` (needs only the camera-session cookie; answers `{closed: true}`); they call the same printer code as the kit routes, in the Hub's process, and not the web app's routes; the state and usage reads are open, `camera/close` needs only the camera-session cookie, and every other route, the camera included, needs the page unlocked | Printers, the live view (5.10) | The expansion shows the facts of 5.3 and no live view |
 | The Hub page's part of the catalog form: `GET library/local` (`{entries: [{id, brand, name, material, added}]}`), `POST library/local` (the form's values; 400 `{error: "invalid_entry", problems: [{field, text}]}`) and `POST library/local/{id}/remove` (`{removed: true}`); the Hub builds the entry from the values with one function | Settings > Filament Catalog (10.9) | The group shows its state and the update buttons only |
 | Devices: `GET devices` (`{devices: [{id, name, kind, version?, newest?, out_of_date, advice?, paired?, last_seen?, reachable?, built_in, page}]}`, `kind` one of `phone`, `pc`, `station`, `web`, `reader`, `builtin`; the Tag Readers are rows of it), `GET device/{id}` (`{device, status?, settings?: [{id, label, kind, value, choices?, min?, max?}], own_page: <address as text>?, photo: bool}`), `GET device/{id}/photo` (open; `image/jpeg`), `POST device/{id}/settings` (code) and `POST device/{id}/open` (unlocked; the Hub asks the station for a one-time ticket and answers `{address: "<own_page>#ticket=<ticket>"}`); what the Hub takes from a station is checked (JSON only, at most 256 KiB, 5 seconds, no redirect, only to the stored host and port over the pinned certificate; a setting's `id` matches `[a-z0-9_.-]{1,40}`, its `kind` is `switch`, `choice`, `number` or `text`, a `label` is at most 80 characters, at most 60 settings; the photo is `image/jpeg`, at most 4 MiB; 7.10); the Hub keeps each client's `X-Spoolwarden-Client: <kind>/<version>` and each reader's `X-Reader-Build` with its pairing, and a Weigh Station's hello gives its version every 5 minutes; `GET state` keeps its `devices` and `readers` fields | Devices (7.2, 7.9, 7.10) | The list is the one of `G state`, without Kind, Version and out-of-date lines |
 | `GET api/events` takes `activity=1` (only the kinds of the Activity list), `subject=<type>:<id>` (for example `spool:212`) and `actor=<type>` or `actor=<type>:<id>`; each served event gains `undo: {possible: bool, until?, why_not?: "changed_since" or "too_old" or "already_undone" or "not_undoable"}`, `undone: bool` and `undo_of?: <id>`; `POST api/events/{id}/undo` answers 200 `{undone: true, event: <the new event>, note?: <text>}`, 409 `{error: <one of the why_not values>, text}` or 404; a web token may call it; the routes that make an undoable change (`PATCH api/spools/{id}`, `POST api/spools/{id}/link`, the slot `load`, `unload` and `clear` routes) answer with `event_id` beside what they answer today, absent on a dry run | Activity (13.4), Undo (2.9), a spool's last ten events (16.3) | No Activity choice, no Undo button, no last ten events |
@@ -2881,6 +2985,11 @@ column says.
 | `GET api/export/{set}.csv`, set one of `usage` (`days`, `printer`), `locations`, `recent`, `activity` (`days`), `printers`, `lines`, `spoolman-spools`, `spoolman-filaments`, answering `text/csv; charset=utf-8` as a download; `POST api/import/spools` (the file as the body, `text/csv`; `dry_run` 1 by default) answering `{rows: [{n, ok, problems: [{column, text}], line}], add, dry, spool_ids?}` and `POST api/import/locations` answering `{rows, add, change, dry}`; a web token may call the exports, not the imports | CSV downloads and imports (2.10) | The menus do not offer them |
 | The backup password: `POST backups/password` `{password}` → `{set: true}` or 400 `{error: "too_short", text}` (code); `POST backups/password/remove` → `{set: false}` (code); `POST backups/list` rows gain `encrypted: bool` and the answer `password_set: bool`; `POST restore/password` `{password}` (for the uploaded file) → `{ok: true}` or 400 `{error: "wrong_password", text}` (code) | Settings > Backups and restore (10.6, 10.11) | The group keeps its warning and offers no password |
 | The kind `home-assistant` in `GET devices` and the pairing kind `{kind: "home-assistant"}` of `POST pair`: a pairing with the role `viewer`, which may call only these routes, all GET: `api/info`, `api/hub`, `api/events`, `api/alerts`, `api/printers`, `api/printers/{id}`, `api/printers/{id}/usage`, `api/printers/{id}/camera.mjpeg`, `api/printers/{id}/camera/{name}`, `api/spools`, `api/spools/{id}`, `api/spools/low`, `api/storage`, `api/storage-use`, `api/health` and `api/analytics`; every other route answers 403 | Devices, **Link Home Assistant** (7.2) | The item is not offered |
+| Languages: `GET languages` (`{hub: "<code>", languages: [{code, name, reviewed, installed, complete}], available: [{code, name, reviewed, complete}], problem?}`, `complete` 0 to 100; `available` is the release's packs and is empty, with `problem`, when the list could not be fetched; open), `POST languages/{code}/install` (starts the job; code), `POST languages/{code}/remove` (`{removed: true}`; code) and `POST settings/language` (`{hub: "<code>"}` → `{hub}`; code), and the kit routes `GET api/languages` (the same without `available`) and `GET api/strings/{code}.js` (the texts of that language as the pages load them, English filled in where a translation is empty) | Appearance and General: Language, Get more languages (10.2, 10.3) | The Language fields and **Get more languages** are hidden and the page is in English |
+| `key` and `params` beside `text` in every answer that carries a text the Hub wrote (an alert's title and text, a Checks row, a refusal); `text` is in the language the caller asked for (`Accept-Language`, or `?lang=<code>`), else the Hub's language, else English; and `language: "<code>"` in `GET api/info` and `GET api/hub` | Every text the Hub writes (2.3, 2.8, 4.2) | The text is shown as sent, in English |
+| The demo: `POST demo` (`{on: true or false}` → `{demo}`; 409 `{error: "not_empty", text}` with the text "The demo is for an empty Hub. This Hub has real data."; code) and `demo: true` in `G state`, `GET api/info` and `GET api/hub` while it is on; the answer "Not in the demo." to every route that would reach outside the Hub (3.9) | The demo banner and Leave demo (3.9), Getting started (4.2), Settings > General (10.3) | No demo is offered and no banner is drawn |
+| Spool labels and the short address: `GET /s/{id}` (a redirect to the spool, 404 for an unknown number), `GET api/spools/{id}/label.svg` and `GET spools/{id}/label.svg` (`size` one of `62x29`, `50x30`, `sheet24`; `image/svg+xml`; open), and the page route `GET labels` (`ids=<n,n,...>`, `size`; the print page, HTML with the labels as inline SVG; open) | Print a label, Print labels, the print page (16.5, 6.3) | The buttons are not shown |
+| A Checks row for a data file that could not be converted: "<What it is> could not be converted (<reason>)." in group Hub, Needs a look, with a Fix | The Checks on Overview (4.2) | The file is left unconverted and nothing says so |
 
 ---
 
@@ -2967,6 +3076,9 @@ A collection (`table` profile in Console), filled from `G spools`.
   Spoolman**, which opens Spoolman's own page in a new tab (`spoolman_url`, given by the Hub: the address with the host
   name the person uses for the Hub, or the configured address of a Spoolman elsewhere). Spoolman's page is plain http.
   The link is absent when the Hub gives no address. The page never builds the address itself.
+- **Selection.** The list offers selection (`02-components.md` 6.1): a checkbox "Select <name>" in the first cell and
+  the header checkbox for the rows of the page. With one or more selected the selection bar shows "<n> selected", the
+  default button **Print labels** (opens the print page, 16.5, for those spools) and **Clear selection**.
 - **Menu.** The page menu (3.8) also holds **Download as CSV** ("Spools (Spoolman's file)" and "Filaments (Spoolman's
   file)") and **Import from CSV** (2.10).
 
@@ -2981,7 +3093,7 @@ phone. Address `#spools/<id>`.
 | The spool | Key-value list with the large spool ring: Spool, Material, Colour (swatch and hex), Net weight and Left, Empty spool weight, Lot, Where, Tag ("None" when there is none) |
 | Last filament taken off it | "<g> g on <printer>, <date and time>", or "No filament has been taken off it yet." (`last_use`) |
 | Latest events | Title "Latest events": the spool's last ten events, newest first, each with the time (`--mono`), who and what (the Hub's `text`); empty: "Nothing has been recorded for this spool yet." |
-| Actions | **Update weight** (primary), **Move**, **Link the last tapped tag**, and, apart under a hairline, **Mark empty** (danger). Each shows its result beside the button |
+| Actions | **Update weight** (primary), **Move**, **Link the last tapped tag**, **Print a label**, and, apart under a hairline, **Mark empty** (danger). Each shows its result beside the button |
 
 Every action previews first, with the Hub's dry run, and shows what would change before anything is saved. Changes need
 the page Unlocked or Trusted, like every change on the Hub page (2.1); looking does not.
@@ -2991,6 +3103,7 @@ the page Unlocked or Trusted, like every change on the Hub page (2.1); looking d
 | **Update weight** | Opens a small form in place: a segmented choice "Weight with the spool" / "Filament left" and a number field in g. A valid number shows the preview "Remaining changes from 620 g to 482 g."; then the primary **Save weight**. Result "Weight updated: 482 g left." | `P spools/<id>` (code) `{gross or remaining, dry_run}` |
 | **Move** | Opens a menu "Move to": "Automatic" first, then every storage location in fill order with how full it is (as 10.4 and `04-web-app.md` 5.4 give them; a full one stays choosable and says "Full"). A choice shows the preview "Spool 214 would move to Shelf B." with **Move**. Result "Moved to Shelf B." | `P spools/<id>` (code) `{location, dry_run}`; for "Automatic" `{auto_location: true, dry_run}` (the Hub moves the spool where its placement rule puts it) |
 | **Link the last tapped tag** | Shows the last tag ("Tag <id>, tapped <age> on the Tag Reader", read when the detail opens and every 3 s while it is open) and the preview "Tag <id> would be linked to spool 214." with **Link tag**. With no tag read the button is disabled with "No tag read yet: tap the spool's tag on a reader." Result "Tag linked." | `G spools/last-tag` (view); `P spools/<id>/link` (code) `{tag, dry_run}` |
+| **Print a label** | Opens the print page (16.5) for this spool in a new tab. It changes nothing, so it needs no code and writes no event | `G labels?ids=<id>` (view) |
 | **Mark empty** | Dry run, then the dialog "Mark spool <id> empty?". Result "Marked empty." | `P spools/<id>` (code) `{empty: true, dry_run}` |
 
 Each of these actions also raises the toast of 2.9 with **Undo**, and the latest events list reads again after an Undo.
@@ -3025,6 +3138,51 @@ button that was pressed, in an `aria-live="polite"` region, and are never lost b
 | Error | "Could not read the spools. <Hub's text>" + **Try again** |
 
 **Main action:** none in the list (it is for finding); in a spool, **Update weight**.
+
+### 16.5 Print a label and Print labels
+
+**What is printed.** A label for each chosen spool, drawn by the Hub as SVG (`02-components.md` 7.13): the QR code, the
+spool's number large, brand, name, material, a box in the filament's colour with its hex value, the lot, the date it
+was added, the net weight, and the nozzle and bed temperatures when the filament has them. It is black on white; the
+colour box is the only colour. Scanning the code opens the spool: the short address
+`https://<name>.local[:port]/s/<number>` goes to the web app's spool when the web app is on (`/intake#spools/<number>`)
+and otherwise to this page's Spools section (`#spools/<number>`). The Android app's **Scan a label** opens the spool
+whatever Hub address is printed, because it uses only the number after `/s/` (`05-android-app.md` 7).
+
+**Where it starts.** **Print a label** on a spool (16.3), **Print labels** on the selected spools (16.2) and **Print
+labels** on a Recently added record, for the record's spools (6.3). Each opens the print page in a new tab:
+`G labels?ids=<n,n,...>&size=<size>` (view), an HTML page with the labels as inline SVG.
+
+```
++--------------------------------------------------------------------------------------------------+
+| Print labels                                                                                     |
+| Size   [ 62 x 29 mm | 50 x 30 mm | Sheet of 24 ]                                                 |
+|                                                                                                  |
+|  +--------------------------------------+   +--------------------------------------+             |
+|  | [QR]  214                            |   | [QR]  213                            |             |
+|  |       Polymaker PolyTerra PLA ...    |   |       Bambu Lab PETG HF Orange       |             |
+|  |       [#] #2B2B2E  Lot F57           |   |       [#] #F28A1B  Lot B21           |             |
+|  +--------------------------------------+   +--------------------------------------+             |
+|                                                                                                  |
+| The code holds this Hub's address, https://spoolwarden.local. If the Hub is renamed or moves to   |
+| another port, old labels still open in the Spoolwarden app's scanner but not from a phone's camera.|
+|                                                                                  [Print]         |
++--------------------------------------------------------------------------------------------------+
+```
+
+| Part | Content |
+|---|---|
+| Title | "Print a label" for one spool, "Print labels" for several |
+| Size | Segmented choice "62 x 29 mm" (a 62 mm roll; the default), "50 x 30 mm", "Sheet of 24" (A4 or Letter, by the browser's paper). Choosing one shows the labels again at that size (`size=62x29`, `50x30` or `sheet24`) |
+| Preview | The labels as they will print, in the chosen size, one per spool; the sheet shows 24 to a page |
+| The printed address | One line: "The code holds this Hub's address, <address>. If the Hub is renamed or moves to another port, old labels still open in the Spoolwarden app's scanner but not from a phone's camera." |
+| **Print** | Primary. Opens the browser's own print dialog; the print rules (`setup_static/setup_labels.css`) hide everything but the labels. No label printer is driven directly and no PDF is made |
+
+| State | Text |
+|---|---|
+| Loading | Skeleton labels |
+| Error | "Could not draw the labels. <Hub's text>" with **Try again** |
+| A number the Hub does not know | "Spool <n> was not found." in its place; the other labels still show |
 
 ---
 

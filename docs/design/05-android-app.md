@@ -197,11 +197,13 @@ line, then:
 | `presets` | Slicer presets (11.2) | Home | `home` |
 | `catalog/new` | Add a line to the Filament Catalog (8) | Home | the screen it was opened from; asks first when fields were typed |
 | `spools` | Spools: search (7.1) | Spools root | `home` tab |
+| `spools/scan` | Scan a label: the QR scanner in label mode (4.4, 7.1) | Spools | `spools` |
 | `spools/{id}` | Spool (7.2) | Spools | `spools` |
 | `spools/{id}/weight` | Update weight sheet (7.3) | Spools | `spools/{id}`; asks first when a weight was typed |
 | `spools/{id}/move` | Move sheet (7.4) | Spools | `spools/{id}` |
 | `spools/{id}/load` | Load: pick a printer (7.6) | Spools | `spools/{id}` |
 | `spools/{id}/load/{printerId}` | Load: pick a slot (7.6) | Spools | `spools/{id}/load`, or `spools/{id}` when the printer step was skipped |
+| `spools/{id}/label` | Print a label sheet (7.10) | Spools | `spools/{id}` |
 | `spools/{id}/load/{printerId}/{slot}` | Load: preview and load (7.6) | Shared | the slot step, or 9.6 when opened from there; blocked while the load is being written |
 | `alerts` | Alerts list (3.6) | Shared | the screen that was open when it was opened |
 | `tag/{uid}` | Tag lookup and "Tag not linked" (7.7) | Shared | the screen that was open when the tag was tapped |
@@ -401,6 +403,16 @@ draws its own.
   waits at the Hub (at most 55 s) and answers at once when something new exists; with the app closed and "Alerts on
   this phone" on, the watching service of 12.7 does the same.
 
+### 3.7 The demo notice
+
+While the Hub the phone is paired with runs in demo (`demo: true` in the answers of `GET api/info` and `GET api/hub`;
+`03-hub-page.md` 3.9), every screen of the app shows one `NoticeCard` (kind info, `02-components.md` 8.8) at the top of
+its content, above the alert cards of 3.6 and every other notice: "Demo data. Nothing here is real." with the text
+button "Leave demo". It has no Dismiss. The pairing screens come before the app knows what the Hub is and show none.
+"Leave demo" opens the Hub page at Settings > General in the browser (as "Open the Hub page", 12.3), where the Hub asks
+"Leave the demo?"; the app holds no setup code. Whatever the Hub refuses in the demo ("Not in the demo.") shows as the
+Hub's text where the person pressed the control (3.5). A test holds that no screen of the app lacks the notice.
+
 ---
 
 ## 4. Pairing
@@ -472,6 +484,17 @@ stay visible over a `--scrim` band.
 | Camera permission | Asked on first open. |
 | Permission refused | The preview is replaced by a panel: "The camera is needed to scan the pairing code. You can allow it in the phone's app settings, or enter the address by hand instead." Buttons "Try again" (filled) and "Enter the address instead" (outlined). |
 | Camera failed | "The camera could not start, so the pairing code can't be scanned. Enter the Hub's address instead." Button "Enter the address instead". |
+
+**Label mode (`spools/scan`).** The same scanner, opened from **Scan a label** in Spools (7.1), with the same close
+button, viewfinder, haptic tick and camera permission, and these texts in place of the pairing ones: hint chip "Point
+the camera at the spool's label"; permission refused "The camera is needed to scan a spool's label. You can allow it in
+the phone's app settings." with "Try again" (filled); camera failed "The camera could not start, so the label can't be
+scanned." A label's QR code holds the address `https://<hub>/s/<number>`; the app uses only the number after `/s/`, so a
+label opens the spool whatever Hub address is printed on it. When the code is read, the scanner closes and opens
+`spools/{id}`. A code that is not a label's address shows "This is not a Spoolwarden spool label." on a notice line
+over the preview, and scanning goes on; a number the Hub does not know shows "This label's spool was not found on this
+Hub." A phone's own camera app opens the same address in the browser instead, where the Hub sends it to the web app's
+spool or the Hub page's Spools section.
 
 ### 4.5 Enter the Hub's address (`pair/address`)
 
@@ -857,7 +880,8 @@ result, from a tag tap (2.6), from a printer slot (9.6) or from a deep link.
 Requests: `GET api/spools/low`, `GET api/spools?q=<q>[&sealed=1]`, `GET api/tags/{uid}`, `PATCH api/spools/{id}` with `gross`,
 `remaining`, `location` or `empty` and `dry_run`, `GET api/locations`, `GET api/storage`, `POST api/spools/{id}/link` with
 `{tag, force, dry_run, gross, location}`, `GET api/printers`, `GET api/printers/{id}`,
-`POST api/printers/{id}/slots/{label}/load` with `dry_run`. The answer of `GET api/spools` also carries `spoolman_url`.
+`POST api/printers/{id}/slots/{label}/load` with `dry_run`, `GET api/spools/{id}/label.svg` with `size`. The answer of
+`GET api/spools` also carries `spoolman_url`.
 
 ### 7.1 Spools (`spools`)
 
@@ -888,6 +912,7 @@ Requests: `GET api/spools/low`, `GET api/spools?q=<q>[&sealed=1]`, `GET api/tags
 | Search field | Label "Brand, material, colour…", leading search icon, trailing clear `IconButton` ("Clear search") when not empty, `ImeAction.Search`. Searches 300 ms after typing stops once 2 or more characters are typed, and at once on the keyboard's search key. Clearing the field clears the results. No separate Search button. | `OutlinedTextField` |
 | Sealed only | Filter chip "Sealed only"; the whole chip toggles; re-runs the search. | `FilterChip` |
 | Running low | Filter chip "Running low (<n>)", `<n>` from `GET api/spools/low`; not shown when `<n>` is 0; the whole chip toggles. With it on, the results panel shows the Running low rows instead of the search results, least filament first: swatch, headline the filament name, supporting line "Spool 214 · 96 g left · Rack 1 · 2 more in stock" (or "Last one", with the warn triangle), chevron; tapping opens `spools/{id}`. Opened from Home's "<n> spools running low" line with the chip already on. | `FilterChip` |
+| Scan a label | Outlined button "Scan a label" (QR icon) under the tag hint. Opens the scanner in label mode (4.4, route `spools/scan`); a label that is read opens `spools/{id}`. | `OutlinedButton` |
 | Tag hint | Tag icon and "Hold a spool's tag to the back of the phone to open it." `--fs-m` `--muted`. Shown while no search is typed. When the phone has no NFC: "This phone can't read tags. Search instead." When NFC is off: "Turn on NFC to open spools by their tag." with the text button "NFC settings" (opens the system NFC settings). | `Row`, `TextButton` |
 | Results | Panel with a collection: swatch, headline "<brand> <name>", supporting "Spool 214 · PLA · Workshop X1 A1 · 620 g left" (the spool's location as the Hub gives it; numbers `--mono`; "sealed" and "tagged" added when true), chevron. Tapping opens `spools/{id}` (right pane on expanded width). | `LazyColumn`, `ListItem` |
 
@@ -895,8 +920,8 @@ States: idle shows only the field, the chip and the tag hint. Searching: indeter
 field (the results stay until new ones arrive). Empty: "No spools match "petg"." with the text button "Clear the
 Sealed only filter" when it is on. Error, offline, Hub notices: 3.2 to 3.4.
 
-TalkBack order: search field, Sealed only, Running low, tag hint, results ("Polymaker PolyTerra PLA Charcoal Black, spool 214,
-PLA, Workshop X1 A1, 620 grams left"), bottom bar.
+TalkBack order: search field, Sealed only, Running low, Scan a label, tag hint, results ("Polymaker PolyTerra PLA
+Charcoal Black, spool 214, PLA, Workshop X1 A1, 620 grams left"), bottom bar.
 
 ### 7.2 Spool (`spools/{id}`)
 
@@ -926,7 +951,7 @@ PLA, Workshop X1 A1, 620 grams left"), bottom bar.
 
 | Element | Text / behaviour | Material 3 |
 |---|---|---|
-| Top bar | Title "<name>" (ellipsis); back arrow; overflow "More actions" with "Mark empty" (danger) and "Refresh". | `TopAppBar`, `DropdownMenu` |
+| Top bar | Title "<name>" (ellipsis); back arrow; overflow "More actions" with "Print a label" (opens 7.10), "Mark empty" (danger) and "Refresh". | `TopAppBar`, `DropdownMenu` |
 | Header | Swatch `swatch-head`; vendor `--fs-m` `--muted`; name `--fs-l` `--fw-title`; line "Spool 214 · PLA · #2B2B2E" in `--fs-s`, numbers and hex in `--mono`. | `Row` |
 | Remaining | "620 g left" in `--fs-2xl` `--mono`, "of 1000 g" `--muted`; level bar with "62 %". Sealed spools show "Sealed · 1000 g" and no bar. Empty spools show the status "Empty" (hollow circle). | `Text`, `LinearProgressIndicator` |
 | Result line | The last change on this screen, as a notice line of kind `ok` under the level bar: "Weight updated: 482 g left.", "Moved to Shelf B.", "Marked empty.", "Tag linked.", "Tag moved to this spool.", "Loaded into Workshop X1, slot A2." It stays until the next change or until the screen is left; it is announced politely. | Notice line |
@@ -1041,6 +1066,19 @@ it cannot be undone." (any other refusal as the Hub sends it), and after a load 
 shows what it was set to." The screen's result line is replaced by the answer and the screen reads from the Hub again.
 There is no "Undo" when the event cannot be undone. The snackbar's time is as 3.1 says. Nothing else has an undo:
 removing a printer, a key, a pairing or a location still asks first.
+
+### 7.10 Print a label (sheet destination `spools/{id}/label`)
+
+Opened from "Print a label" in the spool screen's overflow (7.2). It does what the Hub page's print page does
+(`03-hub-page.md` 16.5), through Android's print service, and changes nothing on the Hub.
+
+| Element | Text / behaviour | Material 3 |
+|---|---|---|
+| Title | "Print a label" | Sheet title |
+| Size | Segmented control "62 x 29 mm" (selected at first), "50 x 30 mm", "Sheet of 24". Choosing one loads the label again at that size (`GET api/spools/{id}/label.svg?size=62x29`, `50x30` or `sheet24`). | `SingleChoiceSegmentedButtonRow` |
+| Preview | The label as the Hub draws it (`02-components.md` 7.13); content description "Label of spool 214: <name>, <material>, <left> g". Loading: a skeleton of the label. Error: "Could not draw the label. <Hub's text>" with "Try again". | `Image` / skeleton |
+| The printed address | One line: "The code holds this Hub's address, <address>. If the Hub is renamed or moves to another port, old labels still open in this app's scanner but not from a phone's camera." | `Text` `--fs-s` `--muted` |
+| Print | Filled button "Print". Hands the label to Android's print service, which shows its own print dialog; no label printer is driven by the app and no PDF is made by it. | `Button` |
 
 ---
 
@@ -1748,10 +1786,17 @@ On expanded width the list is the left pane and the chosen group the right pane 
 |---|---|
 | Appearance | Group title "Appearance". Segmented control with icons and words: "Light", "Dark", "System". Applies at once. |
 | Theme | Group title "Theme". Four preview tiles in a 2 × 2 grid on compact and medium width, one row of four on expanded width: each tile a small drawing of the theme in its own colours, the name and one line: "Console" "Dense and technical"; "Workbench" "Calm cards"; "Palette" "Colourful and roomy"; "Panes" "Simple lists". The tiles are a radio group; the chosen one has a 2 dp `--accent-text` outline and a check mark. Choosing applies at once, with no save button. |
+| Language | Group title "Language". A dropdown: "Automatic" (selected at first) and every language the app carries, each named as that language names it ("English", "Русский", "Deutsch (machine-translated)"). Choosing one sets Android's own per-app language for Spoolwarden, and the app draws itself again in it. Automatic is the phone's language when the app has it, otherwise the Hub's language. Helper "Automatic uses this phone's language if the app has it, otherwise the Hub's language." |
 | Note | "These choices are kept on this phone only." |
 
-Stored in the app's settings store (DataStore) beside each other. When nothing is chosen yet the app uses System and
-Console.
+Stored in the app's settings store (DataStore) beside each other (the language through Android's per-app language
+setting). When nothing is chosen yet the app uses System, Console and Automatic.
+
+**The app carries its languages.** Every language of the app's release is inside the app, as generated resources
+(`res/values-<code>/strings.xml`, `08-platform-mapping.md` section 12); the app downloads no pack. A pack newer than the
+app reaches it with the next app update. A language that is still marked machine-translated shows "(machine-translated)"
+after its name. The app sends the language in use with every request to the Hub (`Accept-Language`), so the texts the
+Hub writes (alert titles and sentences, Checks rows, refusals) come in it.
 
 ### 12.3 Hub connection (`settings/hub`)
 
@@ -1948,7 +1993,8 @@ announced once when they start and once when they end, not on every percent.
 ## 15. Strings and wording
 
 - Every user-visible text, including content descriptions, snackbar texts, dialog texts and error words, is in
-  `res/values/strings.xml`. Counts use `<plurals>` ("1 photo" / "2 photos", "Add 1 spool" / "Add 3 spools").
+  `res/values/strings.xml` (English) and, for each other language of the release, `res/values-<code>/strings.xml`
+  (12.2). Counts use `<plurals>` ("1 photo" / "2 photos", "Add 1 spool" / "Add 3 spools").
   Values are inserted with positional arguments (`%1$s`, `%1$d`); sentences are never built by joining pieces in
   code.
 - Keys are `<screen>_<element>[_<state>]` in lower case: `home_add_from_photos`, `pair_code_error_length`,
@@ -1960,7 +2006,8 @@ announced once when they start and once when they end, not on every percent.
   label) and texts that name it use the `{product}` placeholder, which the generator fills
   (`08-platform-mapping.md` section 12). The command's name is held the same way (`command_name`, `{command}`).
 - Text that comes from the Hub (its messages, printer alerts, the Label Reader's questions, names) is shown as
-  given and never translated or reworded by the app.
+  given and never translated or reworded by the app. The texts the Hub writes itself come in the app's language
+  (12.2); they carry `key` and `params` beside `text`.
 - Wording follows F2: the names of F2 everywhere ("Hub", "Hub page", "Label Reader", "Weigh Station", "Recently
   added", "Filament Catalog", "Slicer presets", "Slicer Sync"); sentence case; units after a space ("210 °C",
   "862 g"); the single character "…"; dates as `2026-11-12 14:05` in lists and logs and as relative words in
@@ -1995,6 +2042,8 @@ The design above works with the Hub as it is. These additions to the Hub's paire
 | `POST api/printers/{id}/slots/{label}/clear` with `{dry_run}` (answer `{slot, spool?, moved_back?, waiting_ended, printer_cleared, dry_run}`); the answer of `unload` gains `waiting_ended`; the load answer's `pending` is read | 9.5 Clear slot, 7.6 and 9.5 waiting | No "Clear slot" button; a waiting load shows as loaded. |
 | `POST api/library/local/form` with `{brand, name, material, nozzle_min?, nozzle_max?, bed_min?, bed_max?, density?, max_volumetric_speed?, bambu_parent?, notes?}` (201 `{entry}`; 400 `{error: "invalid_entry", problems: [{field, text}]}`), `GET api/library/local` (`{entries: [{id, brand, name, material, added}]}`), `DELETE api/library/local/{id}` (`{removed: true}`) | 8 | The form and the list are absent. |
 | `spoolman_url` in the answer of `GET api/spools` | 7.1 "Open Spoolman" | The item is absent. |
+| `GET api/spools/{id}/label.svg` with `size` (`62x29`, `50x30` or `sheet24`; `image/svg+xml`) and the short address `GET /s/{id}` that a label's QR code holds (a redirect; the app reads only the number) | 7.1 Scan a label, 7.10 Print a label | "Scan a label" and "Print a label" are absent. |
+| `demo: true` and `language` in the answers of `GET api/info` and `GET api/hub`; `key` and `params` beside `text` in every answer that carries a text the Hub wrote, `text` in the language of the request's `Accept-Language`; `GET api/languages` (`{hub, languages: [{code, name, reviewed, installed, complete}]}`) | 3.7, 12.2 | No demo notice; the Hub's texts arrive in the Hub's language. |
 | The header `X-Spoolwarden-Client: android/<version>` on every call, which the Hub keeps with the pairing | 12.8 (the Hub's Devices list names this phone and its version) | The Hub shows the phone without a version. |
 | `GET api/events` with `activity=1`, `subject=<type>:<id>` and `actor`, each event with `undo: {possible, until?, why_not?}`, `undone` and `undo_of?`; `POST api/events/{id}/undo` (200 `{undone: true, event, note?}`; 409 `{error, text}`; 404); `GET api/health` (`days`); `GET api/analytics` (`months`, `printer`); `GET api/printers/{id}/usage` with `by=month` (`{months: [{month, grams, prints, unfinished_prints, top_material?}]}`); `GET api/export/{set}.csv` for `usage`, `recent` and `spoolman-spools` | The spool screen's latest events 7.2, Undo 7.9, the Hub screen's history 12.8, By month 9.10, downloads 7.1, 9.10 and 10.1 | Until it exists the app shows none of them |
 
@@ -2193,6 +2242,7 @@ Every route, screen, dialog and flow of today's app (`filament-kit` Android app)
 | Hard-coded status colours and dots | Status component with shapes and tokens 3.1, 2.4, 9.1 |
 | No icons | Own vector drawables 1 |
 | Hard-coded strings, no `strings.xml` | 15 |
+| (none) | Language 12.2; the demo notice 3.7; Scan a label 4.4, 7.1; Print a label 7.10 |
 | No top bar, bottom bar or back control | 2.2, 2.3, 2.5 |
 | No tablet layout | 2.1, window size classes 1 |
 | Mixed loading displays and ellipses | 3.2, 3.5 |
