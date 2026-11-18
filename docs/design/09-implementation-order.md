@@ -1393,6 +1393,8 @@ Stage 12  EV0 to EV9 from the start, against the contracts of the stage      EV7
           AF6 > EV5 (setup_page.py, setup_overview.js)      EA6 > EV5 (setup.js)      AF6 > EV4d (setup_settings.js)
           files held by earlier steps: AF2 > EV3      AF3 > EV4b      EA7 + EA4 > EV6a, EV6b      EA8 > EV7a      AF8 > EV8
           (every step but EV7b and EV10 can start at once; the other steps send EV2 their string keys before it files)
+          Auto: AS0 from the start      EV1 > AS1 (api.py)      EV2 > AS2 (cli.py, the string catalogue)
+          EV6a + EV6b > AS3      EV7a + EV7b > AS4      EV4b > AS5      AS1 to AS5 > AS6
 
 Stage 13  HD0 to HD10 from the start, against the contracts of the stage      HD1 to HD10 > HD11
           registry files: EV1 > HD1 (api.py)      EV2 > HD2 (cli.py, status.py, the string catalogue)
@@ -1491,7 +1493,7 @@ Every screen-level section of 03, 04 and 05 and every command group of 06, with 
 | 3.6 The Hub is restarting; 3.7 The Hub is not answering | S1.9 |
 | 4 Overview | S2.1, S2.2; the Devices tile and Checks row EV2, EV5; the history strips and the Filament line HD7e |
 | 5 Printers (5.1 to 5.5, 5.7 to 5.9) | S2.3, S2.4 (dialogs S1.6) |
-| 5.10 The live view | EV4b |
+| 5.10 The live view | EV4b; Load a spool, the Auto notice, Stop waiting and the choice AS5 |
 | 5.6 Add a printer; 5.4 Find Klipper printers and Klipper add-on | S2.5 |
 | 6 Recently added | S2.6, S2.7 |
 | 7 Devices | S2.8, S2.9; 7.9 and 7.10 EV3, EV4c |
@@ -1517,7 +1519,7 @@ Every screen-level section of 03, 04 and 05 and every command group of 06, with 
 | 3.9 Undo the last action | HD8 |
 | 4 Add spools | S3.7, S3.8 |
 | 5 Spools | S3.9, S3.10; 5.6 EV6a; the last events and the download HD8 |
-| 6 Printers | S3.11; 6.5 Clear slot and 6.9 the guided add EV6b; Undo, By month and the download HD8 |
+| 6 Printers | S3.11; 6.5 Clear slot and 6.9 the guided add EV6b; Automatic, Load a spool, the Auto notice and its buttons (5.4, 6.2, 6.5) AS3; Undo, By month and the download HD8 |
 | 7 Recently added | S3.12 |
 | 8 Slicer presets | S3.13; your own entries EV6a |
 | 9 More and Settings | S3.3; theme S6.2; 9.1 and 9.3 EV6a; the history table and the report line in 9.3 HD8 |
@@ -1538,9 +1540,9 @@ Every screen-level section of 03, 04 and 05 and every command group of 06, with 
 | 4 Pairing | S4.5 |
 | 5 Home | S4.6; the Getting started line EV7a |
 | 6 Add spools | S4.7 |
-| 7 Spools and the spool screen | S3.9, S4.8; the Spools menu EV7b; 7.9 Undo and the last events HD9 |
+| 7 Spools and the spool screen | S3.9, S4.8; the Spools menu EV7b; 7.6 Automatic AS4; 7.9 Undo and the last events HD9 |
 | 8 Add a line to the Filament Catalog | S4.9; the form and list EV7b |
-| 9 Printers | S4.10, S4.11; 9.5 Clear slot and waiting, 9.12 EV7b; 9.10 By month and the download HD9 |
+| 9 Printers | S4.10, S4.11; 9.5 Clear slot and waiting, 9.12 EV7b; the Auto notice AS4; 9.10 By month and the download HD9 |
 | 10 Recently added | S4.12; the download HD9 |
 | 11 Slicer presets | S4.13, S4.14 |
 | 12 Settings | S4.15; 12.2 theme S6.3; 12.3 and 12.8 EV7a; the history table and the report line in 12.8 HD9 |
@@ -1562,7 +1564,7 @@ Every screen-level section of 03, 04 and 05 and every command group of 06, with 
 | 7 Confirmations | S5.2 |
 | 8 Interactive screens | S5.4 |
 | 9.1 `status` | S2.1, S5.1; `--history` HD2 |
-| 9.2 `printer` and `klipper` | S5.5; `load`, `unload`, `clear`, `usage`, `--watch` EV2 |
+| 9.2 `printer` and `klipper` | S5.5; `load`, `unload`, `clear`, `usage`, `--watch` EV2; `load ... auto` AS2 |
 | 9.3 `recent` | S5.6 |
 | 9.4 `devices` and `pair` | S2.8, S5.6; `show`, `set` and the new columns EV2; `pair --home-assistant` HD2 |
 | 9.5 `presets` | S5.7 |
@@ -2294,8 +2296,9 @@ station's hello call, the found Bambu Lab printers and the remote reader's HTTPS
   At every start it tells the Hub `fp`, `port` and `version` on `GET /api/station/hello`, over the connection it already
   has; the Hub then calls it over HTTPS at that port, accepts only that certificate and does not fall back to plain
   HTTP. A station that has not been updated sends no fingerprint and is called over plain HTTP as before; so is a
-  station that cannot make its certificate, which serves plain HTTP as before and logs why; the Checks show a row for
-  either. The Hub never goes back to plain HTTP for a station whose certificate it has pinned: for such a station a
+  station that cannot make its certificate, which serves plain HTTP as before, logs why and says so in its start call;
+  the Checks show a row for each case ("The Weigh Station at <address> is not using HTTPS." and "... is not using
+  HTTPS: it could not make its certificate (<reason>)."). The Hub never goes back to plain HTTP for a station whose certificate it has pinned: for such a station a
   missing or changed certificate is an error row, never a reason to downgrade. The printer-side tag service is pinned
   the first time the Hub reads its address (trust on first use). A Label Reader on another machine is the exception
   until its own software can serve HTTPS: an `http://` address of it is accepted and used as today, an `https://`
@@ -2502,7 +2505,8 @@ anything on the Tag Reader firmware.
 
 Every function that one interface has, the others have where they can: the Hub page gets the Spools section and the live
 printer view, every interface gets Clear slot and the waiting state, the Filament Catalog has one form everywhere, the
-apps show the Hub at a glance, the web app and the app add a printer in the guided order, Spoolman and the Hub page link
+apps show the Hub at a glance, a spool can be assigned to a printer with no slot named (Auto: the Hub loads it into the
+slot that gets a spool next), the web app and the app add a printer in the guided order, Spoolman and the Hub page link
 to each other, Devices shows kinds, versions and out-of-date devices with the Weigh Station's detail and a link to its
 own page, and the command line gets the spool, slot, device and catalog commands. The parts that specify it are 01
 section 8, 02 2.6 and 7.3 to 7.5, 03 3.2, 3.8, 4.2, 5, 7, 10.9 to 10.11, 15 and 16, 04 2, 5, 6, 8, 9, 12 and 14, 05 2,
@@ -2535,14 +2539,57 @@ the web app's route under `/intake/api/` that passes a kit route on.
   filament for this slot until a spool is loaded." Afterwards the slot has no spool, and filament used from it is logged
   with no spool and taken off none. Unload keeps its meaning, "I took this spool out", and now also ends a waiting
   assignment; it is offered only when a spool is recorded, and Clear slot is offered on every slot.
+- **Auto is one rule in every interface.** It is an assignment of a spool to a PRINTER with no slot named. The Hub
+  remembers how each slot of that printer looks at that moment, watches them, and when a spool appears in one, loads the
+  scanned spool into that slot exactly as a named load would: same preset, same move, same answer.
+  - *Which slots the Hub can watch.* Bambu Lab: every slot that has a filament sensor the printer reports, which are the
+    slots of an AMS, an AMS 2 Pro and an AMS HT (`tray_exist_bits`, `tray_reading_bits`, `bridge/layout.py`); not the
+    external spool holders (they have no sensor), and not the slots of a printer that reports no such bits (there the
+    Hub sees only a slot's filament type, which does not change when a spool goes in). Klipper: the lanes or gates of a
+    filament system that reports "loaded" per lane, which are AFC (Box Turtle included, `klipper/afc.py`) and Happy Hare
+    (`klipper/happyhare.py`); not a single extruder and not a toolchanger (no sensor per tool is read). **Auto is
+    offered for a printer with two or more watchable slots.** With fewer there is nothing to choose between, and a
+    printer with one source keeps today's behaviour.
+  - *A spool shows up in a slot* when the slot is seen empty and then loaded: empty at the start and now loaded, or
+    loaded at the start, then seen empty, then loaded again (a spool swapped in a full slot). "Loaded" is what the
+    waiting assignment already uses: present and no longer being read, steady for 3 seconds (`pending.py`). A slot that
+    was loaded at the start and never changes is never chosen, whatever is recorded for it. A slot whose own tag names
+    its spool (a Bambu Lab spool with RFID) is not chosen, as today, and Auto goes on waiting for another slot. The slot
+    that feeds a running print is not chosen (it cannot be loaded). If the chosen slot has a spool recorded, that spool
+    goes back where it was, as every load does.
+  - *One at a time, and never a guess.* A printer has at most one Auto assignment; a new one for the same printer
+    replaces the old one, and the answer says so: "Replaces {spool}, which was waiting." If a second watchable slot
+    shows up before the first one is applied (within its 3 seconds), the Hub does not pick: the assignment stays in the
+    state "choose", and the printer shows "Two slots were loaded. Which one got {spool}?" with those slots as buttons,
+    in every interface that shows the printer. Choosing loads it there.
+  - *How it ends.* When no slot changes it waits 15 minutes (the waiting assignment's time) and ends without a trace
+    other than the notice disappearing. It also ends when someone presses **Stop waiting**, when the same spool is
+    loaded into a named slot anywhere, when a new Auto replaces it, when the printer is removed and when the Hub
+    restarts (it is kept in memory, like the waiting assignment). While it waits, the printer shows one notice in every
+    interface: "Waiting for {spool} to be loaded into any slot of {printer}." with **Stop waiting**.
+  - *A Klipper printer that is printing* refuses a load (`klipper/loads.py`): the slot is still noticed, and the load is
+    sent when the printer allows it; if the 15 minutes pass first, it ends with the Hub's reason.
+  - *Where it is offered, and where it is the default.* The Printer Station's slot list comes from the Hub
+    (`web/reader.py`), so on a printer where Auto is possible the list gains a first entry "Auto". It is the default
+    wherever the device takes the first entry today: when a printer is picked and when a saved slot no longer exists.
+    A device that has a slot saved keeps it until its owner turns the knob. The scan's answer is the waiting one the
+    device already shows, with the text "Auto: load any slot (waits 15 min)". In the web app the spool sheet's "Load
+    into a printer" gets "Automatic" as the first and preselected choice of its slot step when the printer can do it,
+    and the printer page gets **Load a spool** in its header (spool first, then Automatic or a slot) beside the
+    per-slot Load buttons. The app's Load screen gets "Automatic" first and preselected in its slot step. The Hub
+    page's live printer view gets **Load a spool** in the printer's header, the same way. The command line has
+    `spoolwarden printer load <name> auto <spool number>`. A person who wants a certain slot picks it as today: Auto
+    is one tap less, not a replacement.
 - **One function builds a catalog entry.** The Hub builds an owner's own entry from the form's values; the page, the
   apps and the command line send values and never an entry's text. The Catalog token field leaves the Hub page and the
   `config` menu; a stored token keeps working and is not deleted by an update, and `spoolwarden catalog token` stays.
 - **Every client sends its kind and version.** The Hub keeps the newest value with the pairing; a device that sends
   nothing shows "Version not known" and is never called out of date.
 - **Texts.** Only EV2 opens the string catalogue. Every other step sends EV2 its keys and English texts before it files;
-  until EV2 is merged a step shows its own English text through the catalogue's fallback and adds no key itself.
-- **No file is opened by two EV steps.** A step that finds it needs another step's file stops and says so.
+  until EV2 is merged a step shows its own English text through the catalogue's fallback and adds no key itself. The
+  texts of Auto are AS2's: AS1, AS3, AS4 and AS5 send AS2 their keys the same way.
+- **No file is opened by two EV steps.** A step that finds it needs another step's file stops and says so. The same
+  holds for the AS steps at the end of the stage.
 
 ### The contracts
 
@@ -2558,6 +2605,12 @@ existing shape.
 | `PATCH /api/spools/{id}` (changed) | one kind of change per call: `gross`, `remaining`, `location`, `empty`, or new `{"auto_location": true, "dry_run": ...}` | as today; for `auto_location` the Hub moves the spool where its placement rule puts it |
 | `POST /api/printers/{id}/slots/{label}/unload` (changed) | as today | as today plus `waiting_ended: bool` |
 | `POST /api/printers/{id}/slots/{label}/load` (unchanged) | | already answers `pending: true` for a waiting load; clients must read it |
+| `GET /api/printers`, `GET /api/printers/{id}` (changed) | - | the printer gains `auto_possible: bool`; each slot gains `watchable: bool`; a printer that has an Auto assignment also gains `auto: {spool_id, spool: {id, name, material, color_hex}, state: "waiting"\|"choose", slots?: [<labels to choose from>], text, expires_at}?`, in every answer and stream that carries the printer's state, the web app's live stream included |
+| `POST /api/printers/{id}/slots/auto/load` (new) | `{spool_id, dry_run}` (default true) | dry run: `{auto: true, watching: [<labels>], replaces?: {spool_id, name}, dry_run: true}`; real: `{auto: true, pending: true, confirmed: null, expires_in: 900, message}`; 409 `{error: "auto_not_possible", text}` |
+| `POST /api/printers/{id}/auto/choose` (new) | `{slot: <label>}` | the answer of a named load into that slot; 409 `{error: "nothing_to_choose", text}` |
+| `POST /api/printers/{id}/auto/cancel` (new) | - | `{cancelled: true}`; 409 `{error: "not_waiting", text}` |
+| `GET /reader/printers/{id}/slots` (changed) | - | first entry `{label: "auto", ...}` named "Auto" when `auto_possible` |
+| `POST /reader/scan` (changed) | `slot: "auto"` | `status: "queued"`, `slot: "auto"`, `message: "Auto: load any slot (waits 15 min)"` |
 | `GET /api/hub` | - | the object below |
 | `GET /api/library/local` | - | `{entries: [{id, brand, name, material, added}]}` |
 | `POST /api/library/local/form` | `{brand, name, material, nozzle_min?, nozzle_max?, bed_min?, bed_max?, density?, max_volumetric_speed?, bambu_parent?, notes?}` | 201 `{entry: {id, brand, name, material, added}}`; 400 `{error: "invalid_entry", problems: [{field, text}]}` |
@@ -2578,7 +2631,16 @@ The spool view is `inventory.spool_view` as it is, `{id, location, remaining_g, 
 "opened" | "empty", filament_id, vendor, name, material, color_hex, lot}`, plus two new fields: `loaded: {printer_id,
 printer, slot}?` and `low: bool`. What a web token may call gains exactly: `POST /api/printers/{id}/slots/{label}/clear`,
 `POST /api/printers/scan`, `GET /api/hub`, `GET /api/library/local`, `POST /api/library/local/form`,
-`DELETE /api/library/local/{id}` and `POST /api/readers/web/seen`; only a web token may call the last.
+`DELETE /api/library/local/{id}`, `POST /api/readers/web/seen`, `POST /api/printers/{id}/slots/auto/load`,
+`POST /api/printers/{id}/auto/choose` and `POST /api/printers/{id}/auto/cancel`; only a web token may call
+`/api/readers/web/seen`.
+
+`auto` is a reserved slot label (compared without regard to case): no real slot may carry it. The loaded spool's event
+(`spool.loaded`) carries `auto: yes` in its data when an Auto assignment made the load; there is no new event kind. The
+texts of Auto, as the Hub and the interfaces show them: "Waiting for {spool} to be loaded into any slot of {printer}." ·
+"Stop waiting" · "Two slots were loaded. Which one got {spool}?" · "Replaces {spool}, which was waiting." · "Automatic"
+with the hint "The slot where the spool appears." · the refusal "This printer has no slots the Hub can watch. Choose a
+slot." · "Auto: load any slot (waits 15 min)".
 
 **Client headers.** Every client of ours sends `X-Spoolwarden-Client: <kind>/<version>` on every call, with the kind
 `android`, `slicer-sync`, `weigh-station` or `web`. A Weigh Station also gives its version on its hello call. A Tag
@@ -2588,8 +2650,10 @@ entry. The web unit sends a reader's values when its build changes and otherwise
 the Hub does not answer it keeps only the newest value per reader in memory.
 
 **Page routes.** Under `/setup/api/`: the rows of 03 section 15 for the Spools section, the live view, the catalog form,
-Devices. Their answers are the kit routes' answers; the lock of each is in 03 5.10, 7.10, 10.9 and 16. The routes of a
-device's detail: `GET device/{id}` (open) answers `{device, status?, settings?, own_page: <address as text>?, photo:
+Devices. Their answers are the kit routes' answers; the lock of each is in 03 5.10, 7.10, 10.9 and 16. The live view's
+page routes for Auto are `POST printers/{id}/slots/auto/load`, `POST printers/{id}/auto/choose` and `POST
+printers/{id}/auto/cancel`; they need the page unlocked, like every slot action there. The routes of a device's
+detail: `GET device/{id}` (open) answers `{device, status?, settings?, own_page: <address as text>?, photo:
 bool}`; `GET device/{id}/photo` (open) answers `image/jpeg`; `POST device/{id}/settings` needs the page unlocked; `POST
 device/{id}/open` needs the page unlocked, makes the Hub ask the station for a one-time ticket and answers `{address:
 "<own_page>#ticket=<ticket>"}`. The live view's camera has one more: `POST printers/{id}/camera/ticket` with the setup
@@ -2606,7 +2670,8 @@ camera sessions run at a time: the ninth ticket is refused with "Too many camera
 trusted computer needs no ticket.
 
 **Twins** (under `/intake/api/`; EV6a and EV6b): `GET hub` (the kit object), `GET library/local`, `POST library/local`
-(the form), `POST library/local/{id}/remove`, `POST printers/scan` and `POST printers/{id}/slots/{label}/clear`. Each
+(the form), `POST library/local/{id}/remove`, `POST printers/scan`, `POST printers/{id}/slots/{label}/clear`, and for
+Auto `POST printers/{id}/slots/auto/load`, `POST printers/{id}/auto/choose` and `POST printers/{id}/auto/cancel`. Each
 passes the kit route on unchanged, with the guards the neighbouring twins have.
 
 **The Weigh Station's own routes** (over its HTTPS listener; EV3):
@@ -2627,11 +2692,12 @@ The station's 5-minute check-in is `GET /api/station/hello` with `fp`, `port` an
 
 **The command line** (EV2): `spoolwarden spools [<words>] [--sealed|--opened|--loaded|--low]`; `spoolwarden spool show
 <n>`; `spoolwarden spool weigh <n> <grams with the spool>`; `spoolwarden spool move <n> <location|auto>`; `spoolwarden
-spool empty <n>`; `spoolwarden printer show <name> --watch`; `spoolwarden printer load <name> <slot> <spool n>`;
-`spoolwarden printer unload <name> <slot>`; `spoolwarden printer clear <name> <slot>`; `spoolwarden printer usage <name>
-[--days n]`; `spoolwarden catalog add --ask`; `spoolwarden catalog local`; `spoolwarden catalog local remove <id>`;
-`spoolwarden devices show <device>`; `spoolwarden devices set <device> <setting> <value>`. Every changing command
-previews, asks, and takes `-y`; every one has `--json` with the object of its route.
+spool empty <n>`; `spoolwarden printer show <name> --watch`; `spoolwarden printer load <name> <slot> <spool n>` (and
+`auto` in place of the slot, which is AS2's); `spoolwarden printer unload <name> <slot>`; `spoolwarden printer clear
+<name> <slot>`; `spoolwarden printer usage <name> [--days n]`; `spoolwarden catalog add --ask`; `spoolwarden catalog
+local`; `spoolwarden catalog local remove <id>`; `spoolwarden devices show <device>`; `spoolwarden devices set <device>
+<setting> <value>`. Every changing command previews, asks, and takes `-y`; every one has `--json` with the object of its
+route.
 
 ### Which files the stage shares with the stages before it
 
@@ -2645,6 +2711,9 @@ open is merged. A step whose only wait is a registry file builds everything else
 | `setup_page.py`, `setup_static/setup_overview.js` | EV5 | EA6, then AF6 | AF6 |
 | `setup_static/setup_settings.js` | EV4d | EA6, then AF6 | AF6 |
 | `setup_static/setup.js` | EV5 | EA6 | EA6 |
+
+The Auto steps at the end of the stage open `api.py` (AS1) after EV1 is merged, and `cli.py` and the string catalogue
+(AS2) after EV2 is merged; no registry file is opened by two steps at once.
 
 ### EV0 Design text
 Design + docs · Depends on: none · Beside: every other EV step
@@ -2772,8 +2841,71 @@ Design + docs · Depends on: EV1 to EV9 merged
 - **Change:** the user documents and the release notes.
 - **Keep:** the wording of the other sections.
 
-**Order.** EV0 to EV9 now. EV10 last, after the batch. Registry files, one after the other, per file: `api.py`: EA3 >
-AF5 > EV1. `cli.py`, `status.py` and the string catalogue: EA3 > AF5 > EV2. `setup_page.py` and `setup_overview.js`: EA6 >
+### Auto as the slot choice: AS0 to AS6
+
+Each AS step waits only for the EV step that holds its files to be merged into `next`; no file is opened by two AS
+steps. The texts of Auto are AS2's, as the rule on texts above says.
+
+### AS0 Design text
+Design + docs · Depends on: none · Beside: every other step
+- **Files today:** `docs/design/*.md`.
+- **Change:** the design text of Auto: 02 7.5, 03 5.10 and 7.5, 04 5.4, 6.2, 6.5 and 14, 05 7.6, 9.4, 9.5 and 16, 06
+  3.2, 6.8, 7, 9.2, 12 and 13, and 09 (this stage).
+- **Keep:** every other part.
+- **Other interfaces:** every AS step reads it.
+- **Check:** the design's own tests.
+
+### AS1 Hub: the Auto assignment and the routes
+Server builder · Depends on: none · Beside: every other AS step except for its registry file
+- **Starts after:** EV1 is merged: it has `pending.py`, `web/reader.py` and `api.py` open.
+- **Files today:** new `bridge/auto_slot.py`, `bridge/pending.py` (it ends when the spool is loaded elsewhere),
+  `bridge/connection.py` and `bridge/klipper/manager.py` only where status is built, `web/reader.py`, `web/slots.py`,
+  tests. Registry file: `api.py`.
+- **Change:** the Auto assignment (a new module beside the waiting assignment), what is watchable, the three kit routes,
+  the reader's list and scan, and the status fields `auto_possible`, `watchable` and `auto`.
+- **Other interfaces:** every other AS step builds against these routes with stubs.
+- **Check:** prove first (items 5 to 8 of the list below). Then the route, assignment and reader tests.
+
+### AS2 Hub: the command line and the texts
+Server builder · Depends on: none · Beside: every other AS step except for its registry files
+- **Starts after:** EV2 is merged: it has `cli.py` and the string catalogue open.
+- **Files today:** tests. Registry files: `cli.py` and the string catalogue.
+- **Change:** `printer load ... auto`, and ALL catalogue texts of Auto.
+- **Other interfaces:** every other AS step names its keys to this one before it files.
+- **Check:** the command tests; the catalogue and wording tests (08 test 7).
+
+### AS3 Web app: Automatic, Load a spool, the notice and the choice
+Klipper builder · Depends on: none · Beside: every other AS step
+- **Starts after:** EV6a and EV6b are merged: they have these files open.
+- **Files today:** `web/static/app.js`, `web/static/printers.js`, `web/printers_app.py`.
+- **Change:** Automatic in the spool sheet, Load a spool on the printer page, the notice, Stop waiting and the choice;
+  their twins.
+
+### AS4 Android: Automatic, the notice and the choice
+App builder · Depends on: none · Beside: every other AS step
+- **Starts after:** EV7a and EV7b are merged: they have these files open.
+- **Files today:** `ui/spool/LoadScreens.kt`, `LoadViewModel.kt`, `ui/printers/PrinterScreen.kt`, `PrinterViewModel.kt`,
+  `net/Api.kt`, `net/Models.kt`.
+- **Change:** Automatic in the Load screen, the notice, Stop waiting and the choice.
+
+### AS5 Hub page: Load a spool, the notice and the choice
+Bug-bash 1 · Depends on: none · Beside: every other AS step
+- **Starts after:** EV4b is merged: it has these files open.
+- **Files today:** `setup_static/setup_printer_live.js`, `setup_console/printer_live_tab.py`.
+- **Change:** Load a spool in the live view, the notice, Stop waiting and the choice.
+
+### AS6 Documents
+Design + docs · Depends on: AS1 to AS5 merged
+- **Files today:** `docs/*.md`, `release-notes/next.md`.
+- **Change:** the user documents and the release notes.
+- **Keep:** the wording of the other sections.
+
+**Later stages.** Stage 13's steps that open the same files (HD8, HD9 and HD7d) come after the AS step that holds them,
+or before it, never beside it; the order is set by what is merged.
+
+**Order.** EV0 to EV9 now. EV10 last, after the batch. AS0 now; AS1 to AS5 each after the EV step named above, beside
+each other; AS6 last. Registry files, one after the other, per file: `api.py`: EA3 > AF5 > EV1 > AS1. `cli.py` and the
+string catalogue: EA3 > AF5 > EV2 > AS2. `status.py`: EA3 > AF5 > EV2. `setup_page.py` and `setup_overview.js`: EA6 >
 AF6 > EV5. `setup_settings.js`: EA6 > AF6 > EV4d. `setup.js`: EA6 > EV5.
 
 **How far the map is checked.** It is built from four reads of the code, not from opening every file. Not looked at:
@@ -2786,7 +2918,7 @@ Spools section's files again for those functions, and a later stage translates t
 
 ### To prove first, in the step that meets it
 
-Each has a fallback.
+Each has a fallback, except item 8, which only checks that nothing acts twice.
 
 1. **EV1: an entry built from Brand, Name and Material alone passes the catalog's check and gives a usable preset.** The
    check wants `fields` (`library.py:83-88`); the Hub fills them from the catalog's values for that material. If no
@@ -2798,6 +2930,18 @@ Each has a fallback.
    clock mark.
 4. **EV9: a reader in the field takes the new firmware** only when its owner holds the knob; until then its build is
    "not known" and nothing breaks.
+5. **AS1: what a Bambu Lab printer reports when a spool is pushed into an AMS slot** is as assumed: empty, then present
+   and being read, then present. The order is not in the code; it is taken from a recorded printer report or a real
+   printer before the rule of "a spool shows up" is fixed. If a slot never passes through "empty" when a spool is
+   swapped quickly, a swap is not noticed and the text says "Take the old spool out first.". The sensor bits of AMS HT
+   units beyond the first two are marked unverified in the Hub's hardware data: Auto watches only units whose bits are
+   verified.
+6. **AS1: the Printer Station needs no new firmware** (it shows the Hub's list and sends the chosen label back). If its
+   screen cannot show the entry or the message, the firmware gets the change and devices in the field get Auto when
+   their owners update them.
+7. **AS1: a Klipper filament system's "loaded" change reaches the Hub in time** (within seconds). If a system only
+   reports on request, the Hub asks every 2 seconds while an Auto waits.
+8. **AS1: the reader's own queue** (`web/reader.py`) and the kit's waiting assignment do not both act on one scan.
 
 **Out of scope:** adding spools on the Hub page; quick find and colour-name search (the Spoolman link is the answer); the
 Hub updating a satellite by itself; pages for the Tag Reader and the printer-side tag service (they serve nothing a browser
@@ -3373,7 +3517,8 @@ Server builder · Depends on: none · Beside: every other RC step except for its
   `tools/make_release.sh` (packs as release files), tests. Registry file: the string catalogue, after HD2 is merged; it
   changes the file's form, so every other holder must be merged first.
 - **Change:** the catalogue as XML and the generator (also Android's resources per language); packs: template, check,
-  download, install; `key` and `params`; the routes of the contracts above for languages.
+  download, install; `key` and `params`; the routes of the contracts above for languages. The form of 08 section 12 is
+  not final: this step does not fix it, and it is confirmed before the first language pack is made.
 - **Other interfaces:** every other step builds against these routes with stubs.
 - **Check:** prove first (item 3 of the list below).
 

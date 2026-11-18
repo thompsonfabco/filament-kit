@@ -2320,7 +2320,21 @@ is in use; offer Load, Unload and Clear slot where the interface has them.
    remaining as a determinate bar (8.3) plus "62 %", "In use" for the active slot, and the row's actions (Hub page, web
    app and app: **Load**, **Unload**, **Clear slot**). A slot a spool is waiting for shows that spool's name, the waiting
    swatch and the line "Waiting for the spool to load in <slot>." instead of the bar. **Unload** is on a row only
-   while a spool is recorded in the slot; **Clear slot** is on every row.
+   while a spool is recorded in the slot; **Clear slot** is on every row. Above the rows, while the printer has an Auto
+   assignment (a spool the Hub puts into whichever slot gets a spool next), the printer's notice (below).
+
+**The Auto notice (full form only).** A printer has at most one Auto assignment. The strip shows it once, above the
+first unit heading, as an inline result block (8.6):
+- **Waiting** (`data-state="info"`): "Waiting for <spool> to be loaded into any slot of <printer>." ("Waiting for
+  Polymaker PolyTerra PLA Charcoal Black to be loaded into any slot of Workshop X1.") and the default button
+  **Stop waiting** at its end. It is the same in every interface that shows the printer, and takes no room when the
+  printer has no Auto assignment.
+- **Choose** (`data-state="warn"`): "Two slots were loaded. Which one got <spool>?" and under it one default button per
+  slot that changed, labelled with the slot's label (**A2**, **A3**), in slot order. Pressing one loads the spool
+  there, as a named load of that slot does. **Stop waiting** stays at the end of the block.
+The two never show together. The watched slots are not marked on their rows: a row keeps its own state. The notice goes
+away without a word when the assignment ends (15 minutes, **Stop waiting**, the same spool loaded into a named slot,
+the printer removed).
 
 **Sizes and tokens.** Compact: swatches gap `--s1`. Full: rows min height 44 px, grid
 `calc(var(--s6) - var(--s1) / 2) calc(var(--s4) + var(--s1) / 2) minmax(0, 1fr) 7rem auto` (30 px, 18 px), gap
@@ -2334,26 +2348,30 @@ percentage stays) and the last column shrinks to 4.5rem.
 - Focus: as the buttons inside.
 - Pressed: as the buttons.
 - Disabled: Load, Unload and Clear slot are disabled with the reason when the printer cannot take them now ("Available
-  when the printer is connected.").
+  when the printer is connected."). **Stop waiting** and the slot buttons of the choice are disabled with the same
+  reason while the printer is offline.
 - Loading: a slot the printer is still reading shows a spinner and "Reading…"; the whole strip shows skeleton rows
   until the first status arrives.
 - Error: no slot data: one line in place of the rows: "No slot data: the printer is offline." or "No slots read yet.
   Test the connection, then map the slots."
 
 **Behaviour and keyboard.** Updates live from the printer status without moving focus. Load opens the load flow for
-that slot; Unload and Clear slot ask first (9.1), naming the spool and where it goes back to.
+that slot; Unload and Clear slot ask first (9.1), naming the spool and where it goes back to. **Stop waiting** and a
+slot button of the choice act at once and ask nothing; when the notice appears or changes, focus stays where it is.
 
 **Accessibility.** Full form: a `ul` with an `aria-label` ("AMS slots of Workshop X1"); each row's text reads in order
 "A1, Polymaker PolyTerra PLA, Charcoal Black, 62 % left, in use"; a waiting slot reads "A2, Bambu Lab PETG HF Orange,
-waiting to load". Compact form: swatches `aria-hidden`, the `sr`
-sentence carries the content, "3 of 4 loaded" is visible.
+waiting to load". The Auto notice is the inline result's `role="status"`, so a person is told when it appears or turns
+into the choice; its buttons come in reading order before the first unit's rows. Compact form: swatches `aria-hidden`,
+the `sr` sentence carries the content, "3 of 4 loaded" is visible.
 
 **Theme profiles.** `collection` = table and cards: compact form in the Slots cell; tiles: one small spool ring per
 slot instead of swatches; rows: only "3 of 4 loaded" in the row's sub-line. Full form in every `detail`.
 
-**Android.** Full: `Column` of rows (swatch, texts, `LinearProgressIndicator(progress)`, `TextButton`s Load,
-Unload and Clear slot); compact: a `Row` of swatches with a `semantics { contentDescription = … }` sentence, on the
-printers list only (Home has no swatches).
+**Android.** Full: `Column` of rows (swatch, texts, `LinearProgressIndicator(progress)`, `TextButton`s Load, Unload and
+Clear slot), with the Auto notice as a notice line above the first unit, its **Stop waiting** a `TextButton` and the
+slots of the choice `OutlinedButton`s; compact: a `Row` of swatches with a `semantics { contentDescription = … }`
+sentence, on the printers list only (Home has no swatches).
 
 **HTML.**
 ```html

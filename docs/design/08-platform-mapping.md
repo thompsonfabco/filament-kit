@@ -1122,6 +1122,7 @@ storage keys, file and package names) are not part of the catalogue and do not f
   `text` is in the language the caller asked for.
 
 **Languages.** The catalogue's form is also the form of a language pack, so the generator reads both the same way.
+This form is not final: it is confirmed before the first language pack is made.
 
 - **A pack is one XML file** in the catalogue's form with the English beside each text, so that a translator needs
   nothing but a text editor. Each `<text>` holds an `<en>` element (the English, copied from the catalogue) and one
