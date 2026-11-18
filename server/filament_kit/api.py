@@ -166,6 +166,7 @@ STATION_PREFIX = "/api/station/"  # all a `pair --station` token may call (and /
 WEB_ROUTES = (
     ("GET", "/api/printers"),
     ("POST", "/api/printers"),
+    ("POST", "/api/printers/scan"),     # R83 10.1: the web app's Add printer search
     ("GET", "/api/printers/{id}"),
     ("PATCH", "/api/printers/{id}"),
     ("DELETE", "/api/printers/{id}"),

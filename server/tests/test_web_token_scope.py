@@ -95,7 +95,11 @@ def test_every_path_the_web_unit_writes_is_listed():
     for path in calls:
         if path.endswith("/"):      # slots.printer_path's start: its routes are named below
             continue
-        assert api._web_may("GET", path) or api._web_may("POST", path), path
+        if path == UNDO_CALL:       # the scan stops at the quote in f"/api/events/{quote(event, safe='')}/undo"
+            path = "/api/events/1/undo"
+        if any(rx.fullmatch(path) for rx in _CALLED_BEFORE_THE_HUB_MOUNTS_THEM_RX):
+            continue                # refused until the Hub mounts the route: the tests below hold that
+        assert (api._web_may("GET", path) or api._web_may("POST", path) or api._web_may("DELETE", path)), path
 
 
 def test_the_slot_paths_are_listed():
@@ -118,10 +122,9 @@ def test_every_listed_route_is_one_the_web_unit_writes():
 
 # The events and alerts routes (R80 E1, EA3) are listed for the web unit before it calls them: its side (EA4: the
 # hand-over, the push sender, the web twins) comes after. The next test makes EA4 delete each line here once its code
-# calls the route, so this list cannot outlive the gap.
-LISTED_BEFORE_THE_WEB_UNIT_CALLS_THEM = {
-    ("GET", "/api/events"), ("POST", "/api/events/web"), ("GET", "/api/alerts"), ("POST", "/api/alerts/test"),
-    ("GET", "/api/spools/low"), ("GET", "/api/storage-use")}
+# calls the route, so this list cannot outlive the gap. The events and alert reads (EA4, EA7) now call all of them but
+# the alerts test, which only the push twin of the web app sends.
+LISTED_BEFORE_THE_WEB_UNIT_CALLS_THEM = {("POST", "/api/alerts/test")}
 
 
 def test_a_route_listed_ahead_of_the_web_unit_is_not_yet_called_by_it():
@@ -130,6 +133,44 @@ def test_a_route_listed_ahead_of_the_web_unit_is_not_yet_called_by_it():
         assert (method, template) in api.WEB_ROUTES
         rx = re.compile(re.sub(r"\{\w+\}", "[^/]+", template))
         assert not any(rx.fullmatch(c) for c in calls), f"{template} is called now: drop it from the list above"
+
+
+# The kit routes the web unit's twins call (EV6a, EV6b, HD8) that the Hub has not mounted yet (their api.py mounts are
+# EV1's, HD1's and RC9's steps). Each is ruled for a web token; none can be in WEB_ROUTES while the app has no such
+# route (test_every_listed_route_is_a_route_of_the_app), so until then the token is refused and the twin gets the
+# refusal. The mount step lists the route in WEB_ROUTES and deletes its line here; the tests below make that so.
+UNDO_CALL = "/api/events/{quote(event, safe="
+CALLED_BEFORE_THE_HUB_MOUNTS_THEM = {
+    ("GET", "/api/hub"),                                    # R83 10.1 (what a web token may call gains exactly ...)
+    ("POST", "/api/printers/{id}/slots/{label}/clear"),     # R83 10.1
+    ("GET", "/api/library/local"),                          # R83 10.1
+    ("POST", "/api/library/local/form"),                    # R83 10.1
+    ("DELETE", "/api/library/local/{id}"),                  # R83 10.1
+    ("POST", "/api/events/{id}/undo"),                      # R84 9.1: a web token may call it
+    ("GET", "/api/export/{set}.csv"),                       # R84 9.2: the GET /api/export/... routes, not the imports
+    ("GET", "/api/health"),                                 # R84 9.2
+    ("GET", "/api/analytics"),                              # R84 9.2
+}
+_CALLED_BEFORE_THE_HUB_MOUNTS_THEM_RX = [
+    re.compile(re.sub(r"\{\w+\}", "[^/]+", t).replace("[^/]+.csv", "[^/]+")) for _, t in CALLED_BEFORE_THE_HUB_MOUNTS_THEM]
+
+
+def test_a_route_the_hub_has_not_mounted_is_refused_to_the_web_token_until_it_is_listed(app):
+    """Not listed while the app has no such route; the moment the app has it, it must be listed (or leave this set)."""
+    shape = lambda t: re.sub(r"\{[^}]*\}", "{}", t)       # noqa: E731 - {id} and {entry_id} are the same route
+    mounted = {(m, shape(t)) for m, t in _api_routes(app)}
+    for method, template in sorted(CALLED_BEFORE_THE_HUB_MOUNTS_THEM):
+        if (method, shape(template)) in mounted:
+            assert (method, template) in api.WEB_ROUTES, f"{method} {template} is mounted now: list it in api.WEB_ROUTES"
+        else:
+            assert (method, template) not in api.WEB_ROUTES, f"{method} {template} is listed but the app has no such route"
+
+
+def test_the_ruled_routes_stay_off_the_web_token_for_every_other_method():
+    """The ruling names a method for each: the others stay refused (R84 9.2: not the imports)."""
+    for method, path in (("POST", "/api/hub"), ("GET", "/api/printers/1/slots/1/clear"), ("PUT", "/api/library/local/1"),
+                         ("POST", "/api/import/spools"), ("POST", "/api/import/locations"), ("POST", "/api/export/usage.csv")):
+        assert not api._web_may(method, path), (method, path)
 
 
 def test_a_slash_in_a_path_cannot_reach_a_listed_route_by_another_shape():
