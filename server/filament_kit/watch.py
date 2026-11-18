@@ -49,6 +49,7 @@ class _Printer:
     def __init__(self):
         self.state: str | None = None        # RUNNING / PAUSE / FINISH / FAILED / IDLE / OTHER; None = not seen yet
         self.job = ""
+        self.percent = 0                     # the last percent seen while the job was active (for a job that ends unseen)
         self.started_at: float | None = None
         self.pending = False                 # a pause is waiting for its reason
         self.timer: threading.Timer | None = None
@@ -193,7 +194,8 @@ class Watcher:
             p = self._p.get(pid)
             if p is None or p.state not in ACTIVE or self._skip(pid, p.job):
                 return
-            self._finish(pid, p, "FAILED", {"percent": 0, "job": p.job, "fail": "error", "error": "klippy_shutdown"})
+            self._finish(pid, p, "FAILED", {"percent": p.percent, "job": p.job, "fail": "error",
+                                       "error": "klippy_shutdown"})
 
     # ---- the one state machine
     def _skip(self, pid: str, job: str) -> bool:
@@ -206,6 +208,8 @@ class Watcher:
             p.state = new
             if obs["job"]:
                 p.job = obs["job"]
+            if new in ACTIVE and obs.get("percent"):
+                p.percent = obs["percent"]
             if prev is None or first:                         # first sight: learn, write nothing
                 p.errors = (set(obs["hms"]) | ({obs["error"]} if obs["error"] else set())) if bambu else set()
                 if new != "PAUSE" and self.sink.is_raised(f"print-paused:{pid}"):
@@ -277,7 +281,7 @@ class Watcher:
                     log.exception("watcher: reading %s for its pause", pid)
                     obs = None
                 if obs is None:
-                    obs = {"state": "PAUSE", "job": p.job, "percent": 0, "hms": {}}
+                    obs = {"state": "PAUSE", "job": p.job, "percent": p.percent, "hms": {}}
                 if obs["state"] != "PAUSE":
                     return False
             kind, data = self._reason(obs, final)

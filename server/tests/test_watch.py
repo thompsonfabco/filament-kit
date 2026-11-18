@@ -483,3 +483,15 @@ def test_a_hms_code_that_goes_and_comes_back_is_told_once_in_half_an_hour(bambu,
         assert codes == ["0300_0100_0001_0001", "0700_0100_0002_0002", "0300_0100_0001_0001"]
     finally:
         wt.stop()
+
+
+def test_klippy_shutdown_in_a_job_reports_the_last_percent_seen(klipper, store):
+    """R475 LOW 3: print.failed (klippy_shutdown) said percent 0; it carries the last percent the watcher saw."""
+    fake, fam, wt, pid = klipper
+    printing(fake, pct=0.4)
+    assert wait_for(lambda: kinds(store) == ["print.started"])
+    printing(fake, pct=0.55)
+    assert wait_for(lambda: wt._p[pid].percent == 55)
+    wt.on_klipper(pid, "job_ended", {})
+    ev = store.read()["events"][-1]
+    assert ev["kind"] == "print.failed" and ev["data"]["error"] == "klippy_shutdown" and ev["data"]["percent"] == "55"
