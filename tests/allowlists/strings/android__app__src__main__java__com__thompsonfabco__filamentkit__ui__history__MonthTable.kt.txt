@@ -1,0 +1,2 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/MonthTable.kt |  g | text of the history features (HD9); moves to the string catalogue with HD2, the unit of common_grams
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/MonthTable.kt | LLLL yyyy | not text: a route, JSON field or wire value of history and data (HD9)

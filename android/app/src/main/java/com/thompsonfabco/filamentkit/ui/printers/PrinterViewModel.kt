@@ -18,6 +18,8 @@ import com.thompsonfabco.filamentkit.net.PrinterStatus
 import com.thompsonfabco.filamentkit.net.PrinterSummary
 import com.thompsonfabco.filamentkit.net.SlotSpool
 import com.thompsonfabco.filamentkit.net.UnloadResult
+import com.thompsonfabco.filamentkit.net.UsageMonth
+import com.thompsonfabco.filamentkit.ui.history.HistoryTexts
 import com.thompsonfabco.filamentkit.ui.history.ActivityBackend
 import com.thompsonfabco.filamentkit.ui.history.UndoFlow
 import com.thompsonfabco.filamentkit.ui.history.UndoKinds
@@ -32,6 +34,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.io.File
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
@@ -76,6 +79,8 @@ class ApiPrinterBackend(private val current: () -> Api) : PrinterBackend, Printe
     override suspend fun clearSlot(id: String, label: String, dryRun: Boolean) = api.clearSlot(id, label, dryRun)
     override suspend fun activity(subject: String, limit: Int) = api.activity(subject, limit)
     override suspend fun undoEvent(id: Long) = api.undoEvent(id)
+    override suspend fun usageByMonth(printerId: String) = api.usageByMonth(printerId)
+    override suspend fun exportCsv(set: String, to: java.io.File, days: Int?, printer: String?) = api.exportCsv(set, to, days, printer)
     override suspend fun startMap(id: String) = api.startMap(id)
     override suspend fun mapStatus(id: String) = api.mapStatus(id)
     override suspend fun report(id: String) = api.printerReport(id)
@@ -286,6 +291,20 @@ data class PrinterUiState(
     val clearing: Boolean = false,
     /** What the last unload or clear offers to undo on the Hub (R84 3.3); the screen shows its toast and calls [PrinterViewModel.offerShown]. */
     val undoOffer: UndoOffer? = null,
+    /** "Filament used" shows its months (R84 5.7) instead of the last 7 days. */
+    val monthsOn: Boolean = false,
+    /** The months the Hub sent, newest first; null until they are read, or when the Hub has no such view ([monthsOlderHub]). */
+    val months: List<UsageMonth>? = null,
+    val monthsBusy: Boolean = false,
+    val monthsOlderHub: Boolean = false,
+    /** Why the months could not be read. */
+    val monthsProblem: Say? = null,
+    /** "Download as CSV" is being fetched. */
+    val csvBusy: Boolean = false,
+    /** The downloaded file, waiting for the screen to open the share sheet ([PrinterViewModel.csvShown]). */
+    val csvFile: File? = null,
+    /** The download failed, or no app could take the file. */
+    val csvProblem: Say? = null,
 ) {
     val loaded: Boolean get() = printer != null
     val paused: Boolean get() = status?.gcodeState == "PAUSE"
@@ -484,6 +503,51 @@ class PrinterViewModel(
         }
         return outcome
     }
+
+    // --- Filament used: by month and as CSV (R84 5.7, 6.5) ---
+
+    /** Switches "Filament used" between the last 7 days and the months; the months are read the first time. */
+    fun showMonths(on: Boolean) {
+        _state.update { it.copy(monthsOn = on) }
+        if (on && _state.value.months == null && !_state.value.monthsBusy) loadMonths()
+    }
+
+    /** Reads the months again (Try again). */
+    fun loadMonths() {
+        if (_state.value.monthsBusy) return
+        _state.update { it.copy(monthsBusy = true, monthsProblem = null) }
+        viewModelScope.launch {
+            guard(onError = { p -> _state.update { it.copy(monthsProblem = p.say()) } }) {
+                val rows = backend.usageByMonth(id)
+                _state.update { it.copy(months = rows, monthsOlderHub = rows == null) }
+            }
+            _state.update { it.copy(monthsBusy = false) }
+        }
+    }
+
+    /** Downloads this printer's filament used as CSV into [target]; the screen then opens the share sheet on [csvFile]. */
+    fun downloadUsageCsv(target: File) {
+        if (_state.value.csvBusy) return
+        _state.update { it.copy(csvBusy = true, csvProblem = null, csvFile = null) }
+        viewModelScope.launch {
+            guard(onError = { p -> _state.update { it.copy(csvProblem = p.say()) } }) {
+                try {
+                    backend.exportCsv("usage", target, printer = id)
+                    _state.update { it.copy(csvFile = target) }
+                } catch (e: ApiError) {
+                    when {
+                        e.status == NOT_FOUND -> _state.update { it.copy(csvProblem = Say.FromHub(HistoryTexts.CSV_UPDATE_HUB)) }
+                        e.code == "storage" -> _state.update { it.copy(csvProblem = Say.FromHub(HistoryTexts.CSV_NOT_SAVED)) }
+                        else -> throw e
+                    }
+                }
+            }
+            _state.update { it.copy(csvBusy = false) }
+        }
+    }
+
+    /** The screen opened the share sheet (or could not): the file is not offered again; [problem] says why not, if it did not open. */
+    fun csvShown(problem: Say?) = _state.update { it.copy(csvFile = null, csvProblem = problem) }
 
     private fun send(action: String) {
         if (_state.value.commandBusy) return

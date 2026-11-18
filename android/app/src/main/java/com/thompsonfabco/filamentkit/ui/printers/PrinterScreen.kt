@@ -56,6 +56,13 @@ import com.thompsonfabco.filamentkit.net.Temp
 import com.thompsonfabco.filamentkit.ui.ColorSwatch
 import com.thompsonfabco.filamentkit.ui.components.LocalToast
 import com.thompsonfabco.filamentkit.ui.components.NoticeCard
+import com.thompsonfabco.filamentkit.ui.history.CsvOutcome
+import com.thompsonfabco.filamentkit.ui.history.HistoryTexts
+import com.thompsonfabco.filamentkit.ui.history.MonthRows
+import com.thompsonfabco.filamentkit.ui.history.MonthTable
+import com.thompsonfabco.filamentkit.ui.history.csvFileName
+import com.thompsonfabco.filamentkit.ui.history.csvTarget
+import com.thompsonfabco.filamentkit.ui.history.shareCsv
 import com.thompsonfabco.filamentkit.ui.history.showUndoable
 import com.thompsonfabco.filamentkit.ui.history.undoHoldMs
 import kotlinx.coroutines.launch
@@ -164,6 +171,19 @@ fun PrinterScreen(
             )
         }
     }
+    // a downloaded CSV goes straight to the share sheet
+    val csv = state.csvFile
+    val csvSubject = stringResource(R.string.printer_usage_title)
+    LaunchedEffect(csv) {
+        if (csv != null) {
+            viewModel.csvShown(
+                when (shareCsv(context, csv, csvSubject)) {
+                    CsvOutcome.Opened -> null
+                    CsvOutcome.NoApp -> Say.Words(R.string.printer_report_no_app)
+                },
+            )
+        }
+    }
     // an unload or a clear the Hub may undo: a toast says what happened, with Undo for 10 seconds (R84 3.3)
     val toast = LocalToast.current
     val toastScope = rememberCoroutineScope()
@@ -232,7 +252,7 @@ fun PrinterScreen(
             CameraPanel(printer, camera, visible, cameraShown, onCameraShown, onPairAgain)
             SlotsPanel(printer, state, onSlot = { sheetSlot = it.label })
             MappingPanel(printer, state, toolsState, tools, onMapByLoading)
-            UsagePanel(toolsState, tools)
+            UsagePanel(toolsState, tools, state, viewModel)
             SettingsRow(onOpenSettings)
         }
     }
@@ -814,10 +834,62 @@ private fun MapDialog(printer: Printer, s: ToolsUiState, tools: PrinterToolsView
 // --- filament used ---
 
 @Composable
-private fun UsagePanel(s: ToolsUiState, tools: PrinterToolsViewModel) {
+private fun UsagePanel(s: ToolsUiState, tools: PrinterToolsViewModel, state: PrinterUiState, vm: PrinterViewModel) {
     val colors = SpoolwardenTheme.colors
     val space = SpoolwardenTheme.space
-    PrinterPanel(title = stringResource(R.string.printer_usage_title), padded = false) {
+    val context = LocalContext.current
+    PrinterPanel(
+        title = stringResource(R.string.printer_usage_title), padded = false,
+        action = {
+            SwButton(
+                if (state.monthsOn) HistoryTexts.LAST_DAYS else HistoryTexts.BY_MONTH, { vm.showMonths(!state.monthsOn) },
+                kind = SwButtonKind.Quiet,
+            )
+        },
+    ) {
+        if (state.monthsOn) MonthsBody(state, vm) else UsageList(s, tools)
+        PanelDivider()
+        Column(Modifier.padding(horizontal = space.s4, vertical = space.s2), verticalArrangement = Arrangement.spacedBy(space.s2)) {
+            state.csvProblem?.let { NoticeCard(NoticeKind.Bad, sayText(it)) }
+            SwButton(
+                if (state.csvBusy) HistoryTexts.DOWNLOADING else HistoryTexts.DOWNLOAD_CSV,
+                { csvTarget(context, csvFileName("usage", vm.printerId))?.let(vm::downloadUsageCsv) ?: vm.csvShown(Say.FromHub(HistoryTexts.CSV_NOT_SAVED)) },
+                kind = SwButtonKind.Plain, enabled = !state.csvBusy,
+            )
+        }
+    }
+}
+
+/** The By month view: the table, or why there is none (reading, an older Hub, nothing yet, a failed read). */
+@Composable
+private fun MonthsBody(state: PrinterUiState, vm: PrinterViewModel) {
+    val colors = SpoolwardenTheme.colors
+    val space = SpoolwardenTheme.space
+    val months = state.months
+    when {
+        state.monthsProblem != null -> Column(Modifier.padding(horizontal = space.s4)) {
+            NoticeCard(
+                NoticeKind.Bad, sayText(state.monthsProblem),
+                actions = listOf(SwAction(stringResource(R.string.common_try_again), vm::loadMonths)),
+            )
+        }
+        state.monthsBusy && months == null -> Text(
+            stringResource(R.string.common_working), Modifier.padding(space.s4), color = colors.muted, style = MaterialTheme.typography.bodyMedium,
+        )
+        state.monthsOlderHub -> Text(
+            HistoryTexts.MONTHS_UPDATE_HUB, Modifier.padding(space.s4), color = colors.muted, style = MaterialTheme.typography.bodyMedium,
+        )
+        months != null && months.isEmpty() -> Text(
+            HistoryTexts.NO_MONTHS, Modifier.padding(space.s4), color = colors.muted, style = MaterialTheme.typography.bodyMedium,
+        )
+        months != null -> MonthRows(MonthTable.lines(months))
+    }
+}
+
+@Composable
+private fun UsageList(s: ToolsUiState, tools: PrinterToolsViewModel) {
+    val colors = SpoolwardenTheme.colors
+    val space = SpoolwardenTheme.space
         Column(Modifier.padding(horizontal = space.s4), verticalArrangement = Arrangement.spacedBy(space.s2)) {
             s.usageProblem?.let {
                 NoticeCard(
@@ -853,7 +925,6 @@ private fun UsagePanel(s: ToolsUiState, tools: PrinterToolsViewModel) {
                 }
             }
         }
-    }
 }
 
 @Composable

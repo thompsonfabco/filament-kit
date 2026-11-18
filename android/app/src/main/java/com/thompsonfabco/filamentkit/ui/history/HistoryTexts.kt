@@ -24,4 +24,25 @@ object HistoryTexts {
 
     /** The title of a spool's last events (R84 section 2). */
     const val ACTIVITY_TITLE = "Recent activity"
+
+    /** The Filament used panel's other view (R84 5.7) and the way back to the list. */
+    const val BY_MONTH = "By month"
+    const val LAST_DAYS = "Last 7 days"
+
+    /** "Download as CSV" (R84 6.5): the printer's filament used, through the phone's share sheet. */
+    const val DOWNLOAD_CSV = "Download as CSV"
+    const val DOWNLOADING = "Downloading…"
+
+    /** The month table's empty state, and an older Hub. */
+    const val NO_MONTHS = "No months to show yet."
+    const val MONTHS_UPDATE_HUB = "Update the Hub to see filament used by month."
+
+    /** A download that the Hub does not have, or the phone could not keep. */
+    const val CSV_UPDATE_HUB = "Update the Hub to download this file."
+    const val CSV_NOT_SAVED = "The file could not be saved on this phone. Is there enough free space?"
+
+    /** The month table's words: "15 prints", "2 did not finish", "Most used: PA6". */
+    fun prints(n: Int) = if (n == 1) "1 print" else "$n prints"
+    fun unfinished(n: Int) = "$n did not finish"
+    fun mostUsed(material: String) = "Most used: $material"
 }
