@@ -287,6 +287,20 @@ that replaces a browser dialog.
   `wait=0` and `since` set to the last `next` while the page is visible, the rhythm of every other poll of this
   app. While the Hub cannot be reached (10.3) the poll waits for the retry.
 
+### 3.9 Undo the last action
+
+After an action that changes a spool or a slot (Update weight, Move, Mark empty, "Link tag and open", Load, Unload and
+Clear slot) a toast says what happened and carries "Undo" for 10 seconds, as the Hub page does (`03-hub-page.md` section
+2.9): for a move "Moved Bambu Lab PETG HF Orange (212) to Shelf B." with "Undo"; for a load, an unload and a clear the
+slot line's own words ("Loaded into A4.", "Unloaded eSUN ABS+ White from A3.", "Cleared slot A3."). The rule is the Hub's:
+an event is undone once, within 7 days, and only while nothing changed since. "Undo" reads the newest event of that
+spool or slot (GET `activity` with `subject=spool:<id>` and `limit=1`) and, when its `undo.possible` is true, sends POST
+`events/<id>/undo`; the toast then says "Put back." or the refusal "This changed again since, so it cannot be undone."
+(any other refusal as the Hub sends it), and after a load or an unload it adds "The printer still shows what it was set
+to." There is no button when the event cannot be undone. Undo of a spool change is in the toast only; a person who
+asked for no time limits keeps the toast until it is dismissed (`07-accessibility.md` TIM-7). Nothing else has an undo:
+removing a printer, a key, a pairing or a location still asks first.
+
 ---
 
 ## 4. Add spools (`#add`)
@@ -706,7 +720,7 @@ same content expands in place under the spool's row in the results (2.3).
 | "Preview" | default button | POST `open` with `{spool, gross, location, humidity, dry_run: true}`; inline result under the buttons with the Hub's text (it names the tag, old taps, tags one byte apart and "dry run: nothing changed"). |
 | "Link tag and open" | filled | aria-disabled until a preview succeeded with no change since. Reasons: "Preview first: nothing changes until you link." · "You changed the weight. Preview again." · "The Hub found a problem. Fix it and preview again." POST `open` with `dry_run: false`. |
 
-On success: ok line "Spool 214 is open" followed by the Hub's text, a toast "Spool 214 opened.", the three fields
+On success: ok line "Spool 214 is open" followed by the Hub's text, a toast "Spool 214 opened." with "Undo" (3.9), the three fields
 clear and the summary at the top of the sheet updates from the returned spool (location, remaining, "Has a tag").
 When no tag has been read the main button keeps its label; the Hub's preview says whether it can open the spool
 without one.
@@ -717,10 +731,15 @@ Hub has today. When none of the four is available the group is absent and the sh
 
 | Action | How it works |
 |---|---|
-| "Update weight" | Opens a small form in place: "Weight with spool"; "Preview" shows "Remaining changes from 1000 g to 812 g."; then "Save weight". |
-| "Move" | A menu with the same entries as the Location select of 4.5, in fill order, each with how full it is (a full one stays choosable and shows "Full"; an Individual containers location is one entry; it sends the set's `name` and gives the lowest free container, and a container the person picks sends its `containers[].name`; the spool's current place is found by matching its location text as in 4.5, and a text that matches nothing is shown as it is, under no location); choosing one moves it at once; inline result "Moved to Dry box 1." with "Undo" for 5 s. |
-| "Mark empty" | Kept apart at the end (danger outline). Sheet "Mark spool 214 empty?" ("Polymaker PolyTerra PLA Charcoal Black will be marked as used up." · "Cancel" · "Mark empty", danger). Result "Marked empty." |
+| "Update weight" | Opens a small form in place: "Weight with spool"; "Preview" shows "Remaining changes from 1000 g to 812 g."; then "Save weight", with the toast "Updated Polymaker PolyTerra PLA Charcoal Black (214): 812 g left." and "Undo" (3.9). |
+| "Move" | A menu with the same entries as the Location select of 4.5, in fill order, each with how full it is (a full one stays choosable and shows "Full"; an Individual containers location is one entry; it sends the set's `name` and gives the lowest free container, and a container the person picks sends its `containers[].name`; the spool's current place is found by matching its location text as in 4.5, and a text that matches nothing is shown as it is, under no location); choosing one moves it at once; inline result "Moved to Dry box 1." and the toast of 3.9 with "Undo" for 10 s. |
+| "Mark empty" | Kept apart at the end (danger outline). Sheet "Mark spool 214 empty?" ("Polymaker PolyTerra PLA Charcoal Black will be marked as used up." · "Cancel" · "Mark empty", danger). Result "Marked empty." and the toast "Marked Polymaker PETG Teal (77) empty." with "Undo" (3.9). |
 | "Load into a printer" | Printers Feature on. A step list in the sheet: "Load into which printer?" (one row per printer with state), then "Which slot on Workshop X1?" (one row per slot with its current spool), then the automatic preview and "Load", exactly as the load sheet of 6.5. Endpoints: GET `printers`, GET `printers/<id>/state`, POST `printers/<id>/slots/<slot>/load`. |
+
+**Latest events.** Under the actions the sheet lists the spool's last ten events, newest first, each with the time (`--mono`),
+who and what, in the Hub's own words ("Moved Bambu Lab PETG HF Orange (212) to Shelf B."). Title "Latest events"; empty:
+"Nothing has been recorded for this spool yet." GET `activity` with `subject=spool:<id>` and `limit=10` (14). It is read
+when the sheet opens and again after an Undo; the rows have no buttons.
 
 ### 5.5 Running low
 
@@ -737,11 +756,12 @@ the rows below instead of the search results:
 
 ### 5.6 The Spools menu
 
-An icon button "More actions" (44 px) at the right of the page title opens a menu with one item, **Open Spoolman**. It
-opens Spoolman's own page in a new tab (plain http). The address is `spoolman_url` of the Hub's answer (`GET hub`, 14): with
+An icon button "More actions" (44 px) at the right of the page title opens a menu with two items, **Open Spoolman** and
+**Download as CSV**. **Download as CSV** gives "Spools (Spoolman's file)", exactly what Spoolman's own export gives, through the Hub
+(GET `export/spoolman-spools.csv`, 14); the browser saves it to the phone's downloads. **Open Spoolman** opens Spoolman's own page in a new tab (plain http). The address is `spoolman_url` of the Hub's answer (`GET hub`, 14): with
 Spoolman on the Hub, `http://<the host name the person uses for the Hub>:7912`, otherwise the Spoolman address that is
-configured. The web app never builds it. The menu is absent on the public address, where Spoolman is not reachable, and
-when the Hub gives no address. Searching by colour name and a "quick find" are not offered: this link is the answer.
+configured. The web app never builds it. **Open Spoolman** is absent on the public address, where Spoolman is not reachable, and
+when the Hub gives no address; the menu then holds **Download as CSV** alone. Searching by colour name and a "quick find" are not offered: this link is the answer.
 
 ---
 
@@ -948,7 +968,7 @@ spool again.
 | "Load" | filled; aria-disabled with "Pick a spool first." · "Working out the plan…" · "The Hub found a problem; see above." | same with `dry_run: false` |
 
 Before a pick the sheet says "Pick a spool: tap its tag on a reader, or search." After loading, the sheet closes, a
-toast says "Loaded into A4." (or "Sent to A4.") and the slot's line says "Loaded into A4." or "Sent to A4. The printer
+toast says "Loaded into A4." (or "Sent to A4.") with "Undo" (3.9) and the slot's line says "Loaded into A4." or "Sent to A4. The printer
 accepted it but hasn't shown the change yet." When the load answers `pending` (a Bambu Lab printer that has not shown it
 yet), the slot's line says "Waiting for the spool to load in A4." and the slot shows the waiting state above.
 
@@ -963,10 +983,13 @@ A3."); when a
 waiting assignment ended too: "No spool is waiting for A3 any more."; on a Bambu Lab printer, where `printer_cleared`
 is always false: "The printer still shows the old filament for this slot until a spool is loaded."
 
+After an unload and after a clear, the toast of 3.9 ("Unloaded eSUN ABS+ White from A3.", "Cleared slot A3.") carries "Undo" too.
+
 ### 6.6 Filament used
 
-Heading "Filament used" with "Last 7 days" at the right. GET `printers/<id>/usage?days=7`, up to 20 rows, newest
-first.
+Heading "Filament used" with "Last 7 days" at the right, beside the ghost button **By month** and the icon button "More actions"
+(44 px) with **Download as CSV** ("Last 7 days", "Last 30 days", "Last 12 months" as `usage.csv`: GET `export/usage.csv` with
+`printer` and `days`). GET `printers/<id>/usage?days=7`, up to 20 rows, newest first.
 
 | Part | Content |
 |---|---|
@@ -977,6 +1000,11 @@ first.
 | "Undo" | ghost button, 44 px, not on undone rows; opens the sheet "Put it back on the spool?" (12); POST `printers/<id>/usage/<entry>/undo`; line in the row "Put 12.4 g back on the spool." |
 
 Empty: "Nothing used in the last 7 days."
+
+**By month.** The ghost button **By month** (which then reads **Last 7 days**) shows the months of this printer instead of
+the rows: a table with Month (`--mono`), Grams, Prints, Prints that did not finish and Most used material, newest month
+first, from GET `printers/<id>/usage?by=month`. At tablet width and up the monthly bars (02-components 7.12) are drawn
+above the table, with **Show as table** open; on a phone the table alone. Empty: "Nothing used in the last 12 months."
 
 ### 6.7 Slot mapping
 
@@ -1151,6 +1179,8 @@ undo a correction. Served on the home address only (7.4). Code today: `historyTa
 ```
 
 - Data: GET `history`. Photos: GET `history/<id>/photos/<n>`.
+- An icon button "More actions" (44 px) at the right of the title opens a menu with **Download as CSV**: the records as
+  `recent.csv` (GET `export/recent.csv`, 14), saved to the phone's downloads.
 - Intro: "The newest <keep> additions are kept with their photos (<size> now). Change the number on the Hub page
   under Settings."
 - While Share corrections is on, on the Hub (7.5): a second line, the link "Share corrections is on · <n> waiting"
@@ -1545,6 +1575,7 @@ default button **Open the Hub page** (the address `hub_page` of the answer).
 | Group | Content |
 |---|---|
 | Status | The Checks rows of the Hub page's Overview, each with its status badge (OK, Needs a look, Note, Off) and its fix line |
+| History | The changes of the last 7 days as a table, the table of the Hub page's Show history (`03-hub-page.md` 4.2): Time (`--mono`), Check, From, To, newest first; no strips. Empty: "No changes in the last 7 days." Where the history starts later: "No history before <date>." (GET `health?days=7`, 14) |
 | Getting started | "<n> of <m> done"; shown only while steps remain and the Hub page's list is not hidden |
 | Version | "Installed <version>", "Newest <version>", "Last checked <time>"; the info badge "Update available" when it is |
 | Features | One row per feature: its name and the badge "On" or "Off" |
@@ -1553,6 +1584,7 @@ default button **Open the Hub page** (the address `hub_page` of the answer).
 | Label Reader | "Engine: <engine>" and "Anthropic API key: Set" or "Not set"; never the key |
 | Devices | One row per device: its name, its kind and when it was last seen; this phone's row is marked "This phone". Names only: no addresses |
 | Recently added | "Records kept: <n>" |
+| A problem | "Collect a Hub report on the Hub page." |
 
 Everything is redacted as the Hub page's Overview is for a locked page: no addresses, no serial numbers, no secrets.
 Data: `GET hub` (a twin of the kit route, 14). Loading: skeleton rows; error: "Could not read the Hub. <Hub's text>" with
@@ -1824,6 +1856,7 @@ right column is left out or falls back as described there.
 | Twins for the catalog form and for adding a printer: `GET library/local`, `POST library/local` (the form's values; 400 `{error: "invalid_entry", problems: [{field, text}]}`), `POST library/local/{id}/remove`, `POST printers/scan` with `{subnet?}` and `POST printers/{id}/slots/{label}/clear` (`{dry_run}`; answers `{slot, spool?, moved_back?, waiting_ended, printer_cleared, dry_run}`); each passes the kit route on unchanged, with the guards the neighbouring twins have; the unload answer gains `waiting_ended` | 6.5, 6.9, 8 | No form and no list under Slicer presets; "Search" and "Clear slot" are not offered |
 | The header `X-Spoolwarden-Client: web/<version>` on every call of the web app | 9.3 | The Hub shows the web app without a version |
 | The kit route `POST api/readers/web/seen` (a web token only), `{readers: [{id, build?, seen_at}]}`, answered `{ok: true}`: the web unit sends a Tag Reader's build when it changes and otherwise its last call at most once a minute per reader, and while the Hub does not answer keeps only the newest value per reader in memory | 9.3 | The Hub shows a Tag Reader without a build or a last seen |
+| Web twins, under the web app's own base, that pass the kit routes of history and data on unchanged: `GET activity` (`GET api/events` with `activity=1`, `subject` and `actor`; each event also carries `undo: {possible, until?, why_not?}`, `undone` and `undo_of?`), `POST events/{id}/undo` (200 `{undone: true, event, note?}`; 409 `{error, text}`; 404), `GET health` (`days`), `GET analytics` (`months`, `printer`) and `GET export/{set}.csv` for `usage`, `recent` and `spoolman-spools` only; `GET printers/{id}/usage` takes `by=month` and answers `{months: [{month, grams, prints, unfinished_prints, top_material?}]}` | 3.9, 5.4, 5.6, 6.6, 7.1, 9.3 | No Undo button, no latest events, no By month, no history table and no downloads |
 
 ---
 

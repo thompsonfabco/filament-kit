@@ -318,7 +318,7 @@ the Console theme.
 | Alert banner (02 8.8; Android `NoticeCard`) | The same `NoticeCard` of kind `warn` or `bad`, with a bold title, one sentence, the time, one action and Dismiss (3.6) | One composable used by every screen that shows alerts |
 | Dialog | Medium width and up: `AlertDialog` (`BasicAlertDialog` when it holds a form), `--r-l`, `--e2`, scrim `--scrim`. Compact width: the same content in a `ModalBottomSheet` (F7: dialogs become bottom sheets on phones). | Title `--fs-l` `--fw-title`; body `--fs-b`; buttons at the bottom right (in a sheet: full width, stacked, confirming button on top); confirming button last in reading order on wide screens. Every "dialog" in this document follows this rule. |
 | Sheet | `ModalBottomSheet`, `--r-l` top corners, drag handle | Used for short tasks on one thing (update weight, move, slot actions) |
-| Toast | `Snackbar` in the `Scaffold`'s `SnackbarHost`, `--surface` ground, `--border-strong` outline, `--e2` | One line, optional one action ("Undo"); held 5 s, 10 s when it has an action, by the host's own timer |
+| Toast | `Snackbar` in the `Scaffold`'s `SnackbarHost`, `--surface` ground, `--border-strong` outline, `--e2` | One line, optional one button ("Undo", 7.9); held 5 s, 10 s when it has an action, by the host's own timer; with TalkBack on, or where the system's accessibility timeout asks for more, a toast with an action stays until it is dismissed (`07-accessibility.md` TIM-7) |
 | Determinate bar (02 8.3; "progress line" in this document) | `LinearProgressIndicator`, 4 dp, track `--surface-3`, indicator `--accent-text` | Determinate when the Hub gives a number; indeterminate while it does not |
 | Spinner | `CircularProgressIndicator`, 16 dp, inside the button that started the work | Replaced by the word "Working…" when animations are off |
 | Skeleton | `Box` blocks in `--surface-2` with `--r-s` corners | Same height as the rows they stand for; no shimmer |
@@ -884,7 +884,7 @@ Requests: `GET api/spools/low`, `GET api/spools?q=<q>[&sealed=1]`, `GET api/tags
 
 | Element | Text / behaviour | Material 3 |
 |---|---|---|
-| Top bar | Title "Spools", connection chip, appearance icon (2.2) and the overflow "More actions" with one item, "Open Spoolman". It opens Spoolman's own page in the phone's browser (plain http). The address is `spoolman_url` of the answer of `GET api/spools`: with Spoolman on the Hub, `http://<the host name the phone uses for the Hub>:7912`, otherwise the configured address. The app never builds it. The item is absent when the Hub gives no address. Searching by colour name and a "quick find" are not offered: this link is the answer. | `TopAppBar`, `DropdownMenu` |
+| Top bar | Title "Spools", connection chip, appearance icon (2.2) and the overflow "More actions" with two items, "Open Spoolman" and "Download as CSV". "Download as CSV" gives "Spools (Spoolman's file)", exactly what Spoolman's own export gives, through the Hub (`GET api/export/spoolman-spools.csv`); the app saves it to the phone's downloads and offers the share sheet. "Open Spoolman" opens Spoolman's own page in the phone's browser (plain http). The address is `spoolman_url` of the answer of `GET api/spools`: with Spoolman on the Hub, `http://<the host name the phone uses for the Hub>:7912`, otherwise the configured address. The app never builds it. "Open Spoolman" is absent when the Hub gives no address (the menu then holds "Download as CSV" alone). Searching by colour name and a "quick find" are not offered: this link is the answer. | `TopAppBar`, `DropdownMenu` |
 | Search field | Label "Brand, material, colour…", leading search icon, trailing clear `IconButton` ("Clear search") when not empty, `ImeAction.Search`. Searches 300 ms after typing stops once 2 or more characters are typed, and at once on the keyboard's search key. Clearing the field clears the results. No separate Search button. | `OutlinedTextField` |
 | Sealed only | Filter chip "Sealed only"; the whole chip toggles; re-runs the search. | `FilterChip` |
 | Running low | Filter chip "Running low (<n>)", `<n>` from `GET api/spools/low`; not shown when `<n>` is 0; the whole chip toggles. With it on, the results panel shows the Running low rows instead of the search results, least filament first: swatch, headline the filament name, supporting line "Spool 214 · 96 g left · Rack 1 · 2 more in stock" (or "Last one", with the warn triangle), chevron; tapping opens `spools/{id}`. Opened from Home's "<n> spools running low" line with the chip already on. | `FilterChip` |
@@ -932,6 +932,7 @@ PLA, Workshop X1 A1, 620 grams left"), bottom bar.
 | Result line | The last change on this screen, as a notice line of kind `ok` under the level bar: "Weight updated: 482 g left.", "Moved to Shelf B.", "Marked empty.", "Tag linked.", "Tag moved to this spool.", "Loaded into Workshop X1, slot A2." It stays until the next change or until the screen is left; it is announced politely. | Notice line |
 | Main action | "Update weight" opens 7.3. | `Button` |
 | Other actions | "Load into a printer" (outlined; opens 7.6; absent when the printers Feature is off); "Move" (outlined; opens 7.4). | `OutlinedButton` |
+| Latest events | Panel "Latest events", after Details: the spool's last ten events, newest first, each a `ListItem` with the Hub's own words as headline ("Moved Bambu Lab PETG HF Orange (212) to Shelf B.") and "2026-11-12 14:09 · Kitchen phone" (the time, `--mono`, and who) as supporting text. Empty: "Nothing has been recorded for this spool yet." `GET api/events` with `subject=spool:<id>` and `limit=10`; read when the screen opens and again after an Undo. No row has a button. | Panel, `ListItem` |
 | Details | Panel "Details", field rows: Location, Tag ("<tag ID>" `--mono`, or "None"), State ("Sealed", "Opened", "Empty"), Filament ("41"), Empty spool weight ("140 g"), Lot. A row whose value the Hub did not send is left out (16). | Panel, field rows |
 
 When the spool screen was opened from a tag, the header shows a tag status "Opened by tag <tag ID>" in `--fs-s`.
@@ -941,7 +942,7 @@ change from the Hub's answer. Offline: actions disabled with "Needs the Hub. Rec
 
 TalkBack order: back, title, connection, appearance, header (one node: "Polymaker PolyTerra PLA Charcoal Black,
 spool 214, PLA, colour 2B2B2E"), remaining (one node: "62 percent left: 620 of 1000 grams"), result line, Update
-weight, Load into a printer, Move, More actions, Details rows.
+weight, Load into a printer, Move, More actions, Details rows, Latest events.
 
 ### 7.3 Update weight (sheet destination `spools/{id}/weight`)
 
@@ -952,7 +953,7 @@ weight, Load into a printer, Move, More actions, Details rows.
 | Field | Label "Weight with spool", `KeyboardType.Decimal`, `--mono`, focused on open (the keyboard opens with the sheet). Supporting "Put the spool on the scale and type what it shows." Error "Enter grams above 0." |
 | Preview | 400 ms after a valid weight is typed the app asks the Hub for a dry run and shows, under the field: "Remaining becomes 482 g (now 620 g)." with a progress line while it asks. |
 | Buttons | "Cancel" (text) and "Save weight" (main), disabled until a preview is shown; the reason under the field: "Enter the weight to see the result first." "Saving…" with a spinner while saving. |
-| After saving | The sheet closes; the result line of 7.2 shows "Weight updated: 482 g left." |
+| After saving | The sheet closes; the result line of 7.2 shows "Weight updated: 482 g left." and the snackbar "Updated Polymaker PolyTerra PLA Charcoal Black (214): 482 g left." carries "Undo" (7.9). |
 | Leaving with a typed weight | Back or a scrim tap asks as 2.5 rule 1: "Leave without saving?" / "Your changes to the weight are not saved." / "Stay" (focused first) / "Leave without saving" (danger). |
 
 ### 7.4 Move (sheet destination `spools/{id}/move`)
@@ -965,13 +966,13 @@ with each location's `name` first and then with each `containers[].name` (the ap
 is marked "Now here" and selected; a text that matches nothing is shown as it is, under no location, and nothing is
 selected. Tapping another location saves at
 once ("Moving…" in its row), closes the sheet, sets the result line "Moved to Shelf B." and shows the snackbar
-"Moved to Shelf B." with "Undo" (moves it back with the same request). Empty list: "The Hub has no storage locations
+"Moved Bambu Lab PETG HF Orange (212) to Shelf B." with "Undo" for 10 s (7.9). Empty list: "The Hub has no storage locations
 yet. Add them on the Hub page under Settings > Storage locations." Error: notice line in the sheet.
 
 ### 7.5 Mark empty (dialog)
 
 From the overflow. `AlertDialog`: title "Mark spool 214 empty?", body "Polymaker PolyTerra PLA Charcoal Black (spool
-214) will be marked as used up.", buttons "Cancel" and "Mark empty" (danger, filled). After: result line "Marked empty."
+214) will be marked as used up.", buttons "Cancel" and "Mark empty" (danger, filled). After: result line "Marked empty." and the snackbar "Marked Polymaker PETG Teal (77) empty." with "Undo" (7.9).
 
 ### 7.6 Load into a printer (`spools/{id}/load…`)
 
@@ -988,7 +989,7 @@ While the load is being written Back is ignored (2.5 rule 2). Results:
 
 | Result | What happens |
 |---|---|
-| Loaded | The load stack closes; the spool screen's result line shows "Loaded into Workshop X1, slot A2." |
+| Loaded | The load stack closes; the spool screen's result line shows "Loaded into Workshop X1, slot A2." and the snackbar "Loaded Bambu Lab PETG HF Orange (212) into A2 of Workshop X1." carries "Undo" (7.9) |
 | Accepted, not shown yet | Same, with a `warn` result line: "The printer accepted it but hasn't shown the change yet." |
 | Waiting (the answer says `pending`) | The load stack closes; the result line is an `info` line: "Waiting for the spool to load in <slot>." The slot shows the waiting state (9.5) until the printer shows the load |
 | Connection lost during the write | The step stays open with a `bad` notice: "The connection dropped while loading, so the app can't tell if it worked. Check the printer's slot and the spool's location before trying again." Buttons "Open the printer" and "Done". |
@@ -1023,8 +1024,22 @@ line "Tag moved to this spool."
 **The spool already has a tag of its own** (the tapped tag is free; the Hub refuses the first "Link tag" with a
 conflict): a state of the preview, like the one above: `warn` notice "This spool already has a tag. Linking this
 one replaces it.", then the button "Replace this spool's tag" (main). "Cancel" returns to Find. On success: result
-line "Tag linked." Nothing is moved here, so the "Move the tag …" buttons and "Tag moved to this spool." are not
+line "Tag linked." and the snackbar "Linked tag 04A1B2C3D4 to Polymaker PolyTerra PLA Charcoal Black (214)." with "Undo" (7.9). Nothing is moved here, so the "Move the tag …" buttons and "Tag moved to this spool." are not
 used.
+
+### 7.9 Undo the last action
+
+After an action that changes a spool or a slot (Update weight 7.3, Move 7.4, Mark empty 7.5, Load 7.6, Link a tag 7.8,
+and Unload and Clear slot 9.5) the app shows a `Snackbar` that says what happened and carries "Undo" for 10 seconds, with
+the sentences of the Hub page (`03-hub-page.md` section 2.9): for Unload "Unloaded Bambu Lab PETG HF Orange (212) from
+A2 of Workshop X1." and for Clear slot "Cleared slot A2 of Workshop X1." The rule is the Hub's: an event is undone once,
+within 7 days, and only while nothing changed since. "Undo" reads the newest event of that spool or slot (`GET
+api/events` with `subject` and `limit=1`) and, when its `undo.possible` is true, sends `POST api/events/{id}/undo`; the
+snackbar then says "Put back." or the refusal "This changed again since, so it cannot be undone." (any other refusal as
+the Hub sends it), and after a load or an unload it adds "The printer still shows what it was set to." The screen's
+result line is replaced by the answer and the screen reads from the Hub again. There is no "Undo" when the event cannot
+be undone. The snackbar's time is as 3.1 says. Nothing else has an undo: removing a printer, a key, a pairing or a
+location still asks first.
 
 ---
 
@@ -1187,7 +1202,7 @@ autoplays sound.
 |  (o) Slots mapped (4)                |
 |  [ Map slots again ] [Map by loading]|
 |                                      |
-| Filament used (last 7 days)          |
+| Filament used (7 days) [By month]    |
 |  12.4 g · benchy.3mf · A2      Undo  |
 |  2026-11-12 14:05                    |
 |                                      |
@@ -1241,7 +1256,7 @@ screen in landscape with a close button.
 | `cert_changed` | "The printer's certificate changed. If you reset the printer or replaced its mainboard, forget its old certificate in Printer settings. If not, something else may be answering at the printer's address: check the printer's IP address first." |
 | any other code | "The camera could not be shown right now. Leave this screen and come back to try again." |
 
-**Slots panel** (9.5). **Slot mapping panel** (9.7). **Filament used panel** (9.10). A final row "Printer settings"
+**Slots panel** (9.5). **Slot mapping panel** (9.7). **Filament used panel** (9.10, with By month and Download as CSV). A final row "Printer settings"
 with a chevron opens 9.9.
 
 TalkBack order: back, title, connection, appearance, More actions; state line, progress (one node: "Printing
@@ -1287,6 +1302,8 @@ sets a spool again. Results, as notice lines under the slots: "Cleared slot A1. 
 a spool: "Cleared slot A1."); "No spool is waiting for A1 any more." when a waiting assignment ended; and, on a Bambu
 Lab printer (where `printer_cleared` is always false), "The printer still shows the old filament for this slot until a
 spool is loaded."
+
+After an unload and after a clear, the snackbar of 7.9 carries "Undo" too.
 
 ### 9.6 Pick a spool for a slot (`printers/{id}/slots/{slot}/pick`)
 
@@ -1405,6 +1422,13 @@ Trailing "Undo" (text button, 48 dp) where allowed. Undo asks: dialog "Put it ba
 2026-11-12 14:05)"), buttons "Keep" and "Put it back" (main). Result: the row shows "undone" and a notice line
 "12.4 g put back on spool 214." Empty: "Nothing logged in the last 7 days."
 
+**By month.** The text button "By month" in the panel's title row (then "Last 7 days") shows this printer's months instead of the
+rows: a table with Month (`--mono`), Grams, Prints, Prints that did not finish and Most used material, newest first, from
+`GET api/printers/{id}/usage` with `by=month`. At tablet width and up the monthly bars (`02-components.md` 7.12) are drawn
+above the table (`Canvas`), with "Show as table" open; on a phone the table alone. Empty: "Nothing used in the last 12
+months." The panel's overflow "More actions" has "Download as CSV" ("Last 7 days", "Last 30 days", "Last 12 months":
+`GET api/export/usage.csv` with `printer` and `days`), saved to the phone's downloads and offered in the share sheet.
+
 ### 9.11 Lines and results the printer screens also use
 
 The same texts on the Hub page and in the web app, where they show the same thing.
@@ -1474,6 +1498,7 @@ API routes that the app's pairing already allows.
 | Element | Text / behaviour | Material 3 |
 |---|---|---|
 | Header facts | "The newest 20 spool additions are kept with their photos (14.2 MB now)." from `keep` and `photo_bytes`. When the Label Reader is off: an extra line with the hollow circle "The Label Reader is switched off. Correct by hand, or switch it on in Features on the Hub page." | `Text` |
+| Top bar menu | The overflow "More actions" with "Download as CSV": the records as `recent.csv` (`GET api/export/recent.csv`), saved to the phone's downloads and offered in the share sheet. | `DropdownMenu` |
 | Filter | Segmented control "All 5" / "To check 2". Shown only when the Hub sends read confidence (16); otherwise absent. | `SingleChoiceSegmentedButtonRow` |
 | Rows | Thumbnail `thumb-s` of the first photo with the photo count in a small `--mono` badge, or a dashed box with "No photo" for the screen reader; headline the filaments ("Polymaker PolyTerra PLA Charcoal Black", "×2" tag when several spools); supporting "2026-11-12 14:05 · Spool 214" (`--mono`; "Spools 212, 213"); the state as a status; the source word ("From a phone photo", "From the Weigh Station", "Added by hand"); when there is confidence data, the lowest mark ("Colour: medium", "Low: Material, Net weight"). Chevron. Tapping opens `recent/{hid}`. | Panel, `ListItem` |
 | Empty | Empty state with the clock icon: title "Nothing added yet", text "No spool has been added since the history started. Spools added from the web app, the app or the Weigh Station appear here." | Empty state |
@@ -1815,6 +1840,7 @@ reached (`hub_page` is in the answer), the outlined button "Open the Hub page" (
 | Group | Content |
 |---|---|
 | Status | The Checks rows of the Hub page's Overview, each with its status (OK, Needs a look, Note, Off) and its fix line |
+| History | The changes of the last 7 days as a table, the table of the Hub page's Show history (`03-hub-page.md` 4.2): Time (`--mono`), Check, From, To, newest first; no strips. Empty: "No changes in the last 7 days." Where the history starts later: "No history before <date>." (`GET api/health` with `days=7`) |
 | Getting started | "<n> of <m> done"; shown only while steps remain and the Hub page's list is not hidden |
 | Version | "Installed <version>", "Newest <version>", "Last checked <time>"; the `info` line "Update available" when it is |
 | Features | One row per feature: its name and "On" or "Off" |
@@ -1823,6 +1849,7 @@ reached (`hub_page` is in the answer), the outlined button "Open the Hub page" (
 | Label Reader | "Engine: <engine>" and "Anthropic API key: Set" or "Not set"; never the key |
 | Devices | One row per device: its name, its kind and when it was last seen; this phone's row is marked "This phone". Names only: no addresses |
 | Recently added | "Records kept: <n>" |
+| A problem | "Collect a Hub report on the Hub page." |
 
 Everything is redacted as the Hub page's Overview is for a locked page: no addresses, no serial numbers, no secrets.
 Request: `GET api/hub`. Loading: skeleton rows. Error: `bad` notice "Could not read the Hub. <the Hub's text>" with "Try
@@ -1967,6 +1994,7 @@ The design above works with the Hub as it is. These additions to the Hub's paire
 | `POST api/library/local/form` with `{brand, name, material, nozzle_min?, nozzle_max?, bed_min?, bed_max?, density?, max_volumetric_speed?, bambu_parent?, notes?}` (201 `{entry}`; 400 `{error: "invalid_entry", problems: [{field, text}]}`), `GET api/library/local` (`{entries: [{id, brand, name, material, added}]}`), `DELETE api/library/local/{id}` (`{removed: true}`) | 8 | The form and the list are absent. |
 | `spoolman_url` in the answer of `GET api/spools` | 7.1 "Open Spoolman" | The item is absent. |
 | The header `X-Spoolwarden-Client: android/<version>` on every call, which the Hub keeps with the pairing | 12.8 (the Hub's Devices list names this phone and its version) | The Hub shows the phone without a version. |
+| `GET api/events` with `activity=1`, `subject=<type>:<id>` and `actor`, each event with `undo: {possible, until?, why_not?}`, `undone` and `undo_of?`; `POST api/events/{id}/undo` (200 `{undone: true, event, note?}`; 409 `{error, text}`; 404); `GET api/health` (`days`); `GET api/analytics` (`months`, `printer`); `GET api/printers/{id}/usage` with `by=month` (`{months: [{month, grams, prints, unfinished_prints, top_material?}]}`); `GET api/export/{set}.csv` for `usage`, `recent` and `spoolman-spools` | The spool screen's latest events 7.2, Undo 7.9, the Hub screen's history 12.8, By month 9.10, downloads 7.1, 9.10 and 10.1 | Until it exists the app shows none of them |
 
 Routes this design uses that today's app does not call, all already on the Hub's paired API (`server/filament_kit/api.py`,
 behind the paired-device check), so they need nothing new from the Hub:
