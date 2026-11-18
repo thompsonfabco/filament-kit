@@ -107,7 +107,7 @@ def test_no_getpass_left_in_the_cli_and_apply():
 def test_access_code_goes_through_the_masked_prompt(monkeypatch, capsys):
     asked = []
     monkeypatch.setattr(secret_input, "ask", lambda prompt: asked.append(prompt) or "ACCESS1234")
-    _stdin(monkeypatch, "10\na\nb\n192.0.2.20\nH2D\n0948ZZ0A0000001\n\nq\nq\n")
+    _stdin(monkeypatch, "11\na\nb\n192.0.2.20\nH2D\n0948ZZ0A0000001\n\nq\nq\n")
     cli.main(["config", "--numbered"])
     assert any("Access Code" in p for p in asked)
     assert "ACCESS1234" not in capsys.readouterr().out
@@ -116,7 +116,7 @@ def test_access_code_goes_through_the_masked_prompt(monkeypatch, capsys):
 def test_anthropic_key_in_config_goes_through_the_masked_prompt(monkeypatch, capsys):
     asked = []
     monkeypatch.setattr(secret_input, "ask", lambda prompt: asked.append(prompt) or "sk-ant-EXAMPLE")
-    _stdin(monkeypatch, "4\n2\nq\nq\ny\n")           # Label Reader, Anthropic API key, back, leave: unsaved, yes
+    _stdin(monkeypatch, "5\n2\nq\nq\ny\n")           # Label Reader, Anthropic API key, back, leave: unsaved, yes
     assert cli.main(["config", "--numbered"]) == 5
     assert any("Anthropic" in p for p in asked)
     assert "sk-ant-EXAMPLE" not in capsys.readouterr().out
