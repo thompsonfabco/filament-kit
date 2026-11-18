@@ -5,9 +5,10 @@ from __future__ import annotations
 
 import datetime
 import json
+import ssl
 import time
 from collections.abc import Callable
-from http.server import BaseHTTPRequestHandler
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
 def iso(t):
@@ -18,12 +19,38 @@ def age(t):
     return round(time.time() - t) if t else None
 
 
+class TlsServer(ThreadingHTTPServer):
+    """The station's listener: HTTPS only (R82 section 2: every listener another machine can reach). One thread per
+    caller; the TLS handshake happens in that thread (do_handshake_on_connect=False), so a caller that stalls in it
+    holds no one else up."""
+    daemon_threads = True
+
+    def __init__(self, address, handler, context: ssl.SSLContext):
+        self.context = context
+        super().__init__(address, handler)
+
+    def get_request(self):
+        sock, addr = self.socket.accept()
+        return self.context.wrap_socket(sock, server_side=True, do_handshake_on_connect=False), addr
+
+    def handle_error(self, request, client_address):
+        pass  # a failed handshake (a plain-HTTP caller, a scanner) or a dropped connection: nothing to log
+
+
+def tls_context(cert, key) -> ssl.SSLContext:
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+    ctx.load_cert_chain(cert, key)
+    return ctx
+
+
 def make_handler(state_view: Callable[[], dict], allow: set[str]) -> type[BaseHTTPRequestHandler]:
     """A handler class over `state_view()`: a snapshot of the station state plus "panel" (the panel's port); "photo" is the JPEG bytes."""
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "intake-station"
         sys_version = ""
+        timeout = 30    # a caller that stops talking (or never finishes the TLS handshake) frees its thread
 
         def _send(self, code, body):
             data = json.dumps(body).encode()

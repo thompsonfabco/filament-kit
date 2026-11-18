@@ -15,15 +15,19 @@ from __future__ import annotations
 import hashlib
 import http.client
 import json
+import logging
 import os
 import re
 import ssl
+import time
 import uuid
 import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path
 
 from .. import config
+
+log = logging.getLogger("intake-station")
 
 TIMEOUT = 90  # s: a Claude read takes 3-15 s; the station drops a late answer when red was pressed
 CONNECT_TIMEOUT = 5  # s per address: the link lists every server address, some (container bridges) unreachable
@@ -306,10 +310,11 @@ class ServerApi:
                 c.close()
         return 0, {"error": "unreachable", "message": str(last), "display": list(UNREACHABLE)}
 
-    def hello(self) -> tuple[int, dict]:
-        """One authenticated call that does nothing: `station pair` makes it so the token is claimed at once (an
-        unclaimed one lapses 10 minutes after `pair --station`)."""
-        return self._call("GET", "/api/station/hello")
+    def hello(self, values: dict | None = None) -> tuple[int, dict]:
+        """One authenticated call: `station pair` makes it so the token is claimed at once (an unclaimed one lapses 10
+        minutes after `pair --station`). `values`: what the station tells the Hub about itself (`fp`, `port`,
+        `version`: see announce), sent as the query of the call."""
+        return self._call("GET", "/api/station/hello" + ("?" + urllib.parse.urlencode(values) if values else ""))
 
     def tag_lookup(self, uid: str) -> tuple[int, dict]:
         return self._call("GET", "/api/station/tag/" + urllib.parse.quote(uid, safe=""))
@@ -325,3 +330,30 @@ class ServerApi:
 
     def save(self, body: dict) -> tuple[int, dict]:
         return self._call("POST", "/api/station/save", json.dumps(body).encode(), "application/json")
+
+
+def hello_values(fp: str, port: int) -> dict:
+    """The three values of the hello call (R82 section 2.3): the SHA-256 of the station's certificate, its port, and
+    the station software's version. The Hub keeps them with the station's pairing (pairing.record_station_hello)."""
+    from .. import __version__
+    return {"fp": fp, "port": port, "version": __version__}
+
+
+def announce(api_of, fp: str, port: int, tries: int = 20, wait: float = 30, sleep=time.sleep) -> bool:
+    """Tell the Hub the three values once the station has started (and so after its port or certificate changed). An
+    unpaired station does nothing (it tells the Hub when pairing restarts it); a Hub that does not answer is asked
+    again every `wait` seconds, `tries` times. `api_of()` gives the current ServerApi. True when the Hub took it."""
+    for n in range(tries):
+        api = api_of()
+        if not api.paired:
+            return False
+        status, body = api.hello(hello_values(fp, port))
+        if status == 200:
+            return True
+        log.info("telling the Hub about this station: %s %s", status, body.get("error") or "")
+        if status == 401:       # the token is no good: pairing again is the way out, not asking
+            return False
+        if n + 1 < tries:
+            sleep(wait)
+    return False
+
