@@ -35,6 +35,18 @@ object PrinterTexts {
     /** R83 point 2: on a Bambu Lab printer Clear slot changes only the Hub's record. Proposed key `printer_clear_bambu_note`. */
     const val CLEAR_BAMBU_NOTE = "The printer still shows the old filament for this slot until a spool is loaded."
 
+    /**
+     * R83 20:58.1: Unload's question by printer family. A Bambu Lab printer's slot setting is not touched (the catalogue
+     * `printer_unload_body*`); on a Klipper printer it is cleared too. Proposed key `printer_unload_body_klipper`.
+     */
+    fun unloadKlipperBody(spool: String, slot: String, location: String): String {
+        val goes = if (location.isBlank()) "its previous place" else location
+        return listOf(
+            "Unload $spool from $slot? It goes back to $goes.",
+            "The slot's setting on the printer is cleared too, when the printer is online and can do it.",
+        ).joinToString(" ")
+    }
+
     fun clearTitle(label: String): String = "Clear slot $label?"
 
     /**

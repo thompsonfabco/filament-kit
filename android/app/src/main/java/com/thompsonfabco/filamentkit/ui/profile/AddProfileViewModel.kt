@@ -9,6 +9,7 @@ import com.thompsonfabco.filamentkit.net.KitWire
 import com.thompsonfabco.filamentkit.net.LOCAL_NETWORK_MESSAGE
 import com.thompsonfabco.filamentkit.net.LocalEntry
 import com.thompsonfabco.filamentkit.net.LocalEntryResult
+import com.thompsonfabco.filamentkit.net.LocalLibrary
 import com.thompsonfabco.filamentkit.net.ParentList
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Job
@@ -35,7 +36,7 @@ interface ProfileApi {
     suspend fun addLocalEntryForm(values: JsonObject): LocalEntry = throw ApiError(NOT_FOUND, "not_found", "Not found")
 
     /** The owner's own entries; 404 from an older Hub. */
-    suspend fun localLibrary(): List<LocalEntry> = throw ApiError(NOT_FOUND, "not_found", "Not found")
+    suspend fun localLibrary(): LocalLibrary = throw ApiError(NOT_FOUND, "not_found", "Not found")
 
     /** Removes one of the owner's own entries; 404 when the Hub has no such entry. */
     suspend fun removeLocalEntry(id: String): Unit = throw ApiError(NOT_FOUND, "not_found", "Not found")
@@ -103,6 +104,8 @@ data class AddProfileUiState(
     val entriesUnavailable: Boolean = false,
     val entriesFailure: SaveFailure? = null,
     val entriesMessage: String? = null,
+    /** The materials the Hub's catalog knows (the form's Material choice); null: an older Hub sent none, the fixed list is used. */
+    val materials: List<String>? = null,
     /** The entry the "Remove ... ?" question is about. */
     val removeAsk: LocalEntry? = null,
     val removing: Boolean = false,
@@ -132,6 +135,20 @@ class AddProfileViewModel(
 
     init {
         _state.value.values[ProfileField.Material]?.let { loadParents(it.trim()) }
+        loadMaterials()
+    }
+
+    /** The Material choice comes from the Hub's list; an older Hub (404) or a failed read leaves the fixed list. */
+    private fun loadMaterials() {
+        viewModelScope.launch {
+            try {
+                val list = api.localLibrary().materials
+                _state.update { it.copy(materials = list) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+            }
+        }
     }
 
     /** A client appeared (the phone was paired): an old failure goes. */
@@ -218,8 +235,13 @@ class AddProfileViewModel(
         _state.update { it.copy(entriesLoading = true, entriesFailure = null, entriesMessage = null) }
         viewModelScope.launch {
             try {
-                val list = api.localLibrary()
-                _state.update { it.copy(entries = list, entriesLoading = false, entriesUnavailable = false) }
+                val library = api.localLibrary()
+                _state.update {
+                    it.copy(
+                        entries = library.entries, materials = library.materials ?: it.materials,
+                        entriesLoading = false, entriesUnavailable = false,
+                    )
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: ApiError) {

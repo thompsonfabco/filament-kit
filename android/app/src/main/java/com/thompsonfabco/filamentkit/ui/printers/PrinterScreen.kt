@@ -222,7 +222,7 @@ fun PrinterScreen(
     if (printer != null) {
         if (state.confirmStop) StopDialog(printer, state, viewModel)
         if (toolsState.confirmMap) MapDialog(printer, toolsState, tools)
-        state.unloadAsk?.let { UnloadDialog(it, state, viewModel) }
+        state.unloadAsk?.let { UnloadDialog(it, state.printer?.family == "klipper", state, viewModel) }
         state.clearAsk?.let { ClearDialog(it, state, viewModel) }
         toolsState.undoTarget?.let { UndoDialog(it, toolsState, tools) }
         sheetSlot?.let { label ->
@@ -657,7 +657,7 @@ private fun ClearDialog(ask: ClearAsk, state: PrinterUiState, viewModel: Printer
         title = PrinterTexts.clearTitle(ask.label),
         onClose = { if (state.clearing) say() else viewModel.cancelClear() },
         confirm = SwDialogButton(
-            PrinterTexts.CLEAR_SLOT, viewModel::confirmClear, kind = SwButtonKind.Main, busy = state.clearing,
+            PrinterTexts.CLEAR_SLOT, viewModel::confirmClear, kind = SwButtonKind.DestructiveFilled, busy = state.clearing,
         ),
         cancel = SwAction(stringResource(R.string.common_cancel), viewModel::cancelClear),
         cancelEnabled = !state.clearing,
@@ -668,7 +668,7 @@ private fun ClearDialog(ask: ClearAsk, state: PrinterUiState, viewModel: Printer
 }
 
 @Composable
-private fun UnloadDialog(ask: UnloadAsk, state: PrinterUiState, viewModel: PrinterViewModel) {
+private fun UnloadDialog(ask: UnloadAsk, klipper: Boolean, state: PrinterUiState, viewModel: PrinterViewModel) {
     val say = rememberBusySay()
     SwDialog(
         title = stringResource(R.string.printer_unload_title, ask.label),
@@ -681,7 +681,8 @@ private fun UnloadDialog(ask: UnloadAsk, state: PrinterUiState, viewModel: Print
     ) {
         BusyBack(state.unloading, say)
         Text(
-            if (ask.location.isBlank()) stringResource(R.string.printer_unload_body_noplace, ask.spool, ask.label)
+            if (klipper) PrinterTexts.unloadKlipperBody(ask.spool, ask.label, ask.location)
+            else if (ask.location.isBlank()) stringResource(R.string.printer_unload_body_noplace, ask.spool, ask.label)
             else stringResource(R.string.printer_unload_body, ask.spool, ask.label, ask.location),
             style = MaterialTheme.typography.bodyMedium,
         )

@@ -950,8 +950,14 @@ data class HubAnswer(
     val hubPage: String?,
 )
 
-/** One of the owner's own Filament Catalog entries (`GET /api/library/local`). [added] is the Hub's time text. */
+/**
+ * One of the owner's own Filament Catalog entries (`GET /api/library/local`). [added] is the Hub's time as it came: whole
+ * seconds since 1970 as text (a Hub since `ev1a-kit-side`), or ISO text from an older one; `hubTime`/`hubDay` read both.
+ */
 data class LocalEntry(val id: String, val brand: String, val name: String, val material: String, val added: String?)
+
+/** `GET /api/library/local`: the entries and the materials the catalog knows ([materials] null: an older Hub sent none). */
+data class LocalLibrary(val entries: List<LocalEntry>, val materials: List<String>?)
 
 /** One refused field of the catalog form: 400 `invalid_entry`, `problems: [{field, text}]`. */
 data class EntryProblem(val field: String, val text: String)
@@ -1026,6 +1032,14 @@ object KitWire {
 
     fun localEntries(root: JsonElement): List<LocalEntry> =
         ((root as? JsonObject)?.get("entries") as? JsonArray).orEmpty().mapNotNull { localEntry(it) }
+
+    /** The entries and, when the answer has a `materials` list, its non-blank names (an empty list stays empty). */
+    fun localLibrary(root: JsonElement): LocalLibrary {
+        val materials = ((root as? JsonObject)?.get("materials") as? JsonArray)?.mapNotNull {
+            (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.contentOrNull?.trim()?.takeIf { s -> s.isNotEmpty() }
+        }
+        return LocalLibrary(localEntries(root), materials)
+    }
 
     /** Null for an element without an id (it could not be removed). */
     fun localEntry(element: JsonElement): LocalEntry? {

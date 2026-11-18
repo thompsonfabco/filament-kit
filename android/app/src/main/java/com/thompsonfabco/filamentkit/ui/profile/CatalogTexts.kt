@@ -1,5 +1,7 @@
 package com.thompsonfabco.filamentkit.ui.profile
 
+import com.thompsonfabco.filamentkit.ui.hub.hubDay
+
 /**
  * The texts of the catalog form and the list of the owner's own entries (EV7b) that are not in the string catalogue
  * yet. Only the catalogue step (EV2) opens `strings/en.json`; each text here has a proposed key in the EV7b report and
@@ -28,14 +30,14 @@ object CatalogTexts {
     const val REMOVE = "Remove"
     const val REMOVING = "Removing…"
 
-    /** The materials the form offers; anything else is typed under "Other". */
+    /** The materials the form offers when the Hub sends none (an older Hub); anything else is typed under "Other". */
     val MATERIALS = listOf("PLA", "PETG", "ABS", "ASA", "TPU", "PC", "PA", "PVA", "HIPS", "PP")
 
     /** The line of one entry: brand and name, then the material and the day it was added when the Hub gave them. */
     fun entryLine(brand: String, name: String): String = listOf(brand, name).filter { it.isNotBlank() }.joinToString(" ")
 
     fun entryDetail(material: String, added: String?): String =
-        listOfNotNull(material.ifBlank { null }, added?.let { "Added $it" }).joinToString(" · ")
+        listOfNotNull(material.ifBlank { null }, hubDay(added)?.let { "Added $it" }).joinToString(" · ")
 
     fun removeTitle(brand: String, name: String): String = "Remove ${entryLine(brand, name)}?"
 

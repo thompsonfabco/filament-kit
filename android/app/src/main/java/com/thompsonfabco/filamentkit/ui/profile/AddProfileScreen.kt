@@ -277,7 +277,7 @@ private fun Group(@androidx.annotation.StringRes title: Int, s: AddProfileUiStat
             if (f == ProfileField.Parent) {
                 CatalogParentField(s.values[f].orEmpty(), s.parents, !s.saving, onPick = { vm.set(f, it) }, error = error)
             } else if (f == ProfileField.Material) {
-                MaterialField(s.values[f].orEmpty(), !s.saving, onPick = { vm.set(f, it) }, error = error)
+                MaterialField(s.values[f].orEmpty(), s.materials ?: CatalogTexts.MATERIALS, !s.saving, onPick = { vm.set(f, it) }, error = error)
             } else {
                 OutlinedTextField(
                     value = s.values[f].orEmpty(),
@@ -307,8 +307,8 @@ private const val BULLET = "• "
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MaterialField(value: String, enabled: Boolean, onPick: (String) -> Unit, error: String?) {
-    var other by rememberSaveable { mutableStateOf(value.isNotBlank() && value !in CatalogTexts.MATERIALS) }
+private fun MaterialField(value: String, materials: List<String>, enabled: Boolean, onPick: (String) -> Unit, error: String?) {
+    var other by rememberSaveable { mutableStateOf(value.isNotBlank() && value !in materials) }
     var open by remember { mutableStateOf(false) }
     val shown = if (other) CatalogTexts.MATERIAL_OTHER else value
     ExposedDropdownMenuBox(expanded = open && enabled, onExpandedChange = { open = it }) {
@@ -323,7 +323,7 @@ private fun MaterialField(value: String, enabled: Boolean, onPick: (String) -> U
             expanded = open && enabled, onDismissRequest = { open = false },
             containerColor = SpoolwardenTheme.colors.surface, shape = SpoolwardenTheme.shapes.r,
         ) {
-            CatalogTexts.MATERIALS.forEach { m ->
+            materials.forEach { m ->
                 SwMenuItem(m, { other = false; onPick(m); open = false }, checked = !other && m == value)
             }
             SwMenuItem(CatalogTexts.MATERIAL_OTHER, { if (!other) onPick(""); other = true; open = false }, checked = other)

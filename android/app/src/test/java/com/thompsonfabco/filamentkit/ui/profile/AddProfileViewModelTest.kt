@@ -4,6 +4,7 @@ import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
 import com.thompsonfabco.filamentkit.net.LocalEntry
 import com.thompsonfabco.filamentkit.net.LocalEntryResult
+import com.thompsonfabco.filamentkit.net.LocalLibrary
 import com.thompsonfabco.filamentkit.net.ParentList
 import com.thompsonfabco.filamentkit.ui.profile.ProfileField.BedMax
 import com.thompsonfabco.filamentkit.ui.profile.ProfileField.BedMin
@@ -314,6 +315,21 @@ class AddProfileViewModelTest {
         assertEquals("the typing is kept", "1.24", s.values[Density])
     }
 
+    @Test fun theMaterialChoiceComesFromTheHubAndTheFixedListIsTheFallback() = runTest(dispatcher) {
+        api.materials = listOf("PLA", "Wood PLA", "PEEK")
+        val vm = AddProfileViewModel(api)
+        advanceUntilIdle()
+        assertEquals(listOf("PLA", "Wood PLA", "PEEK"), vm.state.value.materials)
+        val older = FakeProfileApi()
+        val old = AddProfileViewModel(older)
+        advanceUntilIdle()
+        assertNull("an older Hub sends none: the screen uses CatalogTexts.MATERIALS", old.state.value.materials)
+        val missing = FakeProfileApi().apply { entriesError = ApiError(404, "not_found", "Not found") }
+        val m = AddProfileViewModel(missing)
+        advanceUntilIdle()
+        assertNull(m.state.value.materials)
+    }
+
     @Test fun theListOpensReadsOnceAndRemoveAsksFirst() = runTest(dispatcher) {
         api.entries = mutableListOf(LocalEntry("a", "SUNLU", "PLA+", "PLA", "2026-11-01"), LocalEntry("b", "Eryone", "Silk", "PLA", null))
         val vm = AddProfileViewModel(api)
@@ -323,7 +339,7 @@ class AddProfileViewModelTest {
         vm.toggleEntries()
         vm.toggleEntries()
         advanceUntilIdle()
-        assertEquals("closed and opened again does not read it twice", 1, api.listCalls)
+        assertEquals("one read for the form's materials, one for the list; closing and opening again adds none", 2, api.listCalls)
         vm.askRemove(vm.state.value.entries!![0])
         assertEquals("Remove SUNLU PLA+ from your own entries? Slicer presets are rebuilt.", CatalogTexts.removeQuestion("SUNLU", "PLA+"))
         assertTrue("nothing is removed until asked", api.removed.isEmpty())
@@ -396,10 +412,12 @@ private class FakeProfileApi : ProfileApi {
         return LocalEntry("new", "", "", "", null)
     }
 
-    override suspend fun localLibrary(): List<LocalEntry> {
+    var materials: List<String>? = null
+
+    override suspend fun localLibrary(): LocalLibrary {
         listCalls++
         entriesError?.let { throw it }
-        return entries.toList()
+        return LocalLibrary(entries.toList(), materials)
     }
 
     override suspend fun removeLocalEntry(id: String) {

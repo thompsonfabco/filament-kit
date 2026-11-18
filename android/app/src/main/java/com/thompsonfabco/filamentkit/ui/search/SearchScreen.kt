@@ -502,7 +502,7 @@ private fun LowSpoolsList(ui: SearchUi, onOpen: (SpoolSummary) -> Unit, online: 
         loaded = ui.lowLoaded,
         loading = ui.busy,
         isEmpty = ui.lowLoaded && ui.low.isEmpty(),
-        empty = { Text(pluralStringResource(R.plurals.running_low_home, 0, 0), style = MaterialTheme.typography.bodyLarge) },
+        empty = { Text(stringResource(R.string.running_low_empty), style = MaterialTheme.typography.bodyLarge) },
         error = ui.failure?.let { hubFailureText(it) },
         onTryAgain = onTryAgain,
         offline = !online,

@@ -537,7 +537,7 @@ class Api(
     }
 
     /** `GET api/library/local`: the owner's own entries; 404 `not_found` from an older Hub. */
-    suspend fun localLibrary(): List<LocalEntry> = KitWire.localEntries(call(request("api", "library", "local").get()))
+    suspend fun localLibrary(): LocalLibrary = KitWire.localLibrary(call(request("api", "library", "local").get()))
 
     /**
      * `POST api/library/local/form`: the Hub builds the entry from the form's [values] (brand, name, material and the

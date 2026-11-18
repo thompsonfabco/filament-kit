@@ -611,6 +611,15 @@ class PrinterViewModelTest {
         vm.stop()
     }
 
+    @Test fun unloadOnAKlipperPrinterSaysTheSlotSettingIsClearedToo() {
+        assertEquals(
+            "Unload Acme PLA from A1? It goes back to Shelf 2. The slot's setting on the printer is cleared too, when the printer is online and can do it.",
+            PrinterTexts.unloadKlipperBody("Acme PLA", "A1", "Shelf 2"),
+        )
+        assertTrue(PrinterTexts.unloadKlipperBody("Acme PLA", "A1", "").contains("goes back to its previous place."))
+        assertFalse(PrinterTexts.unloadKlipperBody("Acme PLA", "A1", "Shelf 2").contains("stays as it is"))
+    }
+
     @Test fun theClearTextsCarryTheNoteLast() {
         assertEquals("Clear slot A1? The Hub forgets the spool recorded here. $stillShows",
             PrinterTexts.clearQuestion("A1", null, null, PrinterTexts.clearNote(null, bambu = true)))
