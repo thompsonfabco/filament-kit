@@ -213,6 +213,8 @@ import com.thompsonfabco.filamentkit.ui.history.HistoryEditEntry
 import com.thompsonfabco.filamentkit.ui.history.HistoryListEntry
 import com.thompsonfabco.filamentkit.ui.history.HistoryPhotoEntry
 import com.thompsonfabco.filamentkit.ui.history.HistoryRecordEntry
+import com.thompsonfabco.filamentkit.ui.history.showUndoable
+import com.thompsonfabco.filamentkit.ui.history.undoHoldMs
 import com.thompsonfabco.filamentkit.ui.home.HomePrintersViewModel
 import com.thompsonfabco.filamentkit.ui.hub.HubGlanceRoute
 import com.thompsonfabco.filamentkit.ui.hub.HubScreen
@@ -1310,11 +1312,19 @@ internal fun FilamentKitApp(
                         val route = e.toRoute<PrinterPickRoute>()
                         PickSpoolEntry(
                             ::currentApi, route.id, route.slot,
-                            onLoaded = { name, confirmed ->
+                            onLoaded = { name, confirmed, undo ->
                                 nav.popBackStack()
                                 val said = if (confirmed) context.getString(R.string.spool_result_loaded, name, route.slot)
                                 else context.getString(R.string.spool_load_unconfirmed)
-                                pairScope.launch { toast.show(said, kind = if (confirmed) null else NoticeKind.Warn) }
+                                val kind = if (confirmed) null else NoticeKind.Warn
+                                // a load the Hub can undo (R84 3.3): Undo in the toast, held 10 s or the phone's recommended time
+                                pairScope.launch {
+                                    if (undo == null) {
+                                        toast.show(said, kind = kind)
+                                    } else {
+                                        toast.showUndoable(said, context.getString(R.string.common_undo), undo.event, undoHoldMs(context), undo.run, kind)
+                                    }
+                                }
                             },
                             onPairAgain = app.router::pairAgain,
                         )
