@@ -1204,11 +1204,12 @@ def test_a_redirect_during_install_or_fetch_is_never_cached(tmp_path):
 SW_ALERT_HARNESS = r"""
 const fs = require("fs"), vm = require("vm");
 const src = fs.readFileSync(process.argv[2], "utf8").replace("__VERSION__", "t");
-const handlers = {}, shown = [], opened = [], navigated = [], focused = [];
+const handlers = {}, shown = [], opened = [], navigated = [], focused = [], closed = [], live = [{ tag: "sw-condition-print-paused:p-3", close() { closed.push("p-3"); } }, { tag: "other", close() { closed.push("other"); } }];
 const win = (url, name) => ({ url, focus: async () => { focused.push(name); return win(url, name); }, navigate: async (u) => { navigated.push([name, u]); return win(u, name); } });
 let windows = [];
 const ctx = { URL, Response: { error: () => "error" },
-  self: { registration: { scope: "https://x/intake/", showNotification: async (t, o) => { shown.push([t, o]); } }, location: { origin: "https://x" },
+  self: { registration: { scope: "https://x/intake/", showNotification: async (t, o) => { shown.push([t, o]); },
+                          getNotifications: async (f) => live.filter((n) => !f || !f.tag || n.tag === f.tag) }, location: { origin: "https://x" },
           skipWaiting() {}, clients: { claim() {}, matchAll: async () => windows, openWindow: async (u) => { opened.push(u); } },
           addEventListener: (n, f) => { handlers[n] = f; } },
   caches: {}, fetch: async () => ({}) };
@@ -1219,13 +1220,15 @@ const click = (url) => handlers.notificationclick({ notification: { close() {}, 
   await push({ title: "Filament ran out on Workshop X1", body: "bracket.3mf is paused at 41 %.", tag: "sw-condition-print-paused:p-3", url: "https://x/intake/#printers/p-3" });
   await push({ title: "Running low: Elegoo PLA Red", body: "Spool 11 has 80 g left.", kind: "spool.low" });
   await push({});
+  await push({ clear: true, tag: "sw-condition-print-paused:p-3" });
+  await push({ clear: true });
   windows = [win("https://x/intake/#spools", "mine")];
   click("https://x/intake/#spools/low"); await click.p;
   windows = [win("https://other/", "foreign")];
   click("https://x/intake/#printers"); await click.p;
   windows = [];
   click("https://x/intake/#printers/p-3"); await click.p;
-  console.log(JSON.stringify({ shown, opened, navigated, focused }));
+  console.log(JSON.stringify({ shown, opened, navigated, focused, closed }));
 })();
 """
 
@@ -1246,6 +1249,7 @@ def test_the_service_worker_shows_every_alert_and_takes_a_window_to_the_place(tm
                                                                     "data": {"url": "https://x/intake/#printers/p-3"}}]
     assert out["shown"][1][1]["tag"] == "spool.low" and out["shown"][1][0] == "Running low: Elegoo PLA Red"
     assert out["shown"][2] == ["Alert", {"body": "", "tag": "alert", "data": {"url": "./"}}]          # a push without fields still shows
+    assert len(out["shown"]) == 3 and out["closed"] == ["p-3"]        # a clearing push closes the notification of its tag, alone, and shows nothing (without a tag it does nothing)
     assert out["navigated"] == [["mine", "https://x/intake/#spools/low"]]                            # the app's own window is taken there
     assert out["focused"] == ["mine"]
     assert out["opened"] == ["https://x/intake/#printers", "https://x/intake/#printers/p-3"]          # another site's window is left alone
