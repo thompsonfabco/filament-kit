@@ -15,12 +15,15 @@ Printers routes have them.
         with `code` (slot_in_use, printer_busy, no_preset, needs_developer_mode ...) and its sentence in `error`
     GET  printers/{serial}/usage[?days=7]       no code: {entries}, each with `spool`
     POST usage/{entry_id}/undo {code}           {entry}
-    POST printers/{serial}/camera/ticket {code} {ticket, expires_in: 60}: for a computer that is not trusted; the stream's address
-                                                then takes ?ticket=<ticket>. One ticket starts one stream within 60 s, for that printer only
-    GET  printers/{serial}/camera.mjpeg[?ticket=]   the stream as the kit route gives it: needs the cookie of a trusted computer or a
-                                                ticket (an image request cannot carry the code)
-    GET  printers/{serial}/camera/{name}        the HLS playlist and segments: the trusted computer's cookie only (a segment's address
-                                                cannot carry a ticket)
+    POST printers/{serial}/camera/ticket {code} {ticket, expires_in: 60}: for a computer that is not trusted (camera_ticket.py keeps the
+                                                tickets). The FIRST camera request with ?ticket=<ticket> (the stream or the HLS playlist) spends it
+                                                and sets the camera session's cookie (fk_setup_camera; path /setup/api/printers/<id>/camera, HttpOnly,
+                                                Secure, SameSite=Strict, no Max-Age): that printer, 10 minutes from its last camera request, in
+                                                memory (camera_ticket.py); at most 8 sessions, the ninth ticket is 429 `too_many_views`
+    GET  printers/{serial}/camera.mjpeg[?ticket=]   the stream as the kit route gives it: a ticket, the camera session's cookie or the cookie of
+                                                a trusted computer (an image request cannot carry the code)
+    GET  printers/{serial}/camera/{name}        the HLS playlist and segments: the same three; a segment's address has no ticket, its cookie goes along
+    POST printers/{serial}/camera/close         {closed: true}; needs only the camera session's cookie, and answers so also when there is none
 
 `routes(page, sm=None, camera_hub=None)`: `sm` is the Spoolman client (the page's own, by default the configured one), `camera_hub` the
 Hub's camera hub (bridge/camera.Hub; the server's one, as the kit routes have it); without one the camera answers 409.
@@ -29,57 +32,28 @@ from __future__ import annotations
 
 import math
 import re
-import secrets
-import threading
-import time
 
 import anyio
 from starlette.requests import Request
+from starlette.responses import JSONResponse
 
-from .. import config, inventory, storage
+from .. import camera_ticket, config, inventory, storage
 from ..bridge import camera, family, loading, mapping, pending, registry, usage
 from ..bridge.connection import ACTIONS, DEVELOPER_MODE_REASON, NoReply, PrinterOffline, UnknownPrinter
 from ..bridge.slottest import NoStatus, PrinterBusy
 from ..spoolman import Spoolman, SpoolmanError
 
 LABEL = re.compile(r"[A-Za-z0-9-]{1,16}")
-TICKET_TTL = 60
-TICKET_MAX = 64             # tickets held at once: the oldest go first, a flood of requests cannot grow the table
+SESSION_COOKIE = "fk_setup_camera"      # R83 ruled 22:20; a session cookie (no Max-Age): the Hub's memory decides the end
 MAX_DAYS = 366.0
 DAYS = 7.0
 OFFLINE = "the printer is offline; check that it is on and on the network"
-
-
-class Tickets:
-    """One-use stream tickets, in memory: `issue(serial)`, then `take(ticket, serial)` once within TICKET_TTL."""
-
-    def __init__(self, ttl: float = TICKET_TTL, clock=time.monotonic):
-        self.ttl, self.clock, self._held, self._lock = ttl, clock, {}, threading.Lock()
-
-    def issue(self, serial: str) -> str:
-        now, ticket = self.clock(), secrets.token_urlsafe(24)
-        with self._lock:
-            self._held = {t: v for t, v in self._held.items() if v[1] > now}
-            while len(self._held) >= TICKET_MAX:
-                self._held.pop(next(iter(self._held)))
-            self._held[ticket] = (serial, now + self.ttl)
-        return ticket
-
-    def take(self, ticket, serial: str) -> bool:
-        """True once, for the printer the ticket was issued for and within its time; the ticket is gone either way it is asked."""
-        if not isinstance(ticket, str):
-            return False
-        with self._lock:
-            held = self._held.pop(ticket, None)
-        return held is not None and held[0] == serial and held[1] > self.clock()
 
 
 def routes(page, sm: Spoolman | None = None, camera_hub=None) -> list[tuple]:
     from ..setup_page import NEED_CODE, Refused
 
     g, w = page.guard, (lambda fn: page.guard(fn, write=True))
-    tickets = Tickets()
-    page.camera_tickets = tickets
 
     def spoolman() -> Spoolman:
         return sm if sm is not None else Spoolman(config.load()["spoolman_url"])
@@ -135,6 +109,8 @@ def routes(page, sm: Spoolman | None = None, camera_hub=None) -> list[tuple]:
             raise mapped from None
 
     def known(serial: str) -> registry.Printer:
+        if serial not in registry.load():
+            camera_ticket.drop_printer(serial)  # a printer taken away ends its tickets and camera sessions
         p = page._entry(serial)         # 404 for none; 409 when its family's module is off
         if not p.configured:
             raise Refused(409, "that printer is not set up on this Hub", code="not_configured")
@@ -318,24 +294,50 @@ def routes(page, sm: Spoolman | None = None, camera_hub=None) -> list[tuple]:
         page.audit(request, f"usage {entry_id} undone")
         return {"entry": e}
 
-    # ---- the camera ----
+    # ---- the camera (camera_ticket.py keeps the tickets and the sessions) ----
     async def ticket(request, body):
         serial = page._serial(request)
         await call(known, serial)
         if hub() is None:
             raise Refused(409, "the camera is not running on this Hub", code="module_off")
         page.audit(request, f"printer {serial} camera ticket")
-        return {"ticket": tickets.issue(serial), "expires_in": TICKET_TTL}
+        try:
+            return camera_ticket.issue(serial)
+        except camera_ticket.TooManyViews as e:
+            raise Refused(429, str(e), code="too_many_views") from None
 
-    async def allowed(request, serial: str, ticket_ok: bool) -> None:
-        """The stream is for an unlocked page: the cookie of a trusted computer (the helper checks it, as it does a code), or, for
-        the picture stream, a ticket made for this printer. A stream request carries no code and no body."""
-        if ticket_ok and tickets.take(request.query_params.get("ticket"), serial):
-            return
+    async def allowed(request, serial: str) -> str | None:
+        """The camera is for an unlocked page, and a request carries no code: a ticket made for this printer (spent here: it opens
+        the camera session, whose id is returned to go in a cookie), the camera session's own cookie, or the cookie of a trusted
+        computer (the helper checks it, as it does a code)."""
+        given = request.query_params.get("ticket")
+        if given is not None:
+            try:
+                sid = camera_ticket.use_ticket(serial, given)
+            except camera_ticket.TooManyViews as e:
+                raise Refused(429, str(e), code="too_many_views") from None
+            if sid is not None:
+                return sid
+        if camera_ticket.verify_session(serial, request.cookies.get(SESSION_COOKIE)):
+            return None
         body: dict = {}
         if page._trusted_token(request, body) is None:
             raise Refused(403, NEED_CODE, field="code")
         await page._code_ok(request, body)
+        return None
+
+    def with_session(res, serial: str, sid: str | None):
+        if sid is not None:
+            c = camera_ticket.session_cookie(serial, sid)       # the path is the kit's; the name is the ruled one and it has no Max-Age
+            res.set_cookie(SESSION_COOKIE, sid, path=c["path"], secure=True, httponly=True, samesite="strict")
+        return res
+
+    async def close(request, body):
+        serial = page._serial(request)
+        r = camera_ticket.close_session(serial, request.cookies.get(SESSION_COOKIE))      # always {closed: true}
+        res = JSONResponse(r, headers={"Cache-Control": "no-store"})
+        res.delete_cookie(SESSION_COOKIE, path=camera_ticket.session_cookie(serial, "")["path"], secure=True, httponly=True, samesite="strict")
+        return res
 
     def stream_of(path: str, serial: str, request: Request):
         """The camera module's own handler for `path`, called with the path's parameters as the kit route has them."""
@@ -348,22 +350,22 @@ def routes(page, sm: Spoolman | None = None, camera_hub=None) -> list[tuple]:
         await call(known, serial)
         if hub() is None:
             raise Refused(409, "the camera is not running on this Hub", code="module_off")
-        await allowed(request, serial, True)
-        return await stream_of("/api/printers/{id}/camera.mjpeg", serial, request)
+        sid = await allowed(request, serial)
+        return with_session(await stream_of("/api/printers/{id}/camera.mjpeg", serial, request), serial, sid)
 
     async def hls(request, body):
         serial = page._serial(request)
         await call(known, serial)
         if hub() is None:
             raise Refused(409, "the camera is not running on this Hub", code="module_off")
-        await allowed(request, serial, False)
-        return await stream_of("/api/printers/{id}/camera/{name:path}", serial, request)
+        sid = await allowed(request, serial)
+        return with_session(await stream_of("/api/printers/{id}/camera/{name:path}", serial, request), serial, sid)
 
     one = "/printers/{serial}"
     return [(one + "/live", g(live), "GET"), (one + "/command", w(command), "POST"),
             (one + "/slots/{label}/load", w(slot_load), "POST"), (one + "/slots/{label}/unload", w(slot_unload), "POST"),
             (one + "/slots/{label}/clear", w(slot_clear), "POST"),
             (one + "/usage", g(usage_list), "GET"), ("/usage/{entry_id}/undo", w(usage_undo), "POST"),
-            (one + "/camera/ticket", w(ticket), "POST"),
+            (one + "/camera/ticket", w(ticket), "POST"), (one + "/camera/close", g(close), "POST"),
             (one + "/camera.mjpeg", g(mjpeg), "GET"), (one + "/camera/{name:path}", g(hls), "GET")]
 
