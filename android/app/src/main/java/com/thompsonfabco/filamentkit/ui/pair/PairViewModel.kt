@@ -114,7 +114,8 @@ class PairViewModel(
 
     /**
      * Reads the certificate [host]:[port] presents; the screen it was asked from ([from]) shows a failure.
-     * With [tryFirst], that port is probed first and [port] only if it fails; a failure shows the error of [port].
+     * With [tryFirst], that port is probed first and [port] only if it fails or does not answer as a Hub;
+     * a failure shows the error of [port].
      */
     private fun probe(host: String, port: Int, from: Step, tryFirst: Int? = null) {
         if (_state.value.busy) return
@@ -128,7 +129,11 @@ class PairViewModel(
                     backend.probe(host, port)
                 } else {
                     try {
-                        backend.probe(host, tryFirst).also { used = tryFirst }
+                        // Any TLS server answers a probe; only a Hub answering api/info makes it the port.
+                        backend.probe(host, tryFirst).also {
+                            backend.info(host, tryFirst, it, null)
+                            used = tryFirst
+                        }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (_: Exception) {

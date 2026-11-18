@@ -73,7 +73,7 @@ class PairViewModelTest {
         assertEquals(Step.Confirm, ui.step)
         assertEquals(FP, ui.fingerprint)
         assertEquals(443, ui.port)
-        assertEquals(listOf("probe 10.0.0.2:443"), backend.calls)
+        assertEquals(listOf("probe 10.0.0.2:443", "info"), backend.calls)
         assertNull(settings.saved)
     }
 
@@ -81,7 +81,52 @@ class PairViewModelTest {
         vm.submitAddress("10.0.0.2", "  ")
         assertEquals(Step.Confirm, ui.step)
         assertEquals(443, ui.port)
-        assertEquals(listOf("probe 10.0.0.2:443"), backend.calls)
+        assertEquals(listOf("probe 10.0.0.2:443", "info"), backend.calls)
+    }
+
+    @Test fun aBlankPortSkips443WhenItIsNotAHub() {
+        backend.probeResult = { if (backend.calls.last().endsWith(":443")) "b".repeat(64) else FP }
+        backend.infoResult = { _ ->
+            if (backend.calls.count { it.startsWith("probe") } == 1) throw ApiError(404, "not_found", "x") else ServerInfo("Workshop server", "1", 1)
+        }
+        vm.submitAddress("10.0.0.2", "")
+        assertEquals(Step.Confirm, ui.step)
+        assertFalse(ui.busy)
+        assertNull(ui.error)
+        assertEquals(8710, ui.port)
+        assertEquals(FP, ui.fingerprint)
+        assertEquals(listOf("probe 10.0.0.2:443", "info", "probe 10.0.0.2:8710"), backend.calls)
+    }
+
+    @Test fun aBlankPortStaysBusyBetweenTheTwoProbes() {
+        val gate = CompletableDeferred<Unit>()
+        val slow = object : PairingBackend by backend {
+            override suspend fun info(host: String, port: Int, fingerprint: String, token: String?): ServerInfo {
+                gate.await()
+                throw ApiError(404, "not_found", "x")
+            }
+        }
+        val slowVm = PairViewModel(settings, slow, CoroutineScope(UnconfinedTestDispatcher()))
+        slowVm.submitAddress("10.0.0.2", "")
+        assertTrue(slowVm.state.value.busy)
+        assertNull(slowVm.state.value.error)
+        gate.complete(Unit)
+        assertEquals(Step.Confirm, slowVm.state.value.step)
+        assertEquals(8710, slowVm.state.value.port)
+    }
+
+    @Test fun cancellationDuringTheHubCheckIsNotAFallback() {
+        val cancelling = object : PairingBackend by backend {
+            override suspend fun info(host: String, port: Int, fingerprint: String, token: String?): ServerInfo {
+                backend.calls += "info"
+                throw kotlinx.coroutines.CancellationException("cancelled")
+            }
+        }
+        val cancelVm = PairViewModel(settings, cancelling, CoroutineScope(UnconfinedTestDispatcher()))
+        cancelVm.submitAddress("10.0.0.2", "")
+        assertEquals(listOf("probe 10.0.0.2:443", "info"), backend.calls)
+        assertNull(cancelVm.state.value.error)
+        assertEquals(Step.Address, cancelVm.state.value.step)
     }
 
     @Test fun aBlankPortFallsBackToTheOldPortAndKeepsIt() {
@@ -142,6 +187,7 @@ class PairViewModelTest {
         busyVm.submitAddress("10.0.0.3", "")
         assertEquals(listOf("probe 10.0.0.2:443"), backend.calls)
         gate.complete(Unit)
+        assertEquals(listOf("probe 10.0.0.2:443", "info"), backend.calls)
         assertEquals(Step.Confirm, busyVm.state.value.step)
     }
 
