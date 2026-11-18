@@ -58,6 +58,12 @@ class HistoryTest {
         val undos = mutableListOf<Int>()
         val photoCalls = mutableListOf<Int>()
         var lists = 0
+        val exports = mutableListOf<String>()
+        var exportError: Exception? = null
+        override suspend fun exportCsv(set: String, to: java.io.File, days: Int?, printer: String?) {
+            exports += set
+            exportError?.let { throw it }
+        }
         var ai = true
         var error: Exception? = null
         var listError: Exception? = null
@@ -730,5 +736,33 @@ class HistoryTest {
         vm.clientSeen("one"); runCurrent()
         vm.clientSeen("two"); runCurrent()
         assertEquals(before, vm.state.value.record)
+    }
+
+    // ---- Download as CSV (R84 6.5) ----
+
+    @Test fun downloadAsCsvAsksForTheRecentSetAndHandsTheFileToTheScreen() = runTest(dispatcher) {
+        val list = HistoryListViewModel(fake)
+        val file = java.io.File("recent.csv")
+        list.downloadCsv(file); runCurrent()
+        assertEquals(listOf("recent"), fake.exports)
+        assertEquals(file, list.state.value.csvFile)
+        assertFalse(list.state.value.csvBusy)
+        list.csvShown(null)
+        assertNull(list.state.value.csvFile)
+    }
+
+    @Test fun anOlderHubAndAFullPhoneHaveTheirOwnWordsForTheRecentDownload() = runTest(dispatcher) {
+        val list = HistoryListViewModel(fake)
+        fake.exportError = ApiError(404, "not_found", "The Hub returned an error (404)")
+        list.downloadCsv(java.io.File("a.csv")); runCurrent()
+        assertEquals(RecentFailure.Hub(HistoryTexts.CSV_UPDATE_HUB), list.state.value.csvProblem)
+        assertNull(list.state.value.csvFile)
+        fake.exportError = ApiError(0, "storage", "disk full")
+        list.downloadCsv(java.io.File("a.csv")); runCurrent()
+        assertEquals(RecentFailure.Hub(HistoryTexts.CSV_NOT_SAVED), list.state.value.csvProblem)
+        fake.exportError = ApiError(401, "unauthorized", "nope")
+        list.downloadCsv(java.io.File("a.csv")); runCurrent()
+        assertTrue(list.state.value.unauthorized)
+        assertNull(list.state.value.error)
     }
 }

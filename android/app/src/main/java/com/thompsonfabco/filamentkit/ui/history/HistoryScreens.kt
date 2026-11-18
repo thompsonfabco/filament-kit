@@ -46,12 +46,18 @@ import com.thompsonfabco.filamentkit.net.HistorySummary
 import com.thompsonfabco.filamentkit.ui.components.DetailPresentation
 import com.thompsonfabco.filamentkit.ui.components.HubNotice
 import com.thompsonfabco.filamentkit.ui.components.HubNoticeKind
+import com.thompsonfabco.filamentkit.ui.components.NoticeCard
+import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 import com.thompsonfabco.filamentkit.ui.components.ScreenState
+import com.thompsonfabco.filamentkit.ui.components.ScreenTopBarActions
 import com.thompsonfabco.filamentkit.ui.components.SwAction
 import com.thompsonfabco.filamentkit.ui.components.SwCardDetail
 import com.thompsonfabco.filamentkit.ui.components.SwEmptyState
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
+import com.thompsonfabco.filamentkit.ui.components.SwIconButton
 import com.thompsonfabco.filamentkit.ui.components.SwLazyCollection
+import com.thompsonfabco.filamentkit.ui.components.SwMenu
+import com.thompsonfabco.filamentkit.ui.components.SwMenuItem
 import com.thompsonfabco.filamentkit.ui.components.SwPaneLayout
 import com.thompsonfabco.filamentkit.ui.components.SwSheetDetail
 import com.thompsonfabco.filamentkit.ui.components.SwTile
@@ -114,9 +120,42 @@ internal fun HistoryListScreen(
     onSummary: (String) -> Unit = {},
 ) {
     val s by vm.state.collectAsState()
-    val resources = androidx.compose.ui.platform.LocalContext.current.resources
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val resources = context.resources
     LaunchedEffect(s.history) {
         s.history?.let { onSummary(recentSummary(it, resources)) }
+    }
+    // Download as CSV (R84 6.5): in the screen's menu once the list is here; the file goes to the system share sheet
+    val csv = s.csvFile
+    val csvSubject = stringResource(R.string.nav_recently_added)
+    LaunchedEffect(csv) {
+        if (csv != null) {
+            vm.csvShown(
+                when (shareCsv(context, csv, csvSubject)) {
+                    CsvOutcome.Opened -> null
+                    CsvOutcome.NoApp -> RecentFailure.Hub(context.getString(R.string.printer_report_no_app))
+                },
+            )
+        }
+    }
+    if (s.history != null) {
+        ScreenTopBarActions {
+            var open by remember { mutableStateOf(false) }
+            Box {
+                SwIconButton(R.drawable.sw_ic_more, stringResource(R.string.common_more_actions), { open = true })
+                SwMenu(open, { open = false }) {
+                    SwMenuItem(
+                        if (s.csvBusy) HistoryTexts.DOWNLOADING else HistoryTexts.DOWNLOAD_CSV,
+                        {
+                            open = false
+                            csvTarget(context, csvFileName("recent", null))?.let(vm::downloadCsv)
+                                ?: vm.csvShown(RecentFailure.Hub(HistoryTexts.CSV_NOT_SAVED))
+                        },
+                        enabled = !s.csvBusy,
+                    )
+                }
+            }
+        }
     }
     val presentation = rememberDetailPresentation()
     val useCardDetail = presentation == DetailPresentation.Card && recordDetail != null
@@ -165,6 +204,7 @@ internal fun HistoryListScreen(
                     s.mismatch != null -> HubNotice(HubNoticeKind.CertificateChanged, onPairAgain)
                     s.unauthorized -> HubNotice(HubNoticeKind.NoLongerPaired, onPairAgain)
                 }
+                s.csvProblem?.let { NoticeCard(NoticeKind.Bad, failureText(it)) }
                 val offline = failure == RecentFailure.Offline
                 val ago = remember(s.loadedAt, s.error) { s.loadedAt?.let { (System.currentTimeMillis() - it) / MS_PER_S } ?: 0L }
                 ScreenState(

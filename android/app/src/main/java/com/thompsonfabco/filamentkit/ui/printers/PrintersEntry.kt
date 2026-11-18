@@ -102,7 +102,7 @@ fun ManualMapEntry(currentApi: () -> Api, id: String, onBack: () -> Unit, onPair
 
 /** Pick a spool for slot [slot] of a printer; [onLoaded] says whether the printer already shows the load. */
 @Composable
-fun PickSpoolEntry(currentApi: () -> Api, id: String, slot: String, onLoaded: (printerName: String, confirmed: Boolean) -> Unit, onPairAgain: () -> Unit) {
+fun PickSpoolEntry(currentApi: () -> Api, id: String, slot: String, onLoaded: (printerName: String, confirmed: Boolean, undo: LoadUndo?) -> Unit, onPairAgain: () -> Unit) {
     val backend = remember { ApiPrinterBackend(currentApi) }
     val printer = viewModel { PrinterViewModel(backend, id) }
     LaunchedEffect(printer) { printer.retry() }
@@ -113,9 +113,11 @@ fun PickSpoolEntry(currentApi: () -> Api, id: String, slot: String, onLoaded: (p
     val vm = viewModel { PickSpoolViewModel(ApiPickBackend(currentApi), id, slot, gate) }
     // the pick screen sits directly on the printer's screen, so leaving is Back
     val back = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
+    // the Undo the Hub offers arrives just before the result, and goes out with it
+    var undo by remember { mutableStateOf<LoadUndo?>(null) }
     PickSpoolScreen(
-        vm, name, slot, onLoaded = { confirmed -> onLoaded(name.orEmpty(), confirmed) }, onPairAgain = onPairAgain,
-        onLeave = { back?.onBackPressed() },
+        vm, name, slot, onLoaded = { confirmed -> onLoaded(name.orEmpty(), confirmed, undo) }, onPairAgain = onPairAgain,
+        onLeave = { back?.onBackPressed() }, onUndoable = { undo = it },
         onOpenTag = { TagEvents.emitWhenListening(it) },
     )
 }

@@ -7,6 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
 import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.ActivityEvent
+import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 import com.thompsonfabco.filamentkit.ui.components.SwToastState
 import com.thompsonfabco.filamentkit.ui.spool.SpoolResult
 import com.thompsonfabco.filamentkit.ui.spool.formatGrams
@@ -32,12 +33,13 @@ internal suspend fun SwToastState.showUndoable(
     event: ActivityEvent?,
     holdMs: Long,
     undo: suspend (ActivityEvent) -> UndoOutcome,
+    kind: NoticeKind? = null,
 ) {
     if (event == null) {
-        show(text)
+        show(text, kind = kind)
         return
     }
-    if (show(text, undoLabel, holdMs = holdMs) != SnackbarResult.ActionPerformed) return
+    if (show(text, undoLabel, kind = kind, holdMs = holdMs) != SnackbarResult.ActionPerformed) return
     show(undo(event).text)
 }
 

@@ -1,1 +1,2 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PickSpool.kt | spool:${} | not text: the Hub's subject of a spool's events (HD9b)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PickSpool.kt | unauthorized | Hub identifier (printer state, job state, error code or field name), never shown

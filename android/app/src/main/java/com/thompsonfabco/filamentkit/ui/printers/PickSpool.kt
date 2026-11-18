@@ -27,6 +27,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.thompsonfabco.filamentkit.R
+import com.thompsonfabco.filamentkit.net.ActivityEvent
 import com.thompsonfabco.filamentkit.net.Api
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
@@ -43,6 +44,11 @@ import com.thompsonfabco.filamentkit.ui.components.SwDialog
 import com.thompsonfabco.filamentkit.ui.components.SwDialogButton
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
 import com.thompsonfabco.filamentkit.ui.components.SwProgress
+import com.thompsonfabco.filamentkit.ui.history.ActivityBackend
+import com.thompsonfabco.filamentkit.ui.history.UndoFlow
+import com.thompsonfabco.filamentkit.ui.history.UndoKinds
+import com.thompsonfabco.filamentkit.ui.history.UndoOffer
+import com.thompsonfabco.filamentkit.ui.history.UndoOutcome
 import com.thompsonfabco.filamentkit.ui.add.TagTaps
 import com.thompsonfabco.filamentkit.ui.spool.LoadGate
 import com.thompsonfabco.filamentkit.ui.spool.SpoolSummary
@@ -61,7 +67,7 @@ import java.math.BigDecimal
 import com.thompsonfabco.filamentkit.ui.spool.SpoolTile
 
 /** The calls "Pick a spool for a slot" makes; [ApiPickBackend] adapts the Api, tests pass a fake. */
-interface PickBackend {
+interface PickBackend : ActivityBackend {
     suspend fun search(query: String, sealedOnly: Boolean): List<JsonObject>
 
     /** The spool linked to tag [uid], or null when the tag is not linked. */
@@ -75,7 +81,12 @@ class ApiPickBackend(private val current: () -> Api) : PickBackend {
     override suspend fun tag(uid: String) = current().tag(uid)
     override suspend fun load(printerId: String, label: String, spoolId: Int, dryRun: Boolean) =
         current().load(printerId, label, spoolId, dryRun)
+    override suspend fun activity(subject: String, limit: Int) = current().activity(subject, limit)
+    override suspend fun undoEvent(id: Long) = current().undoEvent(id)
 }
+
+/** The Undo the Hub offers for a load that went through (R84 3.3): the event it wrote and how to undo it, after the pick screen has gone. */
+class LoadUndo(val event: ActivityEvent, val run: suspend (ActivityEvent) -> UndoOutcome)
 
 /** The dry run of a load into this slot: what the Hub says it would do, before the real load. */
 data class LoadPreview(
@@ -101,6 +112,8 @@ data class PickUiState(
     val unlinkedTag: String? = null,
     /** The load went through: [confirmed] is whether the printer already shows it. */
     val loaded: Boolean? = null,
+    /** The event the load wrote, when the Hub lets it be undone; read before [loaded] is set, so the toast can offer Undo. */
+    val loadedEvent: ActivityEvent? = null,
     /**
      * A tag tapped while the load was written (the last tap wins). After a load that went through it opens at once; after
      * a refused or lost one it waits until the preview is left, so the reason stays readable.
@@ -120,6 +133,7 @@ class PickSpoolViewModel(
     private val printerId: String,
     private val slot: String,
     private val gate: LoadGate = LoadGate(),
+    private val undoFlow: UndoFlow = UndoFlow(backend),
 ) : ViewModel() {
     private val _state = MutableStateFlow(PickUiState())
     val state: StateFlow<PickUiState> = _state.asStateFlow()
@@ -272,7 +286,9 @@ class PickSpoolViewModel(
         viewModelScope.launch {
             try {
                 val done = backend.load(printerId, slot, p.spool.id, dryRun = false)
-                _state.update { it.copy(preview = null, loaded = done.confirmed) }
+                // the answer carries no event id: read it from the spool's newest events (an older Hub, or none: no Undo)
+                val event = undoFlow.find(UndoOffer(listOf("spool:${p.spool.id}"), setOf(UndoKinds.LOADED)))
+                _state.update { it.copy(preview = null, loaded = done.confirmed, loadedEvent = event) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -293,7 +309,10 @@ class PickSpoolViewModel(
     }
 
     /** The screen has said how the load went. */
-    fun loadedShown() = _state.update { it.copy(loaded = null, heldTag = null) }
+    fun loadedShown() = _state.update { it.copy(loaded = null, loadedEvent = null, heldTag = null) }
+
+    /** Undoes the load [event] wrote; a refusal is an outcome with its words. Needs no screen, so it works after this one is left. */
+    suspend fun undoLoad(event: ActivityEvent): UndoOutcome = undoFlow.undo(event)
 
     /**
      * Words for a failed dry run or load. A 401 to the real load is the Hub refusing before it did anything; a lost
@@ -335,6 +354,8 @@ fun PickSpoolScreen(
     onPairAgain: () -> Unit,
     onLeave: () -> Unit = {},
     onOpenTag: (String) -> Unit = {},
+    /** The load went through and the Hub lets it be undone: called just before [onLoaded], for the toast's Undo. */
+    onUndoable: (LoadUndo) -> Unit = {},
 ) {
     val s by viewModel.state.collectAsState()
     val toast = LocalToast.current
@@ -354,7 +375,9 @@ fun PickSpoolScreen(
     LaunchedEffect(s.loaded) {
         s.loaded?.let {
             val held = s.heldTag
+            val event = s.loadedEvent
             viewModel.loadedShown()
+            event?.let { e -> onUndoable(LoadUndo(e, viewModel::undoLoad)) }
             onLoaded(it)
             // the tag that waited for the load opens now, where the screen went back to
             held?.let(onOpenTag)
