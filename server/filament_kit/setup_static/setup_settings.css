@@ -141,6 +141,8 @@
 .storage__form .group__foot { padding-inline: 0; background: none; }
 :root[data-look="palette"] .coll--storage .coll__cell[data-col="actions"] > .actions { flex-wrap: wrap; }
 
-/* the backup password's warning sentence is long: in a narrow group it takes the banner's full width (icon above) instead of the width beside the icon */
+/* the backup password's warning sentence is long: in a narrow group it takes the banner's full width (icon above) instead of the width beside the icon.
+   Edge 344px = the least column that holds the sentence in 3 lines in the widest font (288px = s7 * 6) + the icon (s4 + s1 = 20px) + the gap (s3 = 12px)
+   + the banner's padding either side (2 * s3 = 24px). */
 .backup-password { container-type: inline-size; }
-@container (max-width: 26rem) { .backup-password .banner__text { flex-basis: 100%; } }
+@container (max-width: 344px) { .backup-password .banner__text { flex-basis: 100%; } }
