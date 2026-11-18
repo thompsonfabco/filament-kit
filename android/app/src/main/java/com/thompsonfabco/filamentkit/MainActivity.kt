@@ -215,6 +215,7 @@ import com.thompsonfabco.filamentkit.ui.history.HistoryRecordEntry
 import com.thompsonfabco.filamentkit.ui.home.HomePrintersViewModel
 import com.thompsonfabco.filamentkit.ui.hub.HubGlanceRoute
 import com.thompsonfabco.filamentkit.ui.hub.HubScreen
+import com.thompsonfabco.filamentkit.ui.hub.HealthViewModel
 import com.thompsonfabco.filamentkit.ui.hub.HubViewModel
 import com.thompsonfabco.filamentkit.ui.hub.gettingStartedLine
 import com.thompsonfabco.filamentkit.ui.hub.hubPlaceTitle
@@ -450,6 +451,11 @@ internal fun FilamentKitApp(
         initializer { HubViewModel(load = { currentApi().hub() }) }
     })
     val hubUi by hubVm.state.collectAsStateWithLifecycle()
+    // the check history table on the Hub screen (R84 4.3)
+    val healthVm: HealthViewModel = viewModel(key = "hub-health-${System.identityHashCode(api)}", factory = viewModelFactory {
+        initializer { HealthViewModel(load = { days -> currentApi().health(days) }) }
+    })
+    val healthUi by healthVm.state.collectAsStateWithLifecycle()
     fun openHubGlance() = nav.navigate(HubGlanceRoute) { launchSingleTop = true }
     fun pushPairing() {
         if (nav.leaveSettingsForPairing()) return
@@ -617,8 +623,8 @@ internal fun FilamentKitApp(
                 HubNoticePage(::pushPairing)
                 return@composable
             }
-            LaunchedEffect(api, online) { if (online) hubVm.refresh() }
-            HubScreen(hubUi, online, onTryAgain = hubVm::refresh)
+            LaunchedEffect(api, online) { if (online) { hubVm.refresh(); healthVm.refresh() } }
+            HubScreen(hubUi, online, onTryAgain = hubVm::refresh, health = healthUi, onHealthDays = healthVm::setDays, onHealthTryAgain = healthVm::refresh)
         }
 
         composable<SpoolRoute> { e ->

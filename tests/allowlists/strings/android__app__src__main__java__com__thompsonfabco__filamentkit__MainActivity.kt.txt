@@ -5,5 +5,6 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/MainActivity.kt | Simula
 android/app/src/main/java/com/thompsonfabco/filamentkit/MainActivity.kt | Tag UID | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/MainActivity.kt | catalog_prefill | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/MainActivity.kt | hub-glance-${} | wire key, route or header of phase 3 (EV7a), not a text; found by the widened scan (request 0238)
+android/app/src/main/java/com/thompsonfabco/filamentkit/MainActivity.kt | hub-health-${} | not text: a view model key (HD9)
 android/app/src/main/java/com/thompsonfabco/filamentkit/MainActivity.kt | preset-updates-${} | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/MainActivity.kt | spool-${} | viewModel key for an embedded spool detail, never shown
