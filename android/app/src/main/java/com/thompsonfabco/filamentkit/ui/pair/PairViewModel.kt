@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 const val DEFAULT_PORT = 8710
+private const val HTTPS_PORT = 443
 
 enum class Step { Choose, Address, Confirm, Code, Done }
 
@@ -99,26 +100,42 @@ class PairViewModel(
     fun submitAddress(hostInput: String, portInput: String) {
         if (_state.value.busy) return
         val host = hostInput.trim()
-        val port = if (portInput.isBlank()) DEFAULT_PORT else portInput.trim().toIntOrNull()
+        val blank = portInput.isBlank()
+        val port = if (blank) DEFAULT_PORT else portInput.trim().toIntOrNull()
         if (host.isEmpty()) return fail(host, DEFAULT_PORT, R.string.pair_address_error_empty, PairField.Address)
         if (port == null || port !in 1..65535) {
             return fail(host, DEFAULT_PORT, R.string.pair_address_error_port, PairField.Port)
         }
-        probe(host, port, Step.Address)
+        // No port typed: a new Hub listens on 443, an existing one on 8710; the one that answers is kept.
+        probe(host, port, Step.Address, tryFirst = if (blank) HTTPS_PORT else null)
     }
 
-    /** Reads the certificate [host]:[port] presents; the screen it was asked from ([from]) shows a failure. */
-    private fun probe(host: String, port: Int, from: Step) {
+    /**
+     * Reads the certificate [host]:[port] presents; the screen it was asked from ([from]) shows a failure.
+     * With [tryFirst], that port is probed first and [port] only if it fails; a failure shows the error of [port].
+     */
+    private fun probe(host: String, port: Int, from: Step, tryFirst: Int? = null) {
         if (_state.value.busy) return
         confirmed = false
         fromList = from == Step.Choose
-        _state.value = PairUi(step = from, host = host, port = port, busy = true)
+        _state.value = PairUi(step = from, host = host, port = tryFirst ?: port, busy = true)
         scope.launch {
             try {
-                val fp = backend.probe(host, port)
+                var used = port
+                val fp = if (tryFirst == null) {
+                    backend.probe(host, port)
+                } else {
+                    try {
+                        backend.probe(host, tryFirst).also { used = tryFirst }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        backend.probe(host, port)
+                    }
+                }
                 confirmed = settings.skipsFingerprintCheck()
                 val next = if (confirmed) Step.Code else Step.Confirm
-                _state.value = PairUi(step = next, host = host, port = port, fingerprint = fp)
+                _state.value = PairUi(step = next, host = host, port = used, fingerprint = fp)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

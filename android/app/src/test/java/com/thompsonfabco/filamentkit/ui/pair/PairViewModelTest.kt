@@ -7,6 +7,7 @@ import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
 import com.thompsonfabco.filamentkit.net.ServerInfo
 import java.io.IOException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -71,9 +72,77 @@ class PairViewModelTest {
         vm.submitAddress("10.0.0.2", "")
         assertEquals(Step.Confirm, ui.step)
         assertEquals(FP, ui.fingerprint)
-        assertEquals(8710, ui.port)
-        assertEquals(listOf("probe 10.0.0.2:8710"), backend.calls)
+        assertEquals(443, ui.port)
+        assertEquals(listOf("probe 10.0.0.2:443"), backend.calls)
         assertNull(settings.saved)
+    }
+
+    @Test fun aBlankPortStopsAtTheFirstPortThatAnswers() {
+        vm.submitAddress("10.0.0.2", "  ")
+        assertEquals(Step.Confirm, ui.step)
+        assertEquals(443, ui.port)
+        assertEquals(listOf("probe 10.0.0.2:443"), backend.calls)
+    }
+
+    @Test fun aBlankPortFallsBackToTheOldPortAndKeepsIt() {
+        backend.probeResult = { if (backend.calls.last().endsWith(":443")) throw IOException("refused") else FP }
+        vm.submitAddress("10.0.0.2", "")
+        assertEquals(Step.Confirm, ui.step)
+        assertFalse(ui.busy)
+        assertNull(ui.error)
+        assertEquals(8710, ui.port)
+        assertEquals(listOf("probe 10.0.0.2:443", "probe 10.0.0.2:8710"), backend.calls)
+        vm.confirmFingerprint()
+        vm.submitCode("123456")
+        assertEquals(8710, settings.saved?.port)
+    }
+
+    @Test fun aBlankPortThatFailsOnBothShowsTheErrorAndKeepsTheOrder() {
+        backend.probeResult = { throw IOException("refused") }
+        vm.submitAddress("10.0.0.2", "")
+        assertEquals(Step.Address, ui.step)
+        assertFalse(ui.busy)
+        assertNotNull(ui.error)
+        assertEquals(8710, ui.port)
+        assertEquals(listOf("probe 10.0.0.2:443", "probe 10.0.0.2:8710"), backend.calls)
+    }
+
+    @Test fun aTypedPortIsProbedAloneAsTyped() {
+        backend.probeResult = { throw IOException("refused") }
+        vm.submitAddress("10.0.0.2", "8710")
+        assertEquals(listOf("probe 10.0.0.2:8710"), backend.calls)
+        assertEquals(8710, ui.port)
+        assertNotNull(ui.error)
+    }
+
+    @Test fun aTypedPort443IsProbedAlone() {
+        vm.submitAddress("10.0.0.2", "443")
+        assertEquals(listOf("probe 10.0.0.2:443"), backend.calls)
+        assertEquals(443, ui.port)
+    }
+
+    @Test fun anInvalidPortIsStillRejectedWithoutProbing() {
+        vm.submitAddress("10.0.0.2", "70000")
+        assertEquals(PairField.Port, ui.errorField)
+        assertTrue(backend.calls.isEmpty())
+    }
+
+    @Test fun aSecondSubmitWhileBusyDoesNotProbeAgain() {
+        val gate = CompletableDeferred<Unit>()
+        val slow = object : PairingBackend by backend {
+            override suspend fun probe(host: String, port: Int): String {
+                backend.calls += "probe $host:$port"
+                gate.await()
+                return FP
+            }
+        }
+        val busyVm = PairViewModel(settings, slow, CoroutineScope(UnconfinedTestDispatcher()))
+        busyVm.submitAddress("10.0.0.2", "")
+        assertTrue(busyVm.state.value.busy)
+        busyVm.submitAddress("10.0.0.3", "")
+        assertEquals(listOf("probe 10.0.0.2:443"), backend.calls)
+        gate.complete(Unit)
+        assertEquals(Step.Confirm, busyVm.state.value.step)
     }
 
     @Test fun codeIsOnlySentAfterConfirmAndEntry() {
