@@ -1220,8 +1220,8 @@ const click = (url) => handlers.notificationclick({ notification: { close() {}, 
   await push({ title: "Filament ran out on Workshop X1", body: "bracket.3mf is paused at 41 %.", tag: "sw-condition-print-paused:p-3", url: "https://x/intake/#printers/p-3" });
   await push({ title: "Running low: Elegoo PLA Red", body: "Spool 11 has 80 g left.", kind: "spool.low" });
   await push({});
+  await push({ title: "Print resumed on Workshop X1", body: "bracket.3mf is printing again.", tag: "sw-condition-print-paused:p-3", silent: true, renotify: false, url: "https://x/intake/#printers/p-3" });
   await push({ clear: true, tag: "sw-condition-print-paused:p-3" });
-  await push({ clear: true });
   windows = [win("https://x/intake/#spools", "mine")];
   click("https://x/intake/#spools/low"); await click.p;
   windows = [win("https://other/", "foreign")];
@@ -1248,8 +1248,10 @@ def test_the_service_worker_shows_every_alert_and_takes_a_window_to_the_place(tm
     assert out["shown"][0] == ["Filament ran out on Workshop X1", {"body": "bracket.3mf is paused at 41 %.", "tag": "sw-condition-print-paused:p-3",
                                                                     "data": {"url": "https://x/intake/#printers/p-3"}}]
     assert out["shown"][1][1]["tag"] == "spool.low" and out["shown"][1][0] == "Running low: Elegoo PLA Red"
-    assert out["shown"][2] == ["Alert", {"body": "", "tag": "alert", "data": {"url": "./"}}]          # a push without fields still shows
-    assert len(out["shown"]) == 3 and out["closed"] == ["p-3"]        # a clearing push closes the notification of its tag, alone, and shows nothing (without a tag it does nothing)
+    assert out["shown"][2] == ["Spoolwarden", {"body": "", "tag": "alert", "data": {"url": "./"}}]    # a push without fields still shows, as a plain notice
+    assert out["shown"][3] == ["Print resumed on Workshop X1", {"body": "bracket.3mf is printing again.", "tag": "sw-condition-print-paused:p-3",
+                                                                 "data": {"url": "https://x/intake/#printers/p-3"}, "silent": True, "renotify": False}]   # an ended alert replaces its own: same tag, quiet
+    assert len(out["shown"]) == 5 and out["closed"] == []            # no push shows nothing and none closes anything: an unknown payload ({clear: true}) is shown too
     assert out["navigated"] == [["mine", "https://x/intake/#spools/low"]]                            # the app's own window is taken there
     assert out["focused"] == ["mine"]
     assert out["opened"] == ["https://x/intake/#printers", "https://x/intake/#printers/p-3"]          # another site's window is left alone
@@ -1266,3 +1268,31 @@ def test_a_hidden_screen_stays_hidden_whatever_display_its_own_class_sets():
     assert not plain, "a bare .hidden rule loses to a later one-class display rule"
     one_class = _re.findall(r"^\.([a-z][\w-]*)\s*\{[^}]*\bdisplay:\s*(?!none)", css, _re.M)
     assert "add" in one_class and "spools" in one_class      # the screens that showed through
+
+
+def test_the_page_closes_the_notifications_of_conditions_that_are_over(tmp_path):
+    """R80 20:48 point 4 (EA7): an answer's conditions name what is still raised; a notification tagged sw-condition-<key> of a key that is no
+    longer there is closed by the page, everything else (a raised condition, a moment, another tag) is left."""
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("needs Node")
+    js = (STATIC / "app.js").read_text(encoding="utf-8")
+    start = js.index("async function closeStaleNotifications")
+    end = js.index("function startAlerts()")
+    harness = js[start:end] + r"""
+const closed = [];
+const n = (tag) => ({ tag, close() { closed.push(tag); } });
+const reg = { getNotifications: async () => [n("sw-condition-print-paused:p-3"), n("sw-condition-storage-use"), n("sw-event-41"), n("printer"), { close() { closed.push("untagged"); } }] };
+(async () => {
+  await closeStaleNotifications([{ condition: { key: "storage-use" } }], reg);
+  await closeStaleNotifications(null, reg);                       // an answer without conditions closes nothing
+  await closeStaleNotifications([], { getNotifications: async () => { throw new Error("no"); } });   // a failure is not an error
+  console.log(JSON.stringify(closed));
+})();
+"""
+    (tmp_path / "h.js").write_text(harness, encoding="utf-8")
+    run = subprocess.run([node, str(tmp_path / "h.js")], capture_output=True, encoding="utf-8", timeout=60)
+    assert run.returncode == 0, run.stderr
+    assert json.loads(run.stdout) == ["sw-condition-print-paused:p-3"]

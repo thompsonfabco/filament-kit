@@ -32,12 +32,10 @@ self.addEventListener("push", (event) => {
   try { d = event.data ? event.data.json() : {}; } catch (e) { d = {}; }
   // one notification per alert (R80 section 4): the Hub builds the title and the line, names the place that fixes it in `url`, and tags a
   // lasting condition by its key so it is shown once; an older Hub's print alert has the same fields
-  // a clearing push ({clear: true, tag}, EA4) closes what that tag shows and shows nothing: the condition is over
-  if (d.clear) {
-    if (d.tag) event.waitUntil(self.registration.getNotifications({ tag: d.tag }).then((open) => open.forEach((n) => n.close())));
-    return;
-  }
-  event.waitUntil(self.registration.showNotification(d.title || "Alert", { body: d.body || "", tag: d.tag || d.kind || "alert", data: { url: d.url || "./" } }));
+  // every push ends in a notification (a subscription promises it, R80 20:48): an alert that is over arrives as a normal one with the SAME tag,
+  // `silent` and no `renotify`, which replaces the shown one; a payload this worker does not understand is a plain "Spoolwarden" that opens the app
+  event.waitUntil(self.registration.showNotification(d.title || "Spoolwarden", { body: d.body || "", tag: d.tag || d.kind || "alert", data: { url: d.url || "./" },
+    ...(d.silent === true ? { silent: true } : {}), ...(d.renotify === false ? { renotify: false } : {}) }));
 });
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
