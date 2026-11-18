@@ -2,14 +2,14 @@
 
 The phone web app and the connector's tools change spools in this process (`inventory` reports each change to
 `event_sink`). The Hub's event store is written by the Hub only, so this unit's sink (`OutboxSink`) appends each
-`spool.*` event to an outbox, `event-outbox.xml` in the web unit's folder (0600, atomic, under a lock, never through a
+`spool.*` event to an outbox, `events-outbox.xml` in the web unit's folder (0600, atomic, under a lock, never through a
 symbolic link: the rules of push.xml), and a background `Sender` posts them to the Hub's `POST api/events/web` through
 the unit's channel to the Hub (`slots.KitApi`).
 
 At least once: an item leaves the outbox only after the Hub accepted it, and a resent item is not written twice (the
 Hub holds an event with the same time, kind, subject, actor and values once). The `at` is made when the change is
 made, so a resend carries the same one. The Hub validates a batch all or none and names the item ("event 2 of 3"): that
-item is moved to `event-outbox-rejected.xml` (kept for the owner, capped) and the rest is sent. While the Hub does not
+item is moved to `events-outbox-rejected.xml` (kept for the owner, capped) and the rest is sent. While the Hub does not
 answer the sender retries with a growing wait. An item is dropped, with a log line, after MAX_AGE or when the outbox
 holds more than MAX_ITEMS. Nothing here raises into the request that changed the spool.
 """
@@ -30,7 +30,7 @@ from .slots import SlotError
 log = logging.getLogger(__name__)
 
 PATH = "/api/events/web"
-MAX_ITEMS = 1000            # items kept; over it the oldest are dropped
+MAX_ITEMS = 500             # items kept (R80 E1); over it the oldest are dropped
 MAX_AGE = 7 * 86400         # seconds an item is kept while the Hub does not take it
 MAX_REJECTED = 100          # items kept in the rejected file
 BATCH = 100                 # items per call (the Hub takes 500)
@@ -46,8 +46,8 @@ class Outbox:
 
     def __init__(self, path: Path | str | None = None, rejected: Path | str | None = None, *,
                  max_items: int = MAX_ITEMS, max_age: float = MAX_AGE, clock=time.time):
-        self.path = Path(path) if path else config.paths().web / "event-outbox.xml"
-        self.rejected = Path(rejected) if rejected else self.path.with_name("event-outbox-rejected.xml")
+        self.path = Path(path) if path else config.paths().web / "events-outbox.xml"
+        self.rejected = Path(rejected) if rejected else self.path.with_name("events-outbox-rejected.xml")
         self.max_items, self.max_age, self.clock = max_items, max_age, clock
         self.lock = threading.Lock()
         self._items: list[dict] | None = None
@@ -97,7 +97,7 @@ class Outbox:
                 ET.SubElement(d, "v", name=events._text(k)).text = events._text(v)
         data = ET.tostring(root, encoding="utf-8", xml_declaration=True)
         f.parent.mkdir(parents=True, exist_ok=True)
-        with events._FileLock(f.with_name("event-outbox.lock"), needed=True):
+        with events._FileLock(f.with_name("events-outbox.lock"), needed=True):
             events._refuse_link(f)
             for _ in range(20):
                 tmp = events._tmp_name(f)
