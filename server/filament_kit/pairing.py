@@ -63,6 +63,11 @@ class CertUnreadable(PairingError):
     """The certificate exists but this user may not read it (the CLI run without sudo)."""
 
 
+class AmbiguousStation(PairingError):
+    """Two Weigh Station pairings have told the Hub a certificate: the Hub has one `station.url`, so it cannot tell
+    which pin belongs to it (it would call one station with the other's certificate)."""
+
+
 class CodeSpent(PairingError):
     """The code was valid a short while ago: expired, redeemed, or dropped at the attempt limit."""
 
@@ -442,3 +447,78 @@ def devices() -> list[dict]:
             for d in _load_devices()
             if d.get("claimed") is not None
         ]
+
+
+def record_station_hello(device_id: str, fp, port, version, plain=None) -> bool:
+    """What a Weigh Station says on `GET /api/station/hello` (R82 section 2.3): the SHA-256 of its certificate, its HTTPS
+    port and its software version, kept with that station's pairing in devices.json (`fp`, `port`, `version`,
+    `hello_at` on its record; the file is JSON today, so these keys join it as they are). False, nothing stored, for a
+    device that is no station or a value that is not what it should be (the older station sends none: it stays on plain
+    HTTP). Called by the hello route; the Hub then calls the station over HTTPS, accepting only this certificate.
+    `plain`: a station that could not make its certificate sends no `fp` but this reason (`plain=<why>`) with its port
+    and version: it is kept as `plain_reason` (the Checks row says so) and an fp the Hub already holds is NEVER
+    cleared by it: a pinned station is not downgraded to plain HTTP."""
+    fp = str(fp or "").strip().lower()
+    version = str(version or "").strip()
+    reason = " ".join(str(plain or "").split())[:120]
+    if not fp and reason:
+        return _record_plain(device_id, port, version, reason)
+    try:
+        port = int(str(port).strip())
+    except ValueError:
+        return False
+    if not re.fullmatch(r"[0-9a-f]{64}", fp) or not 1 <= port <= 65535 or len(version) > 40 or not version.isprintable():
+        return False
+    with _locked():
+        devs = _load_devices()
+        for d in devs:
+            if d.get("id") == device_id and device_type(d):
+                if (d.get("fp"), d.get("port"), d.get("version")) != (fp, port, version):
+                    d.update(fp=fp, port=port, version=version)
+                d.pop("plain_reason", None)
+                d["hello_at"] = time.time()
+                _write("devices.json", devs)
+                return True
+    return False
+
+
+def _record_plain(device_id: str, port, version: str, reason: str) -> bool:
+    try:
+        port = int(str(port).strip())
+    except ValueError:
+        return False
+    if not 1 <= port <= 65535 or len(version) > 40 or not version.isprintable():
+        return False
+    with _locked():
+        devs = _load_devices()
+        for d in devs:
+            if d.get("id") == device_id and device_type(d):
+                d.update(version=version, plain_reason=reason, hello_at=time.time())
+                if not d.get("fp"):
+                    d["port"] = port        # the plain port; a pinned station keeps its pinned HTTPS port
+                _write("devices.json", devs)
+                return True
+    return False
+
+
+def station_plain_reason() -> str | None:
+    """Why the Weigh Station that said hello last has no certificate (`plain` of its hello), else None."""
+    with _locked():
+        found = [d for d in _load_devices() if d.get("claimed") is not None and device_type(d) and d.get("plain_reason")]
+    return max(found, key=lambda x: x.get("hello_at") or 0)["plain_reason"] if found else None
+
+
+def station_info() -> dict | None:
+    """`{"fp", "port", "version", "hello_at"}` for the Weigh Station pairing that said hello with a certificate, else
+    None (no station paired, or only an older one that sends no fingerprint: plain HTTP). Raises AmbiguousStation when
+    two pairings have one: the Hub has a single station address (unpair the one that is gone)."""
+    with _locked():
+        found = [d for d in _load_devices() if d.get("claimed") is not None and device_type(d) and d.get("fp")]
+    if not found:
+        return None
+    if len(found) > 1:
+        raise AmbiguousStation("two Weigh Stations are paired and the Hub has one station address: unpair the one "
+                               "that is gone (Settings > Devices)")
+    d = found[0]
+    return {"fp": d["fp"], "port": int(d["port"]), "version": d.get("version") or "", "hello_at": d.get("hello_at")}
+

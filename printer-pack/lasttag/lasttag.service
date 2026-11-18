@@ -8,6 +8,9 @@ User=@USER@
 ExecStart=@PYTHON@ -I @LASTTAG@
 Restart=always
 RestartSec=10
+# its certificate and key (tls/ under /var/lib/lasttag): the file system is read-only to it otherwise
+StateDirectory=lasttag
+StateDirectoryMode=0700
 NoNewPrivileges=yes
 ProtectSystem=strict
 PrivateTmp=yes

@@ -9,6 +9,7 @@ import glob
 import os
 import re
 import threading
+from pathlib import Path
 
 from . import voice
 
@@ -95,6 +96,29 @@ def panel_ttys() -> list[str]:
     never opened), then the ttyUSB ports."""
     acm = [d for d in glob.glob("/dev/ttyACM*") if usb_vendor(d) == PANEL_VENDOR]
     return _by_number(acm) + usb_ttys()
+
+
+def tls_dir() -> Path:
+    """`tls/` in the station's own state folder (systemd's StateDirectory, owned by its service user): its certificate
+    and key, made at the first start."""
+    return Path(os.environ.get("STATE_DIRECTORY", "/var/lib/filament-kit-station").split(":")[0]) / "tls"
+
+
+def ensure_cert(folder: Path | None = None) -> tuple[Path, Path, str]:
+    """(certificate file, key file, SHA-256 fingerprint) of the station's own certificate, made with the Hub's
+    function (`pairing.make_cert`: self-signed, 10 years, this host's names and addresses; key.pem 0600) when there is
+    none or the one there cannot be read. Raises OSError / ValueError when none can be made."""
+    from .. import pairing
+    d = folder or tls_dir()
+    cert, key = d / "cert.pem", d / "key.pem"
+    try:
+        if key.is_file():
+            return cert, key, pairing.fingerprint(cert.read_bytes())
+    except (OSError, ValueError):
+        pass
+    d.mkdir(mode=0o700, parents=True, exist_ok=True)
+    fp = pairing.make_cert(pairing.short_hostname(), pairing.local_ips(), d)
+    return cert, key, fp
 
 
 def view() -> dict:

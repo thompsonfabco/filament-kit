@@ -452,7 +452,7 @@ def test_main_starts_the_flow_timer(monkeypatch):
     started = []
 
     class FakeThread:
-        def __init__(self, target, daemon=False):
+        def __init__(self, target, args=(), kwargs=None, daemon=False):
             self.target = target
 
         def start(self):
@@ -460,18 +460,24 @@ def test_main_starts_the_flow_timer(monkeypatch):
 
     class FakeServer:
         def __init__(self, *a, **kw):
-            pass
+            made.append(a)
 
         def serve_forever(self):
             pass
+    made = []
     monkeypatch.setattr(station_main, "threading", types.SimpleNamespace(Thread=FakeThread))
-    monkeypatch.setattr(station_main, "ThreadingHTTPServer", FakeServer)
+    # the start path: the station's own certificate, the HTTPS listener, then the hello announcing it to the Hub
+    monkeypatch.setattr(station_main.st, "ensure_cert", lambda: ("cert.pem", "key.pem", "ab" * 32))
+    monkeypatch.setattr(station_main.http, "tls_context", lambda cert, key: "context")
+    monkeypatch.setattr(station_main.http, "TlsServer", FakeServer)
     monkeypatch.setattr(station_main, "signal", types.SimpleNamespace(SIGTERM=15, SIGINT=2, signal=lambda *a: None))
     monkeypatch.setattr(station_main.beep, "beep_device", lambda: None)
     monkeypatch.setattr(station_main.camera, "camera_dev", lambda: None)
     monkeypatch.setattr(station_main.flow, "api", lambda: types.SimpleNamespace(paired=True))
     station_main.main()
     assert flow.tick_loop in started
+    assert made and made[0][0][1] == station_main.st.settings["port"] and made[0][2] == "context"   # HTTPS listener
+    assert station_main.server_api.announce in started                                              # tells the Hub
 
 
 # --- final fix wave: tag_not_linked keeps the spool, so the next long press can't add a second ----------------------

@@ -1,5 +1,5 @@
 """filament_kit.station: an intake station's USB scale, NFC reader and button panel (the `station` module): the intake
-flow on the panel, asking the paired kit server, and a read-only HTTP view.
+flow on the panel, asking the paired kit server, and a read-only HTTPS view.
 
 GET /state    -> {"tag": {...as /last-tag...}, "scale": {"grams", "status", "unit", "stable", "age_seconds"} | null,
                   "last_weight": {"grams", "age_seconds", "held"} | null, "panel": "/dev/ttyACMn" or "/dev/ttyUSBn" | null,
@@ -32,7 +32,7 @@ owner's filament-mcp reads a kit station unchanged):
 - `air`: the panel's BME280 room air reading;
 - `camera`: the webcam picture of a new spool for recognition (STATION_CAMERA: a /dev/video path, auto = the first
   USB camera, or off), kept until red or a new scan;
-- `http`: the read-only handler; answers only STATION_ALLOW.
+- `http`: the read-only handler and its HTTPS listener (the station's own certificate, `state.ensure_cert`); answers only STATION_ALLOW.
 Runs as filament-kit-station.service (`python -m filament_kit.station`); nfcpy and pyserial come from the
 `[station]` extra and are imported only inside the reader and panel loops.
 """
