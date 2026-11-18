@@ -51,7 +51,6 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import com.thompsonfabco.filamentkit.R
-import com.thompsonfabco.filamentkit.alerts.AlertTexts
 import com.thompsonfabco.filamentkit.alerts.BannerState
 import com.thompsonfabco.filamentkit.drafts.Draft
 import com.thompsonfabco.filamentkit.net.Printer
@@ -199,7 +198,7 @@ internal fun HomeScreen(
         UpdateNotice(update, onInstallUpdate, onConfirmInstall)
         AlertBanners(alertBanner, now, alertActions)
         if (lowCount > 0) {
-            SwButton(AlertTexts.spoolsRunningLow(lowCount), onOpenLow, Modifier.fillMaxWidth(), icon = R.drawable.sw_ic_warning)
+            SwButton(pluralStringResource(R.plurals.running_low_home, lowCount, lowCount), onOpenLow, Modifier.fillMaxWidth(), icon = R.drawable.sw_ic_warning)
         }
         if (gettingStarted != null) GettingStartedLine(gettingStarted, onOpenHub)
         if (SpoolwardenTheme.window == WindowClass.Phone) {

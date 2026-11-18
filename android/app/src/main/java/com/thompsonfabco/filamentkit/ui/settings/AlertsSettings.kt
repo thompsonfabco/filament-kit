@@ -26,7 +26,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.core.app.NotificationManagerCompat
 import com.thompsonfabco.filamentkit.R
-import com.thompsonfabco.filamentkit.alerts.AlertTexts
 import com.thompsonfabco.filamentkit.alerts.SwitchStep
 import com.thompsonfabco.filamentkit.alerts.switchStep
 import com.thompsonfabco.filamentkit.ui.components.NoticeCard
@@ -86,7 +85,7 @@ internal fun AlertsSettings(facts: AlertsFacts, actions: AlertsActions, modifier
     }
 
     SettingsPage(modifier) {
-        if (!facts.available) NoticeCard(NoticeKind.Info, AlertTexts.UNAVAILABLE)
+        if (!facts.available) NoticeCard(NoticeKind.Info, stringResource(R.string.alerts_unavailable))
         SettingsPanel {
             AlertsSwitchRow(
                 on = facts.on,
@@ -102,10 +101,10 @@ internal fun AlertsSettings(facts: AlertsFacts, actions: AlertsActions, modifier
             if (shown != null && !facts.on) {
                 when (shown) {
                     Help.Notifications -> NoticeCard(
-                        NoticeKind.Warn, AlertTexts.NOTIFICATIONS_DENIED_HELP,
+                        NoticeKind.Warn, stringResource(R.string.settings_alerts_denied_help),
                         actions = listOf(SwAction(stringResource(R.string.common_open_app_settings)) { context.openAppSettings() }),
                     )
-                    Help.LocalNetwork -> NoticeCard(NoticeKind.Warn, AlertTexts.LOCAL_NETWORK_HELP)
+                    Help.LocalNetwork -> NoticeCard(NoticeKind.Warn, stringResource(R.string.settings_alerts_local_network_help))
                 }
             }
         }
@@ -117,7 +116,7 @@ internal fun AlertsSettings(facts: AlertsFacts, actions: AlertsActions, modifier
             )
             if (testSent) Text(stringResource(R.string.settings_alerts_sent), color = SpoolwardenTheme.colors.muted, style = MaterialTheme.typography.bodySmall)
         }
-        SwButton(AlertTexts.RECENT_ALERTS, actions.onRecent, Modifier.fillMaxWidth())
+        SwButton(stringResource(R.string.settings_alerts_recent), actions.onRecent, Modifier.fillMaxWidth())
     }
 }
 
@@ -133,7 +132,7 @@ private fun AlertsSwitchRow(on: Boolean, onChange: (Boolean) -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(space.s3),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(AlertTexts.SWITCH_TITLE, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+            Text(stringResource(R.string.settings_alerts_switch), Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
             Switch(
                 checked = on, onCheckedChange = null,
                 colors = SwitchDefaults.colors(
@@ -146,6 +145,6 @@ private fun AlertsSwitchRow(on: Boolean, onChange: (Boolean) -> Unit) {
                 color = if (on) colors.accentText else colors.muted, style = SpoolwardenTheme.type.dataSmall,
             )
         }
-        Text(AlertTexts.SWITCH_HINT, color = colors.muted, style = MaterialTheme.typography.bodyMedium)
+        Text(stringResource(R.string.settings_alerts_phone_hint), color = colors.muted, style = MaterialTheme.typography.bodyMedium)
     }
 }

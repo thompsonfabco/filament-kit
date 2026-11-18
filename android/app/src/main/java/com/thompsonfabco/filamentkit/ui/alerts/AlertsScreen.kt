@@ -14,12 +14,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.alerts.AlertTarget
 import com.thompsonfabco.filamentkit.alerts.AlertsRoute
 import com.thompsonfabco.filamentkit.alerts.SettingsAlertsRoute
-import com.thompsonfabco.filamentkit.alerts.AlertTexts
 import com.thompsonfabco.filamentkit.alerts.AlertsUi
 import com.thompsonfabco.filamentkit.alerts.alertsList
 import com.thompsonfabco.filamentkit.ui.components.NoticeCard
@@ -47,8 +48,8 @@ internal fun AlertsScreen(
             verticalArrangement = Arrangement.spacedBy(space.s3),
         ) {
             when {
-                !ui.available -> Text(AlertTexts.UNAVAILABLE, style = MaterialTheme.typography.bodyLarge)
-                ui.loaded && rows.isEmpty() -> Text(AlertTexts.EMPTY, style = MaterialTheme.typography.bodyLarge)
+                !ui.available -> Text(stringResource(R.string.alerts_unavailable), style = MaterialTheme.typography.bodyLarge)
+                ui.loaded && rows.isEmpty() -> Text(stringResource(R.string.alert_list_empty), style = MaterialTheme.typography.bodyLarge)
                 else -> rows.forEach { item ->
                     val target = item.target()
                     NoticeCard(
@@ -56,7 +57,7 @@ internal fun AlertsScreen(
                         actions = if (target == AlertTarget.AlertsList) {
                             emptyList()
                         } else {
-                            listOf(SwAction(AlertTexts.actionLabel(target)) { onAction(target) })
+                            listOf(SwAction(stringResource(target.labelRes())) { onAction(target) })
                         },
                     )
                 }
@@ -65,10 +66,11 @@ internal fun AlertsScreen(
     }
 }
 
-/** The top bar's title on the alert screens, which have no catalogue text yet; null on any other screen. */
+/** The top bar's title on the alert screens; null on any other screen. */
+@Composable
 internal fun alertsPlaceTitle(destination: NavDestination?): String? = when {
     destination == null -> null
-    destination.hasRoute(AlertsRoute::class) -> AlertTexts.RECENT_ALERTS
-    destination.hasRoute(SettingsAlertsRoute::class) -> AlertTexts.SETTINGS_TITLE
+    destination.hasRoute(AlertsRoute::class) -> stringResource(R.string.settings_alerts_recent)
+    destination.hasRoute(SettingsAlertsRoute::class) -> stringResource(R.string.settings_group_alerts)
     else -> null
 }

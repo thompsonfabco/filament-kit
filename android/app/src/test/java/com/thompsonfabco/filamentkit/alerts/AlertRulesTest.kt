@@ -188,12 +188,4 @@ class AlertRulesTest {
         assertFalse(shouldStartWatching(on = true, paired = true, notificationsAllowed = false, running = false))
         assertFalse(shouldStartWatching(on = true, paired = true, notificationsAllowed = true, running = true))
     }
-
-    @Test fun textsForOneAndMany() {
-        assertEquals("1 more alert", AlertTexts.moreAlerts(1))
-        assertEquals("3 more alerts", AlertTexts.moreAlerts(3))
-        assertEquals("2 spools running low", AlertTexts.spoolsRunningLow(2))
-        assertEquals("Running low (4)", AlertTexts.runningLowChip(4))
-        assertEquals("2 more in stock", AlertTexts.moreInStock(2))
-    }
 }
