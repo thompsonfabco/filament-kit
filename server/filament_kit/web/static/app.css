@@ -197,6 +197,10 @@ main.standalone { width: min(calc(var(--s7) * 10), calc(100vw - 2 * var(--s4)));
                border-radius: var(--r); background: var(--surface); }
 .pfound__row + .pfound__row { margin-top: var(--s2); }
 .pfound__name { flex: 1 1 auto; font-weight: var(--fw-label); }
+.pguided__heading { margin: var(--s4) 0 var(--s2); font-size: var(--fs-label, 1rem); }
+.pguided__heading:first-child { margin-top: 0; }
+.pguided__choice, .pguided__foot { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s3); }
+.pguided .field + .field { margin-top: var(--s3); }
 
 .printer { display: grid; gap: var(--s4); }
 .printer--inline { margin-top: var(--s3); padding: var(--s4); border: 1px dashed var(--border); border-radius: var(--r); background: var(--surface-2); }

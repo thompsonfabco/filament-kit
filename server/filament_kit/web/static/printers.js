@@ -94,15 +94,15 @@ function printersTab() {
   const countBox = h("p", { class: "printers__count" });
   const noteBox = h("div");
   const addBtn = needsHub(SW.btn(t("common_add"), { icon: "plus", cls: "btn--ghost", name: t("printers_add"), action: "add" }));
-  const addKlipper = needsHub(SW.btn(t("common_add_klipper_printer"), { action: "add-klipper", run: () => addKlipperSheet(addKlipper) }));
+  const addKlipper = needsHub(SW.btn(t("common_add_klipper_printer"), { action: "add-klipper", run: () => guidedAdd(addKlipper) }));
   const listAdd = h("p", { class: "printers__more" }, addKlipper);
   const listView = h("div", { class: "printers" },
     h("div", { class: "printers__bar" }, countBox, addBtn), noteBox, listLine, cards, foundBox, listAdd);
   const pageView = h("div", { class: "printer", hidden: true });
   const el = h("section", { class: "hidden" }, listView, pageView);
   SW.menu(addBtn, () => [
-    ...foundBambu().map((p) => ({ label: t("printers_menu_bambu"), reason: `${p.model_name || p.model || ""} · ${p.ip}`.replace(/^ · /, ""), run: () => addBambuSheet(p, addBtn) })),
-    { label: t("printers_menu_klipper"), run: () => addKlipperSheet(addBtn) }], { label: t("printers_add") });
+    ...foundBambu().map((p) => ({ label: t("printers_menu_bambu"), reason: `${p.model_name || p.model || ""} · ${p.ip}`.replace(/^ · /, ""), run: () => guidedAdd(addBtn, { family: "bambu", ...p }) })),
+    { label: t("printers_menu_klipper"), run: () => guidedAdd(addBtn) }], { label: t("printers_add") });
   const foundBambu = () => manageList.filter((p) => !p.configured && p.family !== "klipper" && p.ip);
 
   // the open printer's name; an address for none this Hub has says so, and never shows the id from the address; null until the lists are read
@@ -201,9 +201,9 @@ function printersTab() {
     foundBox.replaceChildren(...(found.length ? [h("h2", { class: "printers__heading" }, t("printers_found_group")),
       h("ul", { class: "pfound" }, found.map((p) => h("li", { class: "pfound__row" },
         h("span", { class: "pfound__name" }, p.model_name || p.model || t("common_bambu_lab")), h("span", { class: "mono muted" }, p.ip),
-        changes ? needsHub(SW.btn(t("common_add"), { action: "add-found", name: t("printer_add_title", { model: p.model_name || p.model || p.ip }), run: (e) => addBambuSheet(p, e.currentTarget) })) : null)))] : []));
+        changes ? needsHub(SW.btn(t("common_add"), { action: "add-found", name: t("printer_add_title", { model: p.model_name || p.model || p.ip }), run: (e) => guidedAdd(e.currentTarget, { family: "bambu", ...p }) })) : null)))] : []));
     if (!printers.length && !found.length) {
-      cards.replaceChildren(SW.empty({ icon: "printer", title: t("home_printers_empty"), text: t("printer_list_empty_text"), actions: changes ? needsHub(SW.btn(t("common_add_klipper_printer"), { action: "add-klipper", run: (e) => addKlipperSheet(e.currentTarget) })) : null }));
+      cards.replaceChildren(SW.empty({ icon: "printer", title: t("home_printers_empty"), text: t("printer_list_empty_text"), actions: changes ? needsHub(SW.btn(t("common_add_klipper_printer"), { action: "add-klipper", run: (e) => guidedAdd(e.currentTarget) })) : null }));
     }
     listAdd.hidden = !changes || (!printers.length && !found.length);
     layout();
@@ -224,16 +224,147 @@ function printersTab() {
     await backSettled();                                  // the add sheet's own Back must land first, or it would take the page off the new printer again
     if (addedId) location.hash = "#printers/" + enc(addedId);
   }
-  function addBambuSheet(p, opener) {
-    const model = p.model_name || p.model || p.ip;
-    change({ title: t("printer_add_title", { model }), text: t("add_model_found", { address: p.ip }), confirm: t("common_add_printer"), busy: t("printer_add_connecting"), opener,
-      fields: [codeField(t("common_hint_access_code")), SW.field({ label: t("common_field_name_optional"), placeholder: model })] },
-    ([c, n]) => ["add", { serial: p.id, access_code: c, name: n || p.name || model }, ""], added);
+
+  // ----- adding a printer, guided (R82 section 5, R83 section 5): which printer (the found list first), its details, the test and the add,
+  // then "Map its slots now?". One sheet; Back keeps what was typed. The texts below are in the catalogue when EV2 lands (the keys file
+  // lists them); until then the English here is shown. -----
+  const GUIDED = {
+    printer_guided_title: "Add a printer", printer_guided_which: "Which printer?", printer_guided_found: "Found on your network",
+    printer_guided_looking: "Looking…", printer_guided_none: "None found. Type its address in the next step.", printer_guided_use: "Use this",
+    printer_guided_back: "Back", printer_guided_access_hint: "On the printer: Settings > Network/LAN > Access Code",
+    printer_guided_serial: "Serial number", printer_guided_serial_hint: "Printed on the printer; needed when the address was typed.",
+    printer_guided_serial_missing: "Type the printer's serial number.",
+    printer_guided_testing: "Testing…", printer_guided_test_failed: "The Hub could not reach a Klipper printer at {address}.",
+    printer_guided_add_anyway: "Add anyway", printer_guided_try_again: "Try again",
+    printer_guided_map_title: "Map its slots now?", printer_guided_map_body: "Mapping tells the Hub which slot is which. Nothing heats or moves.",
+    printer_guided_map_later: "Later",
+    printer_clear_action: "Clear slot", printer_clear_title: "Clear slot {slot}?", printer_clear_body: "The Hub forgets the spool recorded here.",
+    printer_clear_goes_back: "{name} goes back to {location}.", printer_clear_goes_back_noplace: "{name} goes back to where it was before.",
+    printer_clear_line: "Slot {slot} cleared.", printer_clear_waiting_ended: "The spool that was waiting for slot {slot} is not waiting any more.",
+    printer_clear_printer_left: "What the printer shows for the slot was left as it is.",
+  };
+  function tg(key, vars) {
+    const v = t(key, vars);
+    if (v !== key) return v;
+    const f = GUIDED[key];
+    return f == null ? key : vars ? f.replace(/\{([a-z][a-z0-9_]*)\}/g, (m, n) => (vars[n] != null ? String(vars[n]) : m)) : f;
   }
-  function addKlipperSheet(opener) {
-    change({ title: t("common_add_klipper_printer"), confirm: t("common_add_printer"), busy: t("printer_add_connecting"), opener,
-      fields: [addressField(t("common_address"), t("printer_address_klipper_help"), ""), portField("7125"), SW.field({ label: t("common_field_name_optional") })] },
-    ([host, port, n]) => ["add", { family: "klipper", host, port: parsePort(port), ...(n ? { name: n } : {}) }, ""], added);
+  function guidedAdd(opener, seed) {
+    const st = { step: "which", family: null, scan: "idle", klipperFound: [] };
+    const f = {
+      bAddr: addressField(t("common_address"), t("printer_address_bambu_help"), ""),
+      bCode: codeField(tg("printer_guided_access_hint")),
+      bName: SW.field({ label: t("common_field_name_optional"), optional: true }),
+      bSerial: SW.field({ label: tg("printer_guided_serial"), hint: tg("printer_guided_serial_hint"), mono: true, optional: true, attrs: { autocapitalize: "characters", spellcheck: "false" } }),
+      kAddr: addressField(t("common_address"), t("printer_address_klipper_help"), ""), kPort: portField("7125"),
+      kName: SW.field({ label: t("common_field_name_optional"), optional: true }), kKey: keyField({ optional: true, hint: t("printer_address_key_help") }),
+    };
+    const body = h("div", { class: "pguided" }), line = resultLine(), foot = h("div", { class: "pguided__foot" });
+    let dlg = null, added_ = null, scanned = 0;
+    const close = () => dlg && dlg.close();
+    const cancel = SW.btn(t("common_cancel"), { action: "cancel", run: close });
+    const back = SW.btn(tg("printer_guided_back"), { action: "back", run: () => { clear(line); anyway.hidden = true; go("which"); } });
+    const go_ = SW.btn(t("common_add_printer"), { cls: "btn--primary", action: "add", run: () => submit(false) });
+    const anyway = SW.btn(tg("printer_guided_add_anyway"), { action: "add-anyway", run: () => submit(true) });
+    const later = SW.btn(tg("printer_guided_map_later"), { action: "later", run: () => finish(false) });
+    const mapNow = SW.btn(t("printers_map_slots"), { cls: "btn--primary", action: "map", run: () => finish(true) });
+    anyway.hidden = true;
+    function go(step) {
+      st.step = step;
+      if (step === "which") {
+        const bambu = foundBambu(), k = st.klipperFound;
+        const row = (name, address, pick) => h("li", { class: "pfound__row" }, h("span", { class: "pfound__name" }, name), h("span", { class: "mono muted" }, address),
+          SW.btn(tg("printer_guided_use"), { action: "use", name: tg("printer_guided_use") + " " + name, run: pick }));
+        const rows = [...bambu.map((p) => row(p.model_name || p.model || t("common_bambu_lab"), p.ip, () => useBambu(p))),
+          ...k.filter((p) => !p.configured).map((p) => row(p.name || p.host, `${p.host}:${p.port}`, () => useKlipper(p)))];
+        body.replaceChildren(h("h3", { class: "pguided__heading" }, tg("printer_guided_found")),
+          rows.length ? h("ul", { class: "pfound" }, rows) : h("p", { class: "muted" }, st.scan === "running" ? tg("printer_guided_looking") : tg("printer_guided_none")),
+          h("h3", { class: "pguided__heading" }, tg("printer_guided_which")),
+          h("div", { class: "pguided__choice" }, SW.btn(t("common_bambu_lab"), { action: "family-bambu", run: () => pickFamily("bambu") }),
+            SW.btn(t("common_klipper"), { action: "family-klipper", run: () => pickFamily("klipper") })));
+        foot.replaceChildren(cancel);
+      } else if (step === "details") {
+        const bambu = st.family === "bambu";
+        body.replaceChildren(...(bambu ? [f.bAddr, f.bCode, f.bName, f.bSerial] : [f.kAddr, f.kPort, f.kName, f.kKey]), line);
+        foot.replaceChildren(back, go_, anyway);
+        const first = bambu ? f.bAddr : f.kAddr;
+        if (!first._control.value) first._control.focus(); else if (bambu) f.bCode._control.focus();
+      } else {
+        body.replaceChildren(h("h3", { class: "pguided__heading" }, tg("printer_guided_map_title")), h("p", {}, tg("printer_guided_map_body")));
+        foot.replaceChildren(later, mapNow);
+      }
+    }
+    function pickFamily(fam) { st.family = fam; go("details"); }
+    function useBambu(p) {
+      st.family = "bambu";
+      f.bAddr._control.value = p.ip || ""; if (p.id) f.bSerial._control.value = p.id;
+      go("details");
+    }
+    function useKlipper(p) {
+      st.family = "klipper"; f.kAddr._control.value = p.host || ""; f.kPort._control.value = (p.port ? String(p.port) : "7125");
+      if (p.name && !f.kName._control.value) f.kName._control.value = p.name;
+      go("details");
+    }
+    function invalid(fields) {
+      const bad = fields.filter((x) => { const e = x._check && x._check(); SW.fieldError(x, e || null); return !!e; });
+      if (bad.length) bad[0]._control.focus();
+      return bad.length > 0;
+    }
+    // the test route answers 200 {ok: false} for a printer that does not answer; any other failure (a Hub without the route yet, a
+    // request that did not get through) is not the printer's answer, so the add goes on and says its own result
+    async function klipperTest(v) {
+      try {
+        const r = await pj("test", { family: "klipper", host: v(f.kAddr), port: parsePort(v(f.kPort)), ...(v(f.kKey) ? { api_key: v(f.kKey) } : {}) });
+        return !r || r.ok !== false;
+      } catch (e) {
+        return true;
+      }
+    }
+    async function submit(force) {
+      const bambu = st.family === "bambu", v = (x) => x._control.value.trim();
+      if (invalid(bambu ? [f.bAddr, f.bCode] : [f.kAddr, f.kPort])) return;
+      if (bambu && !v(f.bSerial)) { SW.fieldError(f.bSerial, tg("printer_guided_serial_missing")); f.bSerial._control.focus(); return; }
+      if (!SW.busy(go_, t("printer_add_connecting"))) return;
+      anyway.hidden = true;
+      try {
+        if (!bambu && !force) {                              // Klipper: the Hub asks the printer for its info before it saves anything
+          SW.result(line, "run", tg("printer_guided_testing"));
+          if (!await klipperTest(v)) {
+            SW.result(line, "bad", tg("printer_guided_test_failed", { address: `${v(f.kAddr)}:${v(f.kPort)}` }), { action: { label: tg("printer_guided_try_again"), run: () => submit(false) } });
+            anyway.hidden = false;
+            return;
+          }
+        }
+        clear(line);
+        const sent = bambu ? { serial: v(f.bSerial), host: v(f.bAddr), access_code: v(f.bCode), ...(v(f.bName) ? { name: v(f.bName) } : {}) }
+          : { family: "klipper", host: v(f.kAddr), port: parsePort(v(f.kPort)), ...(v(f.kName) ? { name: v(f.kName) } : {}), ...(v(f.kKey) ? { api_key: v(f.kKey) } : {}) };
+        added_ = await pj("add", sent);
+        go("map");
+      } catch (e) {
+        failed(line, e, () => submit(force));
+      } finally { SW.idle(go_); }
+    }
+    async function finish(map) {
+      const r = added_; added_ = null;
+      close();
+      if (!r) return;
+      await added(r);
+      const id = r.printer && r.printer.id;
+      if (map && id) { try { await pj(`${enc(id)}/map`, {}); if (page && page.id === id) loadMap(); } catch (e) { /* the printer page has its own Map slots */ } }
+    }
+    async function scan() {
+      const mine = ++scanned;
+      st.scan = "running";
+      if (st.step === "which" && dlg && dlg.open) go("which");
+      try { const r = await pj("scan", {}); if (mine === scanned) st.klipperFound = (r && r.found) || []; } catch (e) { if (mine === scanned) st.klipperFound = []; }
+      if (mine !== scanned) return;
+      st.scan = "done";
+      if (st.step === "which" && dlg && dlg.open) go("which");
+    }
+    dlg = SW.sheet({ title: tg("printer_guided_title"), body, foot, cls: "sheet--guided", onClose: () => { scanned++; if (added_) { const r = added_; added_ = null; added(r); } } });
+    openHere(dlg, opener);
+    if (seed) { if (seed.family === "klipper") useKlipper(seed); else useBambu(seed); } else { go("which"); scan(); }
+    return dlg;
   }
 
   // ----- one printer (04 6.2): its nodes are made again for every printer opened -----
@@ -482,7 +613,9 @@ function printersTab() {
         const load = needsHub(SW.btn(t("common_load"), { action: "load", name: t("spool_load_title", { slot: sl.label }), run: () => openLoad(sl, load) }));
         const unload = sp ? needsHub(SW.btn(t("common_unload"), { action: "unload", name: t("printer_unload_title", { slot: sl.label }), run: () => unloadSlot(sl, sp, unload) })) : null;
         load.dataset.key = key("load"); if (unload) unload.dataset.key = key("unload");
-        const actions = h("div", { class: "pslot__actions" }, load, unload);
+        const clearBtn = needsHub(SW.btn(tg("printer_clear_action"), { cls: "btn--ghost", action: "clear-slot", name: tg("printer_clear_title", { slot: sl.label }), run: () => clearSlot(sl, clearBtn) }));
+        clearBtn.dataset.key = key("clear");
+        const actions = h("div", { class: "pslot__actions" }, load, unload, clearBtn);
         if (!up) { disabled(load, t("slot_load_disabled")); if (unload) disabled(unload, t("slot_load_disabled")); }
         const waiting = sl.pending && sl.pending.text ? String(sl.pending.text) : "";   // an assignment waiting for the slot to load
         const detail = waiting ? waiting : sl.present === false ? t("common_empty") : sl.reading ? t("common_reading")
@@ -601,6 +734,28 @@ function printersTab() {
       SW.toast(t("printer_unload_line", { name, slot: label }));
       slotSay(label, [t("printer_unload_line", { name, slot: label }),
         ...(r.moved_back || []).map((m) => (m.location ? t("printer_unload_moved_back", { id: m.id ?? "?", location: m.location }) : t("printer_unload_moved_back_noplace", { id: m.id ?? "?" })))], "ok");
+    } finally { g.slotBusy = false; }
+  }
+
+  // Clear slot (R83 section 3): "the Hub forgets which spool is in this slot", offered on every slot. The dry run says what would happen
+  // (a spool goes back, a waiting assignment ends); a sheet asks; the real call answers what was done.
+  async function clearSlot(sl, button) {
+    const g = page, label = sl.label, line = slotLine(label);
+    if (g.slotBusy) return;
+    g.slotBusy = true;
+    try {
+      let plan = null;
+      await act(line, t("common_checking"), async () => { plan = await pj(`${slotPath(g, label)}/clear`, { dry_run: true }); return null; }, { button, again: () => clearSlot(sl, button) });
+      if (!plan) return;
+      const sp = plan.spool, name = sp ? ((sp.vendor || sp.name) ? `${sp.vendor || ""} ${sp.name || ""}`.trim() : t("spool_title", { id: sp.id })) : "";
+      const mv = [plan.moved_back].flat()[0], back = mv && typeof mv === "object" ? mv.location : mv;      // the contract says a place; the unload route's list of {id, location} is read too
+      const text = [tg("printer_clear_body"), sp ? (back ? tg("printer_clear_goes_back", { name, location: back }) : tg("printer_clear_goes_back_noplace", { name })) : ""].filter(Boolean).join(" ");
+      const r = await sheetAsk({ kind: "confirm", title: tg("printer_clear_title", { slot: label }), text, opener: button, confirm: tg("printer_clear_action"),
+        run: () => pj(`${slotPath(g, label)}/clear`, { dry_run: false }) });
+      if (!r) return;
+      SW.toast(tg("printer_clear_line", { slot: label }));
+      slotSay(label, [tg("printer_clear_line", { slot: label }), ...(r.waiting_ended ? [tg("printer_clear_waiting_ended", { slot: label })] : []),
+        ...(r.printer_cleared === false && (known(g.id) || {}).family !== "klipper" ? [tg("printer_clear_printer_left")] : [])], "ok");
     } finally { g.slotBusy = false; }
   }
 

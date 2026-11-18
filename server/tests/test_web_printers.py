@@ -922,7 +922,7 @@ def test_script_reruns_a_dry_run_asked_for_while_another_ran():
     src = (STATIC / "printers.js").read_text(encoding="utf-8")
     assert "if (g.slotBusy) { if (dry) dryAgain = true; return; }" in src
     assert "if (dryAgain && spool && dlg.isConnected) { dryAgain = false; doLoad(true); }" in src
-    assert src.count("g.slotBusy = false;") == 3 and "slotDone" not in src      # the page's start, the load's finally and the unload's
+    assert src.count("g.slotBusy = false;") == 4 and "slotDone" not in src      # the page's start, the load's finally, the unload's and the clear's
 
 
 def test_the_report_route_asks_the_kit_and_needs_lan_and_origin(app, kit):
@@ -1027,6 +1027,48 @@ def test_add_edit_and_forget_go_to_the_kit_with_only_their_keys(managing):
     assert ("DELETE", "/api/printers/sv08-max") in kit.calls
 
 
+def test_scan_test_and_clear_pass_to_the_kit_with_only_their_keys(managing):
+    """EV6b (R83 10.3): the guided add's Klipper search and test, and Clear slot, are twins of the kit's routes."""
+    app, kit = managing
+    with TestClient(app, base_url=ORIGIN, client=HOME) as c:
+        c.post(P + "/scan", headers=H, json={"subnet": "10.9.9.0/24"})
+        c.post(P + "/test", headers=H, json={"family": "klipper", "host": "voron.local", "port": 7125, "api_key": "k", "serial": "x"})
+        c.post(P + f"/{SERIAL}/slots/A1/clear", headers=H, json={})
+        c.post(P + f"/{SERIAL}/slots/A1/clear", headers=H, json={"dry_run": False})
+    posts = [x for x in kit.calls if x[0] == "POST"]
+    assert ("POST", "/api/printers/scan", {}) in posts                      # no subnet: the kit's own /24
+    assert ("POST", "/api/printers/test", {"family": "klipper", "host": "voron.local", "port": 7125, "api_key": "k"}) in posts
+    assert ("POST", f"/api/printers/{SERIAL}/slots/A1/clear", {"dry_run": True}) in posts
+    assert ("POST", f"/api/printers/{SERIAL}/slots/A1/clear", {"dry_run": False}) in posts
+
+
+def test_scan_and_test_need_the_pages_origin_the_home_network_and_the_changes_switch(managing, env):
+    app, kit = managing
+    with TestClient(app, base_url=ORIGIN, client=HOME) as c:
+        assert c.post(P + "/scan", json={}).status_code == 403 and c.post(P + "/test", json={"host": "x"}).status_code == 403
+    off = make_app(env, ManagingKit(), printer_changes=False)
+    with TestClient(off, base_url=ORIGIN, client=HOME) as c:
+        assert c.post(P + "/scan", headers=H, json={}).status_code == 403 and c.post(P + "/test", headers=H, json={"host": "x"}).status_code == 403
+    assert not [x for x in kit.calls if x[0] == "POST"]
+
+
+def test_clear_checks_its_slot_label_and_flag_before_the_kit(slotapp, slotkit):
+    c = signed(slotapp)
+    assert c.post(P + f"/{SERIAL}/slots/A%231/clear", json={}, headers=H).status_code in (400, 404)
+    assert c.post(P + f"/{SERIAL}/slots/A1/clear", json={"dry_run": "no"}, headers=H).status_code == 400
+    assert not [x for x in slotkit.calls if x[0] == "POST"]
+    assert signed(slotapp).post(P + f"/{SERIAL}/slots/A1/clear", json={}).status_code == 403          # a change needs the page's own origin
+
+
+def test_the_guided_add_and_clear_slot_are_in_the_script():
+    """EV6b: the guided sheet's steps and its calls, and Clear slot beside Unload with a dry run before the sheet."""
+    text = (STATIC / "printers.js").read_text(encoding="utf-8")
+    for words in ("function guidedAdd(", 'pj("scan", {})', 'pj("test", {', 'pj("add", sent)', "/clear`, { dry_run: true }", "/clear`, { dry_run: false }",
+                  'action: "clear-slot"', 'tg("printer_guided_map_title")'):
+        assert words in text, words
+    assert "addBambuSheet" not in text and "addKlipperSheet" not in text
+
+
 def test_a_field_the_kit_names_reaches_the_printers_tab(managing, monkeypatch):
     """S1.4: the kit's `field` (api.py) travels through the web unit's answer to the page."""
     from filament_kit.web.slots import SlotError
@@ -1104,7 +1146,7 @@ def test_forget_from_away_needs_the_session(env):
 def test_the_printers_tab_has_manage_printers():
     text = (STATIC / "printers.js").read_text(encoding="utf-8")
     for words in ('"common_add"', '"common_rename"', '"common_change"', '"common_replace"', '"common_forget"',
-                  '"printers_forget"', '"common_add_klipper_printer"', '`${id}/edit`', '`${id}/forget`', '["add", {'):
+                  '"printers_forget"', '"common_add_klipper_printer"', '`${id}/edit`', '`${id}/forget`', 'pj("add", sent)'):
         assert words in text, words
     # review R103's rules, as the kit enforces them: a new certificate comes with the code, an unpinned printer's new
     # address with its code, a Klipper move with its key
@@ -1159,7 +1201,7 @@ def test_manage_printers_uses_inline_fields_not_prompts():
     code = " ".join(ln for ln in text.splitlines() if not ln.lstrip().startswith("//"))
     assert "window.prompt" not in code and "prompt(" not in code
     assert text.count('type: "secret"') == 2 and 'type: "password"' not in text
-    assert "|| 7125" not in text and "parsePort(port)" in text and 't("common_error_port")' in text
+    assert "|| 7125" not in text and "parsePort(v(f.kPort))" in text and 't("common_error_port")' in text
     assert "n >= 1 && n <= 65535" in text
 
 
@@ -1216,8 +1258,9 @@ def test_confirmations_and_questions_are_sheets_not_native_dialogs():
     assert "SW.ask({ open: openHere" in src
     for key in ("printer_stop_dialog_title", "printer_unload_title", "printer_usage_undo_title", "printers_map_title", "printers_forget_title",
                 "printers_rename_title", "printers_change_address_title", "printers_access_code_title", "printers_forget_cert_title", "printers_key_title",
-                "printer_add_title", "common_add_klipper_printer"):
+                "common_add_printer", "common_add_klipper_printer"):
         assert f't("{key}"' in src, key
+    assert 'tg("printer_guided_title")' in src and 'tg("printer_clear_title"' in src
     assert 'kind: "destructive", title: t("printer_stop_dialog_title")' in src
     assert 'kind: "destructive", title: t("printers_forget_cert_title"' in src and 'kind: "destructive", title: t("printers_forget_title"' in src
     # secrets never go in a plain input: Access Code and Moonraker API key are SW.field secrets
