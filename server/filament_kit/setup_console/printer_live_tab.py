@@ -86,12 +86,12 @@ def routes(page, sm: Spoolman | None = None, camera_hub=None) -> list[tuple]:
         if isinstance(e, loading.NotFound):
             return r(404, "not_found")
         if isinstance(e, family.ModuleOff):
-            return r(409, "module_off", f"the {e.family} module is turned off on this server")
+            return r(409, "module_off", f"the {e.family} feature is turned off on the Hub")
         if isinstance(e, family.NotSupported):
             return r(409, "not_supported", str(e) or "this printer does not support that")
         if isinstance(e, family.RecordedByMoonraker):
             return r(409, "recorded_by_moonraker", "Moonraker recorded this usage in Spoolman; correct it in Spoolman "
-                     "(the kit cannot undo it)")
+                     "(Spoolwarden cannot undo it)")
         if isinstance(e, NoReply):
             return r(504, "no_reply", "the printer did not answer in time")
         if isinstance(e, SpoolmanError):
@@ -222,7 +222,7 @@ def routes(page, sm: Spoolman | None = None, camera_hub=None) -> list[tuple]:
                 r = pending.load_or_wait(page.printers, spoolman(), serial, label, spool_id, dry, sealed_location=sealed())
             except loading.SlotWriteFailed as e:
                 if page.printers.state(serial) == "needs_developer_mode" or DEVELOPER_MODE_REASON.search(str(e)):
-                    raise Refused(409, f"{e}; turn on Developer Mode (LAN-only mode) on the printer and retry",
+                    raise Refused(409, f"{e}; turn on Developer Mode (LAN-only mode) on the printer and try again",
                                   code="needs_developer_mode") from e
                 raise Refused(409, str(e), code="write_refused") from e
             return {**r, "confirmed": bool(r.get("confirmed"))}
@@ -288,7 +288,7 @@ def routes(page, sm: Spoolman | None = None, camera_hub=None) -> list[tuple]:
     async def usage_undo(request, body):
         entry_id = request.path_params["entry_id"]
         if family.is_klipper_entry(entry_id):
-            raise Refused(409, "Moonraker recorded this usage in Spoolman; correct it in Spoolman (the kit cannot undo it)",
+            raise Refused(409, "Moonraker recorded this usage in Spoolman; correct it in Spoolman (Spoolwarden cannot undo it)",
                           code="recorded_by_moonraker")
         e = await call(usage.undo, entry_id, spoolman())
         page.audit(request, f"usage {entry_id} undone")

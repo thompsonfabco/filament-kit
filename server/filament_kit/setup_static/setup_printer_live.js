@@ -10,7 +10,7 @@
 const POLL_MS = 2000;
 const ACTIVE = ["RUNNING", "PAUSE", "PREPARE", "SLICING"];
 const UP = ["connected", "unknown_model"];
-const FIX = { offline: "printers_fix_offline", wrong_code: "printers_fix_wrong_code", needs_developer_mode: "printers_fix_developer_mode",
+const plFIX = { offline: "printers_fix_offline", wrong_code: "printers_fix_wrong_code", needs_developer_mode: "printers_fix_developer_mode",
   cert_changed: "printers_fix_cert_changed", unauthorized: "printers_fix_unauthorized", klippy_not_ready: "printers_fix_klippy" };
 const JOB = { RUNNING: ["printer_state_printing", "info", "s-diamond"], PAUSE: ["printer_state_paused", "warn", "s-triangle"],
   FINISH: ["printer_state_finished", "ok", "s-filled"], FAILED: ["printer_state_failed", "bad", "s-octagon"],
@@ -38,37 +38,37 @@ const STUB = {
   live_not_supported: "This printer has no such control.",
   live_too_many: "Too many camera views are open. Close one first."
 };
-const fill = (text, vars) => (vars ? String(text).replace(/\{([a-z][a-z0-9_]*)\}/g, (m, n) => (vars[n] != null ? String(vars[n]) : m)) : String(text));
+const fillText = (text, vars) => (vars ? String(text).replace(/\{([a-z][a-z0-9_]*)\}/g, (m, n) => (vars[n] != null ? String(vars[n]) : m)) : String(text));
 const t = (key, vars) => {
   const v = SW.t(key, vars);
-  return v !== key || !(key in STUB) ? v : fill(STUB[key], vars);
+  return v !== key || !(key in STUB) ? v : fillText(STUB[key], vars);
 };
-const h = SW.h;
-const E = (tag, cls, ...kids) => h(tag, { class: cls }, ...kids);
+const hx = SW.h;
+const plE = (tag, cls, ...kids) => hx(tag, { class: cls }, ...kids);
 const enc = encodeURIComponent;
-const hexOf = (s) => (/^[0-9A-Fa-f]{6}$/.test(s.color_hex || "") ? "#" + s.color_hex : "");
-const num = (v) => (v == null || v === "" || Number.isNaN(Number(v)) ? "–" : String(Math.round(Number(v))));
+const plhexOf = (s) => (/^[0-9A-Fa-f]{6}$/.test(s.color_hex || "") ? "#" + s.color_hex : "");
+const plnum = (v) => (v == null || v === "" || Number.isNaN(Number(v)) ? "–" : String(Math.round(Number(v))));
 const timeLeft = (min) => (!min || min < 1 ? "" : min >= 60 ? t("printer_time_hours", { hours: Math.floor(min / 60), minutes: min % 60 }) : t("printer_time_minutes", { minutes: min }));
 const clockOf = (iso) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? "" : `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
-const stamp = (at) => String(at || "").replace("T", " ").slice(0, 16);
+const plstamp = (at) => String(at || "").replace("T", " ").slice(0, 16);
 const spoolName = (s) => `${s.vendor || ""} ${s.name || ""}`.trim() || t("spool_title", { id: s.id });
-const sentence = (kind, shape, text) => E("span", "status status--" + kind, SW.shape(shape), text);
+const plsentence = (kind, shape, text) => plE("span", "status status--" + kind, SW.shape(shape), text);
 
 function printerLive(p, ctx = {}) {
   const path = (what) => (ctx.path ? ctx.path(what) : `printers/${enc(p.serial)}/${what}`);
   const call = ctx.api || api;
   const S = { live: null, usage: null, sig: {}, ctl: "", camOn: false, busy: false, timer: 0, tries: 0, seen: false, wasActive: false,
     noLight: false, results: new Map(), undone: new Map() };
-  const head = E("div", "plive__state"), job = E("div", "plive__job"), bar = SW.progress({ value: 0, name: t("printer_progress_name") });
-  const pct = E("span", "plive__pct mono"), prog = E("div", "plive__prog", bar, pct), detail = E("p", "plive__detail muted"), temps = E("p", "plive__temps mono");
-  const alerts = E("div", "plive__alerts"), notes = E("div", "plive__notes"), msg = h("p", { class: "result plive__msg", role: "status" });
-  const locked = E("div", "plive__locked");
-  const controls = E("div", "plive__controls actions"), camBtn = SW.btn(t("printer_camera_show"), { icon: "camera", action: "camera", run: () => cameraToggle() });
-  const camBox = h("div", { class: "plive__cam", hidden: true });
-  const units = E("div", "plive__units"), usageBox = E("div", "plive__log"), usageMsg = h("p", { class: "result", role: "status" });
-  const titled = (key, ...kids) => { const id = SW.uid("pl"); return h("section", { class: "plive__group", "aria-labelledby": id }, h("h3", { class: "plive__title", id }, t(key)), ...kids); };
-  const root = h("section", { class: "plive", "aria-label": t("live_head"), data: { printer: p.serial != null ? "live" : null } },
-    locked, head, job, prog, detail, temps, alerts, notes, controls, msg, E("div", "plive__camrow", camBtn), camBox,
+  const head = plE("div", "plive__state"), job = plE("div", "plive__job"), bar = SW.progress({ value: 0, name: t("printer_progress_name") });
+  const pct = plE("span", "plive__pct mono"), prog = plE("div", "plive__prog", bar, pct), detail = plE("p", "plive__detail muted"), temps = plE("p", "plive__temps mono");
+  const alerts = plE("div", "plive__alerts"), notes = plE("div", "plive__notes"), msg = hx("p", { class: "result plive__msg", role: "status" });
+  const locked = plE("div", "plive__locked");
+  const controls = plE("div", "plive__controls actions"), camBtn = SW.btn(t("printer_camera_show"), { icon: "camera", action: "camera", run: () => cameraToggle() });
+  const camBox = hx("div", { class: "plive__cam", hidden: true });
+  const units = plE("div", "plive__units"), usageBox = plE("div", "plive__log"), usageMsg = hx("p", { class: "result", role: "status" });
+  const titled = (key, ...kids) => { const id = SW.uid("pl"); return hx("section", { class: "plive__group", "aria-labelledby": id }, hx("h3", { class: "plive__title", id }, t(key)), ...kids); };
+  const root = hx("section", { class: "plive", "aria-label": t("live_head"), data: { printer: p.serial != null ? "live" : null } },
+    locked, head, job, prog, detail, temps, alerts, notes, controls, msg, plE("div", "plive__camrow", camBtn), camBox,
     titled("live_slots", units), titled("printer_usage_title", usageBox, usageMsg));
   prog.hidden = detail.hidden = temps.hidden = true;
   camBtn.hidden = true;
@@ -79,11 +79,11 @@ function printerLive(p, ctx = {}) {
   const active = () => up() && ACTIVE.includes(gcode());
   function paintState() {
     const L = S.live, s = (L && L.status) || {}, st = L ? L.state : "";
-    if (!L) { head.replaceChildren(E("span", "muted", t("printer_waiting"))); return; }
+    if (!L) { head.replaceChildren(plE("span", "muted", t("printer_waiting"))); return; }
     const word = st === "offline" ? SW.status("offline") : up() ? SW.status("connected") : SW.status("needs_look");
-    head.replaceChildren(word, ...(!up() ? [E("span", "muted", FIX[st] ? t(FIX[st]) : String(st).replace(/_/g, " "))] : []));
+    head.replaceChildren(word, ...(!up() ? [plE("span", "muted", plFIX[st] ? t(plFIX[st]) : String(st).replace(/_/g, " "))] : []));
     const g = gcode(), jt = up() && g ? JOB[g] : null;
-    job.replaceChildren(...(up() && g ? [jt ? sentence(jt[1], jt[2], s.job ? t(jt[0], { job: s.job }) : t(JOB_WORD[g])) : E("span", "muted", t(JOB_WORD[g] || "printer_job_idle"))] : []));
+    job.replaceChildren(...(up() && g ? [jt ? plsentence(jt[1], jt[2], s.job ? t(jt[0], { job: s.job }) : t(JOB_WORD[g])) : plE("span", "muted", t(JOB_WORD[g] || "printer_job_idle"))] : []));
     const live = active();
     prog.hidden = !live;
     if (live) {
@@ -96,16 +96,16 @@ function printerLive(p, ctx = {}) {
     detail.textContent = live ? [layer, left ? t("printer_progress_left", { time: left }) : "", clock ? t("printer_progress_done", { clock }) : "", s.stage].filter(Boolean).join(" · ") : "";
     detail.hidden = !detail.textContent;
     const tp = s.temps || {}, lines = [];
-    (tp.nozzle || []).forEach((n, i) => lines.push(t(tp.nozzle.length > 1 ? "printer_temp_nozzle_n" : "printer_temp_nozzle", { n: i + 1, now: num(n.current), target: num(n.target) })));
-    if (tp.bed) lines.push(t("printer_temp_bed", { now: num(tp.bed.current), target: num(tp.bed.target) }));
-    if (tp.chamber) lines.push(t("printer_temp_chamber", { now: num(tp.chamber.current) }));
+    (tp.nozzle || []).forEach((n, i) => lines.push(t(tp.nozzle.length > 1 ? "printer_temp_nozzle_n" : "printer_temp_nozzle", { n: i + 1, now: plnum(n.current), target: plnum(n.target) })));
+    if (tp.bed) lines.push(t("printer_temp_bed", { now: plnum(tp.bed.current), target: plnum(tp.bed.target) }));
+    if (tp.chamber) lines.push(t("printer_temp_chamber", { now: plnum(tp.chamber.current) }));
     temps.textContent = up() ? lines.join(" · ") : "";
     temps.hidden = !temps.textContent;
     const hms = s.hms || [], err = s.print_error;
-    alerts.replaceChildren(...(up() ? [...hms.map((x) => sentence("bad", "s-octagon", x.text || t("printer_alert_code", { code: x.code }))),
-      ...(err && !hms.length ? [sentence("bad", "s-octagon", t("printer_alert_code", { code: err }))] : [])] : []));
+    alerts.replaceChildren(...(up() ? [...hms.map((x) => plsentence("bad", "s-octagon", x.text || t("printer_alert_code", { code: x.code }))),
+      ...(err && !hms.length ? [plsentence("bad", "s-octagon", t("printer_alert_code", { code: err }))] : [])] : []));
     alerts.setAttribute("aria-label", t("live_alerts"));
-    notes.replaceChildren(...[...(s.notes || []), s.spoolman_warning].filter((n) => typeof n === "string" && n).map((n) => E("p", "muted", n)));
+    notes.replaceChildren(...[...(s.notes || []), s.spoolman_warning].filter((n) => typeof n === "string" && n).map((n) => plE("p", "muted", n)));
     camBtn.hidden = !S.camOn && !(L.camera && L.camera.kind);
   }
 
@@ -113,7 +113,7 @@ function printerLive(p, ctx = {}) {
   function paintControls() {
     const L = S.live, s = (L && L.status) || {}, g = gcode(), light = (L && L.controls && L.controls.light) && !S.noLight;
     const sig = [up(), g, s.light, light, SW.lock.state === "locked"].join("|");
-    locked.replaceChildren(...(SW.lock.state === "locked" ? [E("p", "muted", t("live_locked"), " ", unlockToShow())] : []));
+    locked.replaceChildren(...(SW.lock.state === "locked" ? [plE("p", "muted", t("live_locked"), " ", unlockToShow())] : []));
     if (sig === S.ctl) return;
     S.ctl = sig;
     const ctl = (action, key, cls) => { const b = SW.btn(t(key), { cls, action, run: () => command(action, b) }); return b; };
@@ -183,7 +183,7 @@ function printerLive(p, ctx = {}) {
   }
   function cameraFail(text) {
     camBox.hidden = false;
-    camBox.replaceChildren(E("div", "plive__camtext", E("p", "", text), SW.btn(t("common_try_again"), { action: "try-again", run: () => cameraStart() })));
+    camBox.replaceChildren(plE("div", "plive__camtext", plE("p", "", text), SW.btn(t("common_try_again"), { action: "try-again", run: () => cameraStart() })));
   }
   async function cameraStart() {
     const kind = S.live && S.live.camera && S.live.camera.kind, name = p.name || (S.live && S.live.name) || "";
@@ -191,10 +191,10 @@ function printerLive(p, ctx = {}) {
     S.camOn = true;
     camBtn.replaceChildren(SW.icon("camera", "icon--s"), t("printer_camera_hide"));
     camBox.hidden = false;
-    camBox.replaceChildren(E("div", "plive__camtext", SW.spinner(), t("printer_camera_starting")));
+    camBox.replaceChildren(plE("div", "plive__camtext", SW.spinner(), t("printer_camera_starting")));
     try {
       if (kind === "hls") {
-        const v = h("video", { class: "plive__video", playsInline: true, muted: true, autoplay: true, controls: true, "aria-label": t("printer_camera_alt", { printer: name }) });
+        const v = hx("video", { class: "plive__video", playsInline: true, muted: true, autoplay: true, controls: true, "aria-label": t("printer_camera_alt", { printer: name }) });
         if (!v.canPlayType("application/vnd.apple.mpegurl")) { cameraFail(t("printer_camera_no_hls")); return; }
         const src = await firstAddress("camera/index.m3u8");
         if (!S.camOn) return;
@@ -205,7 +205,7 @@ function printerLive(p, ctx = {}) {
       }
       const src = await firstAddress("camera.mjpeg");
       if (!S.camOn) return;
-      const img = h("img", { class: "plive__img", alt: t("printer_camera_alt", { printer: name }) });
+      const img = hx("img", { class: "plive__img", alt: t("printer_camera_alt", { printer: name }) });
       img.addEventListener("load", () => camBox.querySelector(".plive__camtext")?.remove(), { once: true });
       img.addEventListener("error", () => { if (S.camOn) cameraFail(t("printer_camera_failed")); });
       camBox.append(img);                                   // the starting line stays until the first picture
@@ -222,12 +222,12 @@ function printerLive(p, ctx = {}) {
 
   // ----- slots -----
   const lineOf = (label) => {
-    const el = h("div", { class: "result plive__slotline", role: "status", data: { slot: label } }), r = S.results.get(label);
+    const el = hx("div", { class: "result plive__slotline", role: "status", data: { slot: label } }), r = S.results.get(label);
     if (r) SW.result(el, r[0], r[1].cloneNode ? r[1].cloneNode(true) : r[1]);
     return el;
   };
   const slotSay = (label, kind, lines) => {
-    const body = E("span", "plive__lines", [].concat(lines).filter(Boolean).map((x, i) => E("span", "plive__linetext", x)));
+    const body = plE("span", "plive__lines", [].concat(lines).filter(Boolean).map((x, i) => plE("span", "plive__linetext", x)));
     S.results.set(label, [kind, body]);
     const el = units.querySelector(`.plive__slotline[data-slot="${CSS.escape(label)}"]`);
     if (el) SW.result(el, kind, body.cloneNode(true));
@@ -237,24 +237,24 @@ function printerLive(p, ctx = {}) {
     if (key === S.sig.slots) return;
     S.sig.slots = key;
     const focus = document.activeElement && units.contains(document.activeElement) ? document.activeElement.dataset.key : null;
-    const unitNode = (u) => h("div", { class: "plive__unit" },
-      h("h4", { class: "plive__unittitle" }, [u.label, u.type_name].filter(Boolean).join(" · ")),
-      h("ul", { class: "slot-strip plive__slots", "aria-label": t("slot_list_label", { name: p.name || (L && L.name) || "" }) }, (u.slots || []).map((sl) => {
-        const sp = sl.spool, waiting = sl.pending, hex = hexOf(sl), grams = sp && sp.remaining_weight != null ? Math.round(sp.remaining_weight) : null;
+    const unitNode = (u) => hx("div", { class: "plive__unit" },
+      hx("h4", { class: "plive__unittitle" }, [u.label, u.type_name].filter(Boolean).join(" · ")),
+      hx("ul", { class: "slot-strip plive__slots", "aria-label": t("slot_list_label", { name: p.name || (L && L.name) || "" }) }, (u.slots || []).map((sl) => {
+        const sp = sl.spool, waiting = sl.pending, hex = plhexOf(sl), grams = sp && sp.remaining_weight != null ? Math.round(sp.remaining_weight) : null;
         const mk = (what, key_, run, cls) => { const b = SW.btn(t(key_), { action: what, cls, name: t(`live_${what}_slot`, { slot: sl.label }), run: () => run(b) }); b.dataset.key = `${what}:${sl.label}`; return b; };
         const load = mk("load", "common_load", (b) => slotLoad(sl, b));
         const unload = sp ? mk("unload", "common_unload", (b) => slotUnload(sl, b)) : null;
         const clear = mk("clear", "live_clear", (b) => slotClear(sl, b));
         if (!up()) for (const b of [load, unload, clear]) if (b) SW.disable(b, t("slot_load_disabled"));
-        const what = waiting && !sp && !sl.type ? null : sl.present === false ? E("span", "muted", t("common_empty")) : [sp ? spoolName(sp) : sl.type || t("printer_slot_unknown"), " ", E("span", "mono muted", hex)];
-        return h("li", { class: "slot-strip__row plive__slot", data: { state: waiting ? "waiting" : sl.active ? "active" : null, slot: sl.label } },
-          E("span", "slot-strip__label mono", sl.label), SW.swatch(hex, { empty: sl.present === false && !waiting }),
-          E("span", "slot-strip__name plive__what", what, waiting ? E("span", "plive__waiting", t("slot_waiting"), waiting.spool_id != null ? [" ", E("span", "mono", "#" + waiting.spool_id)] : "") : null),
-          E("span", "slot-strip__level", grams != null ? E("span", "mono", t("printer_slot_left", { left: grams })) : null),
-          E("span", "slot-strip__use", sl.active ? t("slot_in_use") : ""),
-          E("span", "actions plive__actions", load, unload, clear), lineOf(sl.label));
+        const what = waiting && !sp && !sl.type ? null : sl.present === false ? plE("span", "muted", t("common_empty")) : [sp ? spoolName(sp) : sl.type || t("printer_slot_unknown"), " ", plE("span", "mono muted", hex)];
+        return hx("li", { class: "slot-strip__row plive__slot", data: { state: waiting ? "waiting" : sl.active ? "active" : null, slot: sl.label } },
+          plE("span", "slot-strip__label mono", sl.label), SW.swatch(hex, { empty: sl.present === false && !waiting }),
+          plE("span", "slot-strip__name plive__what", what, waiting ? plE("span", "plive__waiting", t("slot_waiting"), waiting.spool_id != null ? [" ", plE("span", "mono", "#" + waiting.spool_id)] : "") : null),
+          plE("span", "slot-strip__level", grams != null ? plE("span", "mono", t("printer_slot_left", { left: grams })) : null),
+          plE("span", "slot-strip__use", sl.active ? t("slot_in_use") : ""),
+          plE("span", "actions plive__actions", load, unload, clear), lineOf(sl.label));
       })));
-    units.replaceChildren(...(list.length ? list.map(unitNode) : [E("p", "muted", t(!L ? "printer_waiting" : up() ? "spool_load_no_slots" : "slot_none_offline"))]));
+    units.replaceChildren(...(list.length ? list.map(unitNode) : [plE("p", "muted", t(!L ? "printer_waiting" : up() ? "spool_load_no_slots" : "slot_none_offline"))]));
     if (focus) { const b = units.querySelector(`[data-key="${CSS.escape(focus)}"]`); if (b) b.focus(); }
   }
   const slotPost = (sl, what, body) => post(`slots/${enc(sl.label)}/${what}`, body);
@@ -293,7 +293,7 @@ function printerLive(p, ctx = {}) {
     const text = !sp ? t("live_clear_body", { slot: sl.label }) : where ? t("live_clear_body_spool", { slot: sl.label, name: spoolName(sp), location: where })
       : t("live_clear_body_spool_noplace", { slot: sl.label, name: spoolName(sp) });
     const done = await SW.ask({ kind: "confirm", title: t("live_clear_title", { slot: sl.label }), opener: button, confirm: t("live_clear"), text,
-      body: plan.waiting_ended ? E("p", "", t("live_clear_waiting")) : null, run: () => slotPost(sl, "clear", { dry_run: false }) });
+      body: plan.waiting_ended ? plE("p", "", t("live_clear_waiting")) : null, run: () => slotPost(sl, "clear", { dry_run: false }) });
     if (!done) { S.results.delete(sl.label); return; }
     slotSay(sl.label, "ok", [t("live_clear_done", { slot: sl.label }), done.waiting_ended ? t("live_clear_waiting") : "", done.printer_cleared ? t("live_clear_printer") : "", done.text || ""]);
   });
@@ -301,21 +301,21 @@ function printerLive(p, ctx = {}) {
   async function pickSpool(sl, button) {
     if (ctx.pickSpool) return ctx.pickSpool(sl);
     let chosen = null;
-    const results = h("div", { class: "plive__picks" }), note = h("p", { class: "result", role: "status" });
+    const results = hx("div", { class: "plive__picks" }), note = hx("p", { class: "result", role: "status" });
     const find = SW.field({ type: "search", label: t("common_search"), placeholder: t("common_search_placeholder"), onSearch: (q) => search(q) });
     let asked = 0;
-    const row = (s) => h("button", { class: "btn plive__pick", type: "button", "aria-pressed": "false", data: { spool: s.id }, on: { click: (ev) => {
+    const row = (s) => hx("button", { class: "btn plive__pick", type: "button", "aria-pressed": "false", data: { spool: s.id }, on: { click: (ev) => {
       chosen = s;
       for (const b of results.children) b.setAttribute("aria-pressed", String(b === ev.currentTarget));
     } } }, t("printer_load_row_id", { id: s.id }) + " " + spoolName(s), " ",
-    E("span", "muted", t("printer_load_row_where", { location: s.location || "?", grams: s.remaining_g != null ? Math.round(s.remaining_g) : "?" })));
+    plE("span", "muted", t("printer_load_row_where", { location: s.location || "?", grams: s.remaining_g != null ? Math.round(s.remaining_g) : "?" })));
     const search = async (q) => {
       const mine = ++asked;
       try {
         const r = await call(`spools?q=${enc(q)}&limit=12`);
         if (mine !== asked) return;
         SW.result(note, null);
-        results.replaceChildren(...((r.spools || []).length ? r.spools.map(row) : [E("p", "muted", t("spools_empty_filtered"))]));
+        results.replaceChildren(...((r.spools || []).length ? r.spools.map(row) : [plE("p", "muted", t("spools_empty_filtered"))]));
       } catch (e) { if (mine === asked) SW.result(note, "bad", t("live_pick_failed")); }
     };
     search("");
@@ -331,8 +331,8 @@ function printerLive(p, ctx = {}) {
     if (line) SW.result(line, null);
     const moved = (plan.moved_back || []).filter((m) => m.id !== sp.id).map((m) => (m.location ? t("spool_load_plan_goes_back", { id: m.id ?? "?", slot: sl.label, location: m.location }) : t("spool_load_plan_goes_back_noplace", { id: m.id ?? "?", slot: sl.label })));
     const done = await SW.ask({ kind: "confirm", title: t("spool_load_title", { slot: sl.label }), opener: button, confirm: t("common_load"),
-      text: t("live_plan", { name: spoolName(sp), slot: sl.label }), body: [plan.preset && plan.preset.name ? E("p", "", t("printer_load_preset", { name: plan.preset.name })) : null, ...moved.map((m) => E("p", "", m)),
-        ...(plan.problems || []).map((x) => E("p", "", x))], run: () => slotPost(sl, "load", { spool_id: sp.id, dry_run: false }) });
+      text: t("live_plan", { name: spoolName(sp), slot: sl.label }), body: [plan.preset && plan.preset.name ? plE("p", "", t("printer_load_preset", { name: plan.preset.name })) : null, ...moved.map((m) => plE("p", "", m)),
+        ...(plan.problems || []).map((x) => plE("p", "", x))], run: () => slotPost(sl, "load", { spool_id: sp.id, dry_run: false }) });
     if (!done) return;
     slotSay(sl.label, "ok", [done.pending ? t("live_load_waiting", { slot: sl.label }) : t(done.confirmed ? "live_load_done" : "live_load_sent", { name: spoolName(sp), slot: sl.label }), ...moved, ...(done.problems || [])]);
   });
@@ -344,7 +344,7 @@ function printerLive(p, ctx = {}) {
       S.usage = [...(r.entries || [])].sort((a, b) => String(b.at || "").localeCompare(String(a.at || ""))).slice(0, 20);
     } catch (e) { SW.result(usageMsg, "bad", e.message); return; }
     SW.result(usageMsg, null);
-    usageBox.replaceChildren(S.usage.length ? h("ul", { class: "plive__usage" }, S.usage.map(usageRow)) : E("p", "muted", t("printer_usage_empty")));
+    usageBox.replaceChildren(S.usage.length ? hx("ul", { class: "plive__usage" }, S.usage.map(usageRow)) : plE("p", "muted", t("printer_usage_empty")));
   }
   function usageNote(e) {
     if (e.undone) return t("printer_usage_note_undone");
@@ -354,19 +354,19 @@ function printerLive(p, ctx = {}) {
     return "";
   }
   function usageRow(e) {
-    const line = h("div", { class: "result", role: "status" }), said = S.undone.get(e.id);
+    const line = hx("div", { class: "result", role: "status" }), said = S.undone.get(e.id);
     if (said) SW.result(line, "ok", said);
     const counted = !e.undone && !e.observe && e.spool_id != null && !e.error && !String(e.id).startsWith("k-");
     const b = counted ? SW.btn(t("common_undo"), { action: "undo", name: t("printer_used_undo_name", { grams: e.grams ?? "?", job: e.job || t("printer_used_job_default") }), run: () => undo(e, b, line) }) : null;
     const from = e.spool ? t("printer_used_from_spool", { id: e.spool.id, name: spoolName(e.spool) }) : e.spool === null && e.spool_id != null ? t("printer_used_spool_gone") : "";
-    return h("li", { class: "plive__used", data: { state: e.undone ? "undone" : null, entry: e.id } },
-      E("span", "plive__grams mono", t("common_grams", { grams: e.grams ?? "?" })), E("span", "plive__what", [e.job || t("printer_used_job_default"), e.slot].filter(Boolean).join(" · ")),
-      E("span", "plive__when mono muted", stamp(e.at)), E("span", "plive__from muted", [from, usageNote(e)].filter(Boolean).join(" · ")), b, line);
+    return hx("li", { class: "plive__used", data: { state: e.undone ? "undone" : null, entry: e.id } },
+      plE("span", "plive__grams mono", t("common_grams", { grams: e.grams ?? "?" })), plE("span", "plive__what", [e.job || t("printer_used_job_default"), e.slot].filter(Boolean).join(" · ")),
+      plE("span", "plive__when mono muted", plstamp(e.at)), plE("span", "plive__from muted", [from, usageNote(e)].filter(Boolean).join(" · ")), b, line);
   }
   async function undo(e, button, line) {
     await unlocked(async () => {
       const back = await SW.ask({ kind: "confirm", title: t("printer_usage_undo_title"), opener: button, cancel: t("common_keep"), confirm: t("printer_usage_undo_confirm"),
-        text: t("printer_usage_undo_body", { grams: e.grams ?? "?", job: e.job || "?", slot: e.slot || "?", time: stamp(e.at) }), run: () => call(`usage/${enc(e.id)}/undo`, { code: theCode() }) });
+        text: t("printer_usage_undo_body", { grams: e.grams ?? "?", job: e.job || "?", slot: e.slot || "?", time: plstamp(e.at) }), run: () => call(`usage/${enc(e.id)}/undo`, { code: theCode() }) });
       if (!back) return;
       S.undone.set(e.id, t("printer_usage_undone", { grams: e.grams ?? "?", id: e.spool_id ?? "?" }));
       loadUsage();
