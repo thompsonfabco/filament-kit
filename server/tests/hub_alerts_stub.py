@@ -151,10 +151,27 @@ def hub_stub(hub_app):  # noqa: F811
         running.stop()
 
 
-def drive(hub_stub, tmp_path, body, width=1280, query="", look="console"):
-    """Runs `body` in the page (async, `return out`); the look is set once the page stands."""
+def notification_stub(notif):
+    """The browser's notifications for a test: "none" = the browser has no Notification; "granted" | "denied" | "default"
+    (asking answers `window.__notifAnswer`, "granted" unless the test changes it). Shown ones are collected in `window.__notes`."""
+    if notif is None:
+        return "window.__notes = [];\n"
+    if notif == "none":
+        return 'window.__notes = [];\nObject.defineProperty(window, "Notification", { value: undefined, configurable: true });\n'
+    return ("window.__notes = [];\nwindow.__notifAnswer = 'granted';\n"
+            "class FakeNotification {\n"
+            "  constructor(title, o) { window.__notes.push({ title, body: o && o.body, tag: o && o.tag }); this.close = () => {}; }\n"
+            "  static get permission() { return window.__perm; }\n"
+            "  static async requestPermission() { window.__perm = window.__notifAnswer; return window.__perm; }\n"
+            "}\n"
+            f"window.__perm = {json.dumps(notif)};\n"
+            'Object.defineProperty(window, "Notification", { value: FakeNotification, configurable: true });\n')
+
+
+def drive(hub_stub, tmp_path, body, width=1280, query="", look="console", notif=None):
+    """Runs `body` in the page (async, `return out`); the look is set once the page stands. `notif` sets the browser's notifications."""
     app, url = hub_stub
-    script = PRELUDE + f'\nawait ready();\nawait look("{look}");\nconst out = {{}};\n' + body + "\nreturn out;\n"
+    script = PRELUDE + notification_stub(notif) + f'\nawait ready();\nawait look("{look}");\nconst out = {{}};\n' + body + "\nreturn out;\n"
     return _drive(url, tmp_path, script, width=width)
 
 
