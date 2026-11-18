@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
@@ -33,6 +34,7 @@ import com.thompsonfabco.filamentkit.net.HubCheckState
 import com.thompsonfabco.filamentkit.ui.components.NoticeCard
 import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 import com.thompsonfabco.filamentkit.ui.components.ScreenState
+import com.thompsonfabco.filamentkit.ui.components.SwAction
 import com.thompsonfabco.filamentkit.ui.components.SwButton
 import com.thompsonfabco.filamentkit.ui.settings.FieldRow
 import com.thompsonfabco.filamentkit.ui.settings.GroupTitle
@@ -51,6 +53,10 @@ internal fun HubScreen(
     onTryAgain: () -> Unit,
     modifier: Modifier = Modifier,
     nowMillis: Long = System.currentTimeMillis(),
+    /** The check history table (R84 4.3), under Status; null leaves it out (a Hub without it, or no Hub). */
+    health: HealthUi? = null,
+    onHealthDays: (Int) -> Unit = {},
+    onHealthTryAgain: () -> Unit = {},
 ) {
     val space = SpoolwardenTheme.space
     val links = LocalUriHandler.current
@@ -88,12 +94,53 @@ internal fun HubScreen(
                                     }, Modifier.fillMaxWidth())
                                 }
                             }
+                            if (section.group == HubGroup.Status && health != null) HealthPanel(health, onHealthDays, onHealthTryAgain)
                         }
                         if (openProblem) NoticeCard(NoticeKind.Bad, stringResource(R.string.settings_hub_page_error_browser))
                     }
                 }
             }
         }
+    }
+}
+
+/**
+ * The check history (R84 4.3): when each check changed, from and to as words (never colour alone), newest first, for 7 days
+ * and 30 on request, with "No history before <date>." when the Hub's record starts later. Left out on an older Hub.
+ */
+@Composable
+private fun HealthPanel(health: HealthUi, onDays: (Int) -> Unit, onTryAgain: () -> Unit) {
+    if (health.unavailable) return
+    val colors = SpoolwardenTheme.colors
+    val space = SpoolwardenTheme.space
+    val answer = health.answer
+    SettingsPanel {
+        GroupTitle(HubTexts.HEALTH_TITLE)
+        when {
+            health.failed && answer == null -> NoticeCard(
+                NoticeKind.Bad, health.message ?: stringResource(R.string.common_offline_text),
+                actions = listOf(SwAction(stringResource(R.string.common_try_again), onTryAgain)),
+            )
+            answer == null -> Text(stringResource(R.string.common_working), color = colors.muted, style = MaterialTheme.typography.bodyMedium)
+            else -> {
+                val rows = HealthTable.rows(answer, HealthWords(stringResource(R.string.status_ok), stringResource(R.string.status_needs_look)))
+                if (rows.isEmpty()) Text(HubTexts.HEALTH_NO_CHANGES, style = MaterialTheme.typography.bodyMedium)
+                rows.forEach { row ->
+                    Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = row.spoken }, verticalArrangement = Arrangement.spacedBy(space.s1)) {
+                        Text(row.time, color = colors.muted, style = MaterialTheme.typography.bodySmall)
+                        Text(row.check, style = MaterialTheme.typography.bodyMedium)
+                        Text("${row.from} → ${row.to}", style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+                HealthTable.footnote(answer)?.let { Text(it, color = colors.muted, style = MaterialTheme.typography.bodySmall) }
+            }
+        }
+        val long = health.days == HealthUi.LONG_DAYS
+        SwButton(
+            if (long) HubTexts.HEALTH_SHOW_7 else HubTexts.HEALTH_SHOW_30,
+            { onDays(if (long) HealthUi.DEFAULT_DAYS else HealthUi.LONG_DAYS) },
+            Modifier.fillMaxWidth(), enabled = !health.loading,
+        )
     }
 }
 

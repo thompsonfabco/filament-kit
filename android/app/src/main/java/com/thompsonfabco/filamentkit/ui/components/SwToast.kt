@@ -44,25 +44,36 @@ private class ToastVisuals(
  * The shell's toast queue. Screens use it for a result whose control has gone away (a closed sheet, a popped
  * screen); a result with a control still on screen is a notice line next to it instead. Toasts show one at a time,
  * in the order asked for; each is held [TOAST_MS], or [TOAST_WITH_ACTION_MS] with an action, from the moment it is
- * shown, by a timer that dismisses only that toast.
+ * shown, by a timer that dismisses only that toast. A toast may ask for a longer hold ([show]'s `holdMs`), as the
+ * Undo toast does for people whose accessibility settings give more time to act. While a touch-exploration service
+ * (TalkBack) is on, a toast with an action has no timer: it stays until dismissed or its action is pressed (R84 3.5).
  */
-internal class SwToastState {
+internal class SwToastState(private val touchExploration: () -> Boolean = { false }) {
     internal val host = SnackbarHostState()
     private val turn = Mutex()
 
-    /** Shows [message] and returns when it is gone; [SnackbarResult.ActionPerformed] when the action was pressed. */
-    suspend fun show(message: String, actionLabel: String? = null, kind: NoticeKind? = null): SnackbarResult =
+    /** Takes the toast on screen away now (an answer to what it offered, given somewhere else, must not wait behind it). */
+    fun dismiss() {
+        host.currentSnackbarData?.dismiss()
+    }
+
+    /**
+     * Shows [message] and returns when it is gone; [SnackbarResult.ActionPerformed] when the action was pressed.
+     * [holdMs] replaces the usual hold, but never shortens it.
+     */
+    suspend fun show(message: String, actionLabel: String? = null, kind: NoticeKind? = null, holdMs: Long? = null): SnackbarResult =
         turn.withLock {
             // the host is free now, so this toast is the one on screen as soon as showSnackbar runs
             coroutineScope {
-                val timer = launch {
-                    delay(if (actionLabel != null) TOAST_WITH_ACTION_MS else TOAST_MS)
+                val timer = if (actionLabel != null && touchExploration()) null else launch {
+                    val usual = if (actionLabel != null) TOAST_WITH_ACTION_MS else TOAST_MS
+                    delay(maxOf(usual, holdMs ?: 0L))
                     host.currentSnackbarData?.dismiss()
                 }
                 try {
                     host.showSnackbar(ToastVisuals(message, actionLabel, kind))
                 } finally {
-                    timer.cancel()
+                    timer?.cancel()
                 }
             }
         }

@@ -5,6 +5,7 @@ import com.thompsonfabco.filamentkit.net.Api
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
 import com.thompsonfabco.filamentkit.net.StorageAnswer
+import com.thompsonfabco.filamentkit.ui.history.ActivityBackend
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -17,7 +18,7 @@ import java.io.IOException
 import kotlin.math.roundToInt
 
 /** The server calls the spool screens need; [of] adapts the real [Api] at each call, tests pass a fake. */
-interface SpoolBackend {
+interface SpoolBackend : ActivityBackend {
     suspend fun search(q: String, sealedOnly: Boolean): List<JsonObject>
     suspend fun spool(id: Int): JsonObject
     suspend fun tag(uid: String): JsonObject?
@@ -42,6 +43,8 @@ interface SpoolBackend {
 
             override suspend fun locations() = current().locations()
             override suspend fun storage() = current().locationList()
+            override suspend fun activity(subject: String, limit: Int) = current().activity(subject, limit)
+            override suspend fun undoEvent(id: Long) = current().undoEvent(id)
         }
     }
 }

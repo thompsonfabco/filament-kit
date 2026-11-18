@@ -1,0 +1,8 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/UndoFlow.kt | slot.cleared | not text: a route, JSON field or wire value of history and data (HD9)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/UndoFlow.kt | spool.emptied | not text: a route, JSON field or wire value of history and data (HD9)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/UndoFlow.kt | spool.loaded | not text: a route, JSON field or wire value of history and data (HD9)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/UndoFlow.kt | spool.moved | not text: a route, JSON field or wire value of history and data (HD9)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/UndoFlow.kt | spool.opened | not text: a route, JSON field or wire value of history and data (HD9)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/UndoFlow.kt | spool.unloaded | not text: a route, JSON field or wire value of history and data (HD9)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/UndoFlow.kt | spool.weighed | not text: a route, JSON field or wire value of history and data (HD9)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/UndoFlow.kt | text | not text: a route, JSON field or wire value of history and data (HD9)

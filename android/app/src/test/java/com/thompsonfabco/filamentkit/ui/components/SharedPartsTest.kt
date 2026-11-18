@@ -256,8 +256,8 @@ class SharedPartsTest {
 
     // --- toast ---
 
-    private fun toastHost(): Pair<SwToastState, () -> CoroutineScope> {
-        val state = SwToastState()
+    private fun toastHost(touchExploration: Boolean = false): Pair<SwToastState, () -> CoroutineScope> {
+        val state = SwToastState(touchExploration = { touchExploration })
         lateinit var scope: CoroutineScope
         themed {
             scope = rememberCoroutineScope()
@@ -299,6 +299,35 @@ class SharedPartsTest {
         rule.onNodeWithText("Removed.").assertExists()
         rule.mainClock.advanceTimeBy(TOAST_WITH_ACTION_MS + 1_000)
         rule.onNodeWithText("Removed.").assertDoesNotExist()
+    }
+
+    @Test fun anActionToastStaysUntilDismissedWhileTalkBackIsOn() {
+        val (state, scope) = toastHost(touchExploration = true)
+        var result: androidx.compose.material3.SnackbarResult? = null
+        rule.mainClock.autoAdvance = false
+        rule.runOnIdle { scope().launch { result = state.show("Removed.", actionLabel = "Undo") } }
+        rule.mainClock.advanceTimeBy(60_000)
+        rule.onNodeWithText("Removed.").assertExists()
+        rule.runOnIdle { state.dismiss() }
+        rule.mainClock.advanceTimeBy(1_000)
+        rule.onNodeWithText("Removed.").assertDoesNotExist()
+        assertEquals(androidx.compose.material3.SnackbarResult.Dismissed, result)
+    }
+
+    @Test fun anActionToastClosesAfterTheUsualHoldWhenTalkBackIsOff() {
+        val (state, scope) = toastHost(touchExploration = false)
+        rule.mainClock.autoAdvance = false
+        rule.runOnIdle { scope().launch { state.show("Removed.", actionLabel = "Undo") } }
+        rule.mainClock.advanceTimeBy(TOAST_WITH_ACTION_MS + 1_000)
+        rule.onNodeWithText("Removed.").assertDoesNotExist()
+    }
+
+    @Test fun aToastWithoutAnActionKeepsItsTimerWhileTalkBackIsOn() {
+        val (state, scope) = toastHost(touchExploration = true)
+        rule.mainClock.autoAdvance = false
+        rule.runOnIdle { scope().launch { state.show("Saved.") } }
+        rule.mainClock.advanceTimeBy(TOAST_MS + 1_000)
+        rule.onNodeWithText("Saved.").assertDoesNotExist()
     }
 
     @Test fun queuedToastsEachGetTheirOwnTimeAndOneNeverClosesAnother() {

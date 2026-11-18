@@ -2,4 +2,5 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterScree
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterScreen.kt | hls | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterScreen.kt | klipper | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterScreen.kt | mjpeg | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterScreen.kt | usage | not text: a route, JSON field or wire value of history and data (HD9)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterScreen.kt | yyyy-MM-dd HH:mm | an identifier or pattern, not text on the screen; kept while the file holds it

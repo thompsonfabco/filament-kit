@@ -4,7 +4,15 @@ import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.AmsSlot
 import com.thompsonfabco.filamentkit.net.AmsUnit
 import com.thompsonfabco.filamentkit.net.ClearResult
+import com.thompsonfabco.filamentkit.net.ActivityEvent
 import com.thompsonfabco.filamentkit.net.ApiError
+import com.thompsonfabco.filamentkit.net.UndoAnswer
+import com.thompsonfabco.filamentkit.net.UndoState
+import com.thompsonfabco.filamentkit.net.UsageMonth
+import com.thompsonfabco.filamentkit.ui.history.HistoryTexts
+import java.io.File
+import com.thompsonfabco.filamentkit.ui.history.UndoKinds
+import com.thompsonfabco.filamentkit.ui.history.UndoOutcome
 import com.thompsonfabco.filamentkit.net.CommandResult
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
 import com.thompsonfabco.filamentkit.net.Printer
@@ -111,6 +119,27 @@ class PrinterViewModelTest {
             clears += label to dryRun
             clearError?.let { throw it }
             return clearResult.copy(slot = label, dryRun = dryRun)
+        }
+        var months: List<UsageMonth>? = emptyList()
+        var monthsError: Exception? = null
+        var monthCalls = 0
+        override suspend fun usageByMonth(printerId: String): List<UsageMonth>? {
+            monthCalls++
+            monthsError?.let { throw it }
+            return months
+        }
+        var exportError: Exception? = null
+        val exports = mutableListOf<String>()
+        override suspend fun exportCsv(set: String, to: File, days: Int?, printer: String?) {
+            exports += "$set:$printer:$days"
+            exportError?.let { throw it }
+        }
+        var events: List<ActivityEvent> = emptyList()
+        override suspend fun activity(subject: String, limit: Int): List<ActivityEvent> = events.filter { it.subject == subject }
+        val undone = mutableListOf<Long>()
+        override suspend fun undoEvent(id: Long): UndoAnswer {
+            undone += id
+            return UndoAnswer(true, id + 1, "The printer still shows what it was set to.")
         }
         val unloads = mutableListOf<Pair<String, Boolean>>()
         var unloadError: Exception? = null
@@ -740,6 +769,115 @@ class PrinterViewModelTest {
         vm.confirmUnload(); runCurrent()
         assertEquals(Note(Say.Words(R.string.printer_unload_done, listOf("Ext-L", 5, "Sealed stock"))), vm.state.value.slotNote)
         vm.stop()
+    }
+
+    // --- Undo on the Hub (R84 3) ---
+
+    private fun event(id: Long, kind: String, subject: String) =
+        ActivityEvent(id, "2026-11-17T04:00:00Z", null, kind, "Pixel", "x", subject, UndoState(true, null, null), false, null)
+
+    @Test fun anUnloadOffersUndoLookedForOnTheSpoolsEvents() = runTest(dispatcher) {
+        withSlots()
+        backend.events = listOf(event(31, "spool.unloaded", "spool:7"))
+        val vm = vm()
+        vm.start(); runCurrent()
+        vm.askUnload(a1); runCurrent()
+        assertNull(vm.state.value.undoOffer)
+        vm.confirmUnload(); runCurrent()
+        val offer = vm.state.value.undoOffer!!
+        assertEquals(listOf("spool:7"), offer.subjects)
+        assertEquals(setOf(UndoKinds.UNLOADED), offer.kinds)
+        vm.offerShown()
+        assertNull(vm.state.value.undoOffer)
+        val calls = backend.printerCalls
+        val outcome = vm.undoOnHub(event(31, "spool.unloaded", "spool:7"))
+        assertEquals(UndoOutcome.Done("Put back. The printer still shows what it was set to."), outcome)
+        assertEquals(listOf(31L), backend.undone)
+        assertNull("the result line no longer holds", vm.state.value.slotNote)
+        runCurrent()
+        assertTrue("the printer is read again", backend.printerCalls > calls)
+        vm.stop()
+    }
+
+    @Test fun aClearOffersUndoOnTheSpoolAndThePrinter() = runTest(dispatcher) {
+        withSlots(family = "klipper")
+        backend.clearResult = backend.clearResult.copy(spool = recorded, movedBack = "Shelf 2", printerCleared = true)
+        val vm = vm()
+        vm.start(); runCurrent()
+        vm.askClear(a1); runCurrent()
+        vm.confirmClear(); runCurrent()
+        val offer = vm.state.value.undoOffer!!
+        assertEquals(listOf("spool:7", "printer:0948AB"), offer.subjects)
+        assertEquals(setOf(UndoKinds.SLOT_CLEARED), offer.kinds)
+        vm.stop()
+    }
+
+    @Test fun aFailedUnloadOffersNoUndo() = runTest(dispatcher) {
+        withSlots()
+        val vm = vm()
+        vm.start(); runCurrent()
+        vm.askUnload(a1); runCurrent()
+        backend.unloadError = ApiError(409, "printer_busy", "busy")
+        vm.confirmUnload(); runCurrent()
+        assertNull(vm.state.value.undoOffer)
+        vm.stop()
+    }
+
+    // --- Filament used by month and as CSV (R84 5.7, 6.5) ---
+
+    @Test fun byMonthReadsTheMonthsOnceAndTheWayBackKeepsThem() = runTest(dispatcher) {
+        backend.months = listOf(UsageMonth("2026-11", 1840.0, 15, 1, "PA6"))
+        val vm = vm()
+        vm.showMonths(true); runCurrent()
+        assertTrue(vm.state.value.monthsOn)
+        assertEquals(listOf("2026-11"), vm.state.value.months!!.map { it.month })
+        vm.showMonths(false)
+        vm.showMonths(true); runCurrent()
+        assertEquals("the months are not read again", 1, backend.monthCalls)
+    }
+
+    @Test fun anOlderHubHasNoMonthsAndSaysSo() = runTest(dispatcher) {
+        backend.months = null
+        val vm = vm()
+        vm.showMonths(true); runCurrent()
+        assertTrue(vm.state.value.monthsOlderHub)
+        assertNull(vm.state.value.months)
+        assertNull(vm.state.value.monthsProblem)
+    }
+
+    @Test fun aFailedMonthReadShowsAProblemAndTryAgainReadsAgain() = runTest(dispatcher) {
+        backend.monthsError = ApiError(0, "offline", "no route")
+        val vm = vm()
+        vm.showMonths(true); runCurrent()
+        assertNotNull(vm.state.value.monthsProblem)
+        assertFalse(vm.state.value.monthsBusy)
+        backend.monthsError = null
+        backend.months = listOf(UsageMonth("2026-10", 100.0, 2, 0, null))
+        vm.loadMonths(); runCurrent()
+        assertNull(vm.state.value.monthsProblem)
+        assertEquals(1, vm.state.value.months!!.size)
+    }
+
+    @Test fun downloadAsCsvAsksForThisPrintersUsageAndHandsTheFileToTheScreen() = runTest(dispatcher) {
+        val vm = vm()
+        val file = File("usage-0948AB.csv")
+        vm.downloadUsageCsv(file); runCurrent()
+        assertEquals(listOf("usage:0948AB:null"), backend.exports)
+        assertEquals(file, vm.state.value.csvFile)
+        assertFalse(vm.state.value.csvBusy)
+        vm.csvShown(null)
+        assertNull(vm.state.value.csvFile)
+    }
+
+    @Test fun anOlderHubAndAFullPhoneEachHaveTheirOwnWordsForTheDownload() = runTest(dispatcher) {
+        val vm = vm()
+        backend.exportError = ApiError(404, "not_found", "The Hub returned an error (404)")
+        vm.downloadUsageCsv(File("a.csv")); runCurrent()
+        assertEquals(Say.FromHub(HistoryTexts.CSV_UPDATE_HUB), vm.state.value.csvProblem)
+        assertNull(vm.state.value.csvFile)
+        backend.exportError = ApiError(0, "storage", "disk full")
+        vm.downloadUsageCsv(File("a.csv")); runCurrent()
+        assertEquals(Say.FromHub(HistoryTexts.CSV_NOT_SAVED), vm.state.value.csvProblem)
     }
 
     @Test fun blankCodeIsNotSent() = runTest(dispatcher) {

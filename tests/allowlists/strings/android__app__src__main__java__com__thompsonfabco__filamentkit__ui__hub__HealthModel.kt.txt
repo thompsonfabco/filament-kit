@@ -1,0 +1,3 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/hub/HealthModel.kt | bad | not text: the Hub's state value (HD9)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/hub/HealthModel.kt | look | not text: the Hub's state value (HD9)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/hub/HealthModel.kt | ok | not text: the Hub's state value (HD9)
