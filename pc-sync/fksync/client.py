@@ -18,6 +18,8 @@ import urllib.parse
 from dataclasses import dataclass, field
 from typing import Callable
 
+from . import __version__
+
 DEFAULT_PORT = 8710
 _FP = re.compile(r"^[0-9a-fA-F]{64}$")
 _TOKEN = re.compile(r"^[!-~]{1,512}$")  # printable ASCII, no spaces: safe in a header, never echoed
@@ -137,13 +139,14 @@ class _PinnedConnection(http.client.HTTPSConnection):
             raise _Mismatch(actual)
 
 
+CLIENT_HEADER = f"slicer-sync/{__version__}"      # sent on every call: the Hub shows the PC's kind and version in Devices (R83 10.1)
 HUB_PORTS = (443, DEFAULT_PORT)     # a bare host: the web address's own port first, then the Hub's older one
 
 
-def find_hub(host: str, ports=HUB_PORTS, timeout: float = 10) -> tuple[int, str, str]:
+def find_hub(host: str, ports=None, timeout: float = 10) -> tuple[int, str, str]:
     """(port, fingerprint, IP connected to) of the first port where a Hub answers. Only a Hub counts: a TLS answer alone does not
     (the Remote access proxy owns 443 on a machine whose Hub sits on 8710), so each port is asked /api/info and must answer as a Hub."""
-    tried = []
+    tried, ports = [], ports or HUB_PORTS
     for port in ports:
         try:
             fp, ip = fetch_peer(host, port, timeout)
@@ -197,7 +200,7 @@ class Client:
                 offline.append(f"{addr}: {e}")
                 conn.close()
                 continue
-            headers = {"Accept": "application/json", "Connection": "close"}
+            headers = {"Accept": "application/json", "Connection": "close", "X-Spoolwarden-Client": CLIENT_HEADER}
             if ctype:
                 headers["Content-Type"] = ctype
             if auth and self._token:
