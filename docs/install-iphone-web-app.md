@@ -18,7 +18,8 @@ It only works **on your home network**. Away from home it says "Spoolwarden only
 There is no sign-in: anyone on your home Wi-Fi can use it.
 
 > **At home it needs no setup.** The Hub serves the web app itself at
-> `https://<server name>.local:8710/intake` (the Hub page's **Devices** section shows the address and a QR code).
+> `https://<server name>.local/intake` (the Hub page's **Devices** section shows the address and a QR code; a Hub that
+> kept port 8710 has `:8710` after the name).
 > Safari warns once about the Hub's own certificate: accept it to go on. To avoid the warning, or to reach the
 > app with a name of your own, use one of the two ways below (the `web` Feature and a web server in front). None of
 > this has been tried on a real iPhone yet; see [Known gaps](known-gaps.md).
@@ -35,17 +36,22 @@ There is no sign-in: anyone on your home Wi-Fi can use it.
 
 | | The built-in address | Way A: home only, nginx | Way B: a public name |
 |---|---|---|---|
-| Address | `https://<server name>.local:8710/intake` | `https://<computer name>.local/filament` | `https://filament.example.com/filament` (your own name) |
+| Address | `https://<server name>.local/intake` (`:8710` after the name on a Hub that kept that port) | `https://<computer name>.local/filament` | `https://filament.example.com/filament` (your own name) |
 | What you need | nothing: the Hub serves it | the `web` and `remote` Features (Spoolwarden installs nginx) | a domain name, ports 80 and 443 forwarded to the Hub |
 | Safari | warns about the certificate (you accept it once) | warns about the certificate (you accept it once) | no warnings |
 | Also gives you | | an address without a port number | the Claude connector from outside |
 
 Start with the built-in address. Use way A or B only to avoid the warning or to use a name of your own.
 
+Way A and way B switch on Remote access, which needs port 443 for itself. A Hub that holds 443 (a new install where
+443 was free) refuses it: `Remote access needs port 443, and the Hub is using it`. They need a Hub on another port: one that
+kept 8710, or one installed with Remote access chosen, which then takes 8710.
+
 ## The built-in address: no setup
 
 1. Open the Hub page's **Devices** section: it shows the address and a QR code. Or build it yourself: the Hub's name
-   from `hostname`, for example `https://my-server.local:8710/intake`.
+   from `hostname`, for example `https://my-server.local/intake` (`https://my-server.local:8710/intake` on a Hub that kept
+   port 8710).
 2. Go on to [Open it in Safari](#open-it-in-safari-and-add-it-to-the-home-screen) and use that address.
 
 ## Way A: home only
@@ -155,8 +161,30 @@ does nothing.
 goes back to Shelf A." Tap **OK**. Only your inventory changes; the printer's own slot setting stays as it is.
 
 The same rules as the app (Android) apply: for example, while a print runs, the slot that feeds the job is refused.
-See [Using the app](android-app.md#load-and-unload-a-spool). The tab also has the filament usage with undo,
-re-mapping slots and optional notifications.
+See [Using the app](android-app.md#load-and-unload-a-spool). The tab also has the filament usage with undo and
+re-mapping slots.
+
+## Alerts
+
+The Hub writes down what happens (a print runs out of filament, pauses or fails, a printer reports a problem, storage is
+almost full, a spool is running low, a device stops answering) and turns the kinds you have switched on into alerts. Which kinds are on, and
+the limits, are set on the Hub: [Alerts in the user guide](user-guide.md#alerts).
+
+- **While the web app is open**, an alert shows as a banner at the top of the page (at most two, then **<n> more alerts**)
+  and as a short message when it arrives. The page asks the Hub every 10 seconds and stops asking while it is hidden, so
+  an alert that came meanwhile appears when you open it again. In **More**, **Settings**, **Recent alerts** lists what is
+  happening now and the alerts of the last 7 days. A **Running low (n)** button appears in the spool search when spools are running low; it lists them.
+- **With the web app closed**, the phone gets a notification only when Web Push is on. It is off by default, and it works only
+  at the `web` Feature's address (way A or B), not at the built-in address. The Hub needs the optional push package and the
+  web service needs a way out to the browsers' push services; the steps are in the
+  [user guide](user-guide.md#claude-connector-and-phone-web-app).
+- **Then, on the iPhone, put the web app on the Home Screen** (as above): in Safari the page says **This browser cannot
+  receive alerts. Alerts on iPhone work only from the Home Screen.** and offers **Add to Home Screen**. Open it from the
+  Home Screen, go to **More**, **Settings**, **Alerts on this phone**, switch on **Notify this phone** and allow notifications
+  when iOS asks. It then says **On: this phone gets alerts.** If notifications are blocked it says **Notifications are
+  blocked for this site. Allow them in the phone's settings.**
+- **Send a test alert** (on the same page) sends one notification to the phones that switched this on, to check that it works. It
+  waits 30 seconds between tests. If the push service cannot be reached, the message says so.
 
 ## Common problems
 

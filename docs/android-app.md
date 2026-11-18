@@ -22,7 +22,8 @@ the bottom shows the app's version and the Hub's.
    ```
 
    It prints a QR code, the Hub's certificate fingerprint and a 6-digit code, good for about 10 minutes. (The
-   Hub page, `https://<computer name>.local:8710/setup`, can show a pairing code too.)
+   Hub page, `https://<computer name>.local/setup` (`:8710` after the name on a Hub that kept that port), can show a
+   pairing code too.)
 2. Open the app. On Android 17 and newer, tap **Allow** when it asks for **local network access** (it may call it
    **Nearby devices**). Without it the
    app can't find or reach your Hub. If you said no, the app shows **Allow** again, and **Open app settings**
@@ -37,7 +38,8 @@ the bottom shows the app's version and the Hub's.
 
 1. Under **Hubs found on this network**, tap your Hub: it goes straight to the fingerprint check. If it isn't
    listed, tap **Enter the address instead** and type the computer's name with `.local` (for example `my-server.local`) or its IP
-   address; leave **Port** at 8710, and tap **Connect**.
+   address; leave **Port** empty, and tap **Connect**. With no port the app tries 443 first and then 8710, and keeps the
+   one where a Hub answers; type a port only if your Hub uses another one.
 2. **Check the Hub's fingerprint** shows the Hub's address and its full fingerprint. Compare it with the
    fingerprint shown with the pairing code on the Hub (in the Terminal, or on the Hub page). If they match, tap
    **It matches**. If they differ, tap **It does not match** and stop.
@@ -273,3 +275,30 @@ With the app open, tap a spool's NFC tag on the back of the phone.
 - **Add a line to the Filament Catalog** (on the Slicer presets screen, under "Missing a product line?") is for a filament line the
   Catalog doesn't have: fill in the fields marked `*` (Brand, Line, Material) and any numbers from the maker's data sheet, and tap
   **Save to the catalog**. The Hub page has its own box for the same job, **Add your own entry**, which takes one entry as JSON.
+
+## 4. Alerts
+
+The Hub watches your printers, your spools and its own disk, and writes down what happens. Eight kinds of event can become
+an alert; which ones are on, and the limits, are set on the Hub (see [Alerts in the user guide](user-guide.md#alerts)). A
+Hub that is too old to send alerts makes the app say **This Hub does not send alerts yet. Update the Hub to get them.**
+
+- **On the home screen**, an alert that is happening now, or a warning or problem from the last 24 hours, shows as a banner at the top, with the
+  time, a button to the place that fixes it (**Open the printer**, **Show running low**) and **Dismiss**. At most two
+  show; more are a line **<n> more alerts**, which opens the list. **Settings**, **Alerts**, **Recent alerts** opens the same list: what is
+  happening now, then the alerts of the last 7 days.
+- **Running low.** When spools are running low, the home screen has a button such as **1 spool running low**. It opens
+  **Search** with the **Running low (n)** filter on.
+- **Alerts on this phone** (**Settings**, **Alerts**) is a switch, off until you turn it on. Turning it on asks Android to
+  allow notifications (Android 13 and newer) and, on Android 17 and newer, **local network access**. If one is
+  refused the switch stays off and the page says what to allow, with **Open app settings**. While it is on, the app
+  watches the Hub with the app closed and shows a notification for each alert, with Android's small permanent
+  notification **Watching the Hub for alerts** (Android requires it while an app keeps watching). Tapping an alert opens the printer, the
+  running-low list or the alerts list. After the phone restarts or the app is updated, watching starts again by itself; if you
+  dismiss or stop it, opening the app starts it again.
+- **Only where the phone reaches the Hub.** The app asks the Hub itself, at the address it was paired with or finds on the
+  network; nothing goes through the internet. Away from home, with no way to the Hub, no alerts arrive. What happened
+  meanwhile is shown when the phone reaches the Hub again, as a notification if it is less than 24 hours old and in the
+  list for 7 days.
+- **Send a test alert** (on the same page, available while the switch is on) sends one test alert to this phone: it
+  shows **Sent.** and the notification **Test alert** follows in a moment.
+- If the Hub no longer knows this phone (it was unpaired), watching stops and the switch goes off.

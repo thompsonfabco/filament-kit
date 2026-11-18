@@ -37,7 +37,7 @@ wget -q https://github.com/thompsonfabco/filament-kit/releases/latest/download/g
 ```
 
 It downloads the installer (`get.sh`) and runs it. The installer fetches the newest release, checks its
-signature, and asks a few questions (pressing Enter at each one is fine). At the end it shows a QR code for pairing your phone. Step by step, with every question and what you see:
+signature, and asks a few questions (pressing Enter at each one is fine; the first is whether to finish setting up in your browser, **Guided Setup**). At the end it shows a QR code for pairing your phone, or with Guided Setup the Hub's address and its setup code. A new Hub is on port 443, so its address has no port. Step by step, with every question and what you see:
 **[Install the Hub](docs/install-server.md)**.
 
 This is a beta: [Known gaps](docs/known-gaps.md) lists what is still rough.
@@ -107,6 +107,8 @@ On Android, install `filament-kit.apk` from the Releases page (Android 10 or new
 on the Hub and scan the QR code it prints: [Install the app](docs/install-android-app.md), then [Using the app](docs/android-app.md) for printers and spools. On an iPhone
 or in any phone browser, the `web` Feature (Web access) gives the same tasks as a web app you can put on the home screen:
 [Use the web app on an iPhone](docs/install-iphone-web-app.md). `sudo spoolwarden devices` lists paired phones, and `sudo spoolwarden devices forget <device>` removes one.
+Both apps show **alerts** (filament ran out, print paused, failed or finished, printer error, storage almost full, spool running low, device
+stopped answering), and the app (Android) can notify you with the app closed: [Alerts](docs/user-guide.md#alerts).
 
 ## Pair your PC
 
@@ -160,7 +162,7 @@ with `sudo spoolwarden catalog update`, or turn on the `library` Feature to also
 | Path | What |
 |---|---|
 | `/etc/filament-kit` | Settings (`config.json`), the Hub's certificate, the API key, the web passphrase, your hardware file |
-| `/var/lib/filament-kit` | Paired phones, printers, slot maps, usage, Slicer presets, the Filament Catalog, Tag Reader tokens |
+| `/var/lib/filament-kit` | Paired phones, printers, slot maps, usage, the Hub's events and alert settings, Slicer presets, the Filament Catalog, Tag Reader tokens |
 | `/var/lib/filament-kit-web` | The web app's own state (v0.4.0): Claude connector sign-ins, its token, push keys |
 | `/var/lib/spoolman` | Spoolman's database (your spools) |
 | `/var/backups/filament-kit` | Nightly backups (14 days) |

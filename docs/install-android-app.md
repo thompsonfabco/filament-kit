@@ -22,7 +22,8 @@ Use either way:
 - **From GitHub:** on the phone, open the project's GitHub **Releases** page in Chrome and tap
   `filament-kit.apk` under **Assets** of the newest release.
 - **From your Hub:** a Hub installed from a release also has the app. On the phone, open
-  `https://<computer name>.local:8710/app.apk` (for example `https://my-server.local:8710/app.apk`). Chrome warns
+  `https://<computer name>.local/app.apk` (for example `https://my-server.local/app.apk`; on a Hub that kept port 8710,
+  `https://my-server.local:8710/app.apk`). Chrome warns
   that the connection is not private, because the Hub uses its own certificate. Tap **Advanced**, then
   **Proceed**. The download itself is the same file as on GitHub.
 
@@ -52,7 +53,7 @@ Pairing lets the app trust your Hub and lets the Hub know your phone. You do it 
 
    It shows a QR code, the Hub's certificate fingerprint and a 6-digit pairing code. They are good for about
    10 minutes. (The installer showed the same at the end of the install; if that code is still fresh, use it. The Hub page,
-   `https://<computer name>.local:8710/setup`, can show a pairing code too.)
+   `https://<computer name>.local/setup`, or with `:8710` after the name on a Hub that kept that port, can show a pairing code too.)
 
 2. **On the phone**, the app opens on **Pair with your Hub**. It asks for each permission only when it first
    needs it, not at the start:
@@ -68,7 +69,7 @@ Pairing lets the app trust your Hub and lets the Hub know your phone. You do it 
 
 1. Under **Hubs found on this network**, tap your Hub: it goes straight to the fingerprint check. If it's not
    listed, tap **Enter the address instead** and type the computer's name with `.local` (for example `my-server.local`) or its IP
-   address. Leave **Port** at 8710.
+   address. Leave **Port** empty: the app then tries 443 and then 8710.
 2. The app shows **Check the Hub's fingerprint** with the Hub's address and its full fingerprint. Compare it
    with the fingerprint shown with the pairing code (in the Terminal, or on the Hub page). If they are the
    same, tap **It matches**. If they differ, tap **It does not match** and stop: something else is answering at that
@@ -84,6 +85,8 @@ The home screen shows the buttons **Add spools**, **Search**, **Printers** and *
 **Settings** shows the Hub and its fingerprint and has **Open the Hub page** (the Hub's own page in your
 browser, for what the app doesn't do: Features, keys, devices, backups; it asks for the setup code), **Pair again** and
 **Forget this Hub**. Its switch **Check the fingerprint when pairing by address** controls whether the fingerprint step is left out when you pick a Hub from the list or type its address.
+**Settings** also has **Alerts**: the switch **Alerts on this phone** turns on notifications for print and Hub alerts,
+which arrive only while the phone can reach the Hub ([Alerts](android-app.md#4-alerts)).
 
 ## Updates
 

@@ -20,13 +20,13 @@ fixed.
 4. **No store.** The app is not on Google Play or F-Droid; it is sideloaded from the Releases page (or from the
    Hub). Google's developer verification for sideloaded apps is due to reach most phones in 2026–2027; check
    the current rules.
-5. **The APK from the Hub shows a certificate warning.** `https://<server>.local:8710/app.apk` (served
+5. **The APK from the Hub shows a certificate warning.** `https://<server>.local/app.apk` (`:8710` after the name on a Hub that kept that port; served
    without sign-in) uses the Hub's self-signed certificate, so Chrome shows a warning first. Not tried on a
    phone.
 ## iPhone web app
 
 6. **An https address on your own name needs nginx.** At home the Hub serves the web app itself, at
-   `https://<server name>.local:8710/intake`, with no setup (v0.5.1); Safari warns once about its own certificate.
+   `https://<server name>.local/intake` (`:8710` after the name on a Hub that kept that port), with no setup (v0.5.1); Safari warns once about its own certificate.
    Only to avoid that warning or to use a name of your own, `web.public_url` must be `https://` and the
    web service (127.0.0.1 only) sits behind nginx: tick Web access and Remote access and accept nginx's
    self-signed placeholder certificate in Safari. The placeholder lasts 825 days and is made again by an apply within
@@ -49,7 +49,7 @@ fixed.
 11. ~~Confusing lines in the installer output.~~ Fixed in v0.3.0: no `no such user` line or bare number; the Spoolman
     line reads `Spoolman: the kit's extra fields are in place` or `... added the kit's extra fields: ...`.
 12. **The installer doesn't open firewall ports.** When `ufw` is on, it prints the `sudo ufw allow` lines for the ports
-    with no rule (8710/tcp for the app, 5353/udp for `.local` names, 7912/tcp for Spoolman, 443/tcp for the web app);
+    with no rule (443/tcp for the app, or 8710/tcp on a Hub that kept that port, 5353/udp for `.local` names, 7912/tcp for Spoolman, 443/tcp for the web app);
     running them is up to you. Ubuntu ships with `ufw` off, so most users won't hit this.
 13. ~~Uninstalling after a one-command install needed the kept tarball.~~ Fixed in v0.3.0:
     `sudo spoolwarden uninstall [--purge]` runs the kept release's uninstaller.
@@ -65,6 +65,21 @@ fixed.
 17. **Going back from v0.4.3 leaves the Hub page's job unit.** `filament-kit-setup-job@.service` stays on disk, unused,
     after `sudo spoolwarden update --rollback` from v0.4.3; the earlier Hub page does not call it. From v0.5.0 a
     rollback removes the unit files the version it leaves introduced.
+
+## Alerts and the Hub's address
+
+18. **Alerts reach a phone only where the phone reaches the Hub.** The app (Android) asks the Hub itself, so away from home
+    (or on a guest network) no alert arrives until the phone reaches the Hub again. With the web app closed, an
+    iPhone or other phone gets notifications only through Web Push, which is off by default and works only at the `web`
+    Feature's address; see [Alerts](user-guide.md#alerts).
+19. **Alerts are not on the Hub page.** The banner, the Alerts list and notifications are in the web app and the
+    app (Android). On the Hub page, the Overview's checks show the Hub's disk and the running-low note. The Terminal has `spoolwarden events` and `spoolwarden alerts`.
+20. **Which alerts are on is set at the Terminal.** `sudo spoolwarden alerts set` changes the switches, the running-low
+    limit and the storage warning; the apps show none of them. The limit at which storage counts as full (95 %), and the
+    switch that limits the running-low alert to the last spool of a filament, are not changeable there.
+21. **Remote access and a Hub on port 443 exclude each other.** A new install takes 443 when it is free, and Remote access
+    needs 443 for itself, so switching it on is refused. Choose Remote access in the installer to give the Hub 8710.
+    An existing Hub keeps its port.
 
 ## How this was first checked (v0.2.0)
 
