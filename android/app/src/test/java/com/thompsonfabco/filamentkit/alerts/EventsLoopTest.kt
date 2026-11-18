@@ -11,10 +11,21 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class EventsLoopTest {
-    private class MemoryCursor(var id: Long? = null) : CursorStore {
+    private class MemoryCursor(var id: Long? = null, var hub: String? = "hub-a", var dismissed: Set<String> = emptySet()) : CursorStore {
         override suspend fun lastSeen() = id
         override suspend fun setLastSeen(id: Long) {
             this.id = id
+        }
+        override suspend fun useHub(fingerprint: String) {
+            if (hub != fingerprint) {
+                hub = fingerprint
+                id = null
+                dismissed = emptySet()
+            }
+        }
+        override suspend fun restart(next: Long) {
+            id = next
+            dismissed = emptySet()
         }
     }
 
@@ -27,7 +38,7 @@ class EventsLoopTest {
     private fun answer(text: String) = AlertParsing.events(Json.parseToJsonElement(text))
 
     /** Runs the loop over [steps] (an answer or a failure each); after the last one the loop is cancelled. */
-    private fun run(cursor: MemoryCursor, vararg steps: Any, waitS: Int = 55): LoopEnd? {
+    private fun run(cursor: MemoryCursor, vararg steps: Any, waitS: Int = 55, hub: String = "hub-a"): LoopEnd? {
         val queue = ArrayDeque(steps.toList())
         val loop = EventsLoop(
             fetch = { q ->
@@ -39,6 +50,7 @@ class EventsLoopTest {
                 }
             },
             cursor = cursor,
+            hub = hub,
             deliver = { delivered += it },
             clock = { clock },
             sleep = { sleeps += it; clock += it },
@@ -66,7 +78,7 @@ class EventsLoopTest {
         assertEquals(14L, queries[2].since)
         assertEquals(14L, cursor.id)
         assertEquals(55, queries[0].waitS)
-        assertTrue(queries.all { it.alertOnly })
+        assertTrue("the loop reads clearing events too", queries.none { it.alertOnly })
     }
 
     @Test fun aRestartContinuesFromTheStoredCursor() {
@@ -125,5 +137,61 @@ class EventsLoopTest {
         val end = run(MemoryCursor(), ApiError(401, "unauthorized", "no"), answer("""{"events":[]}"""))
         assertEquals(LoopEnd.Revoked, end)
         assertEquals(1, queries.size)
+    }
+
+    @Test fun aFilamentRanOutNotificationIsCancelledAfterThePrintResumed() {
+        // a Hub fake that applies the contract: alert=1 returns only events of alert types that are on
+        val stream = listOf(
+            1L to """{"id":1,"kind":"spool.empty","severity":"bad","alert":true,"title":"Filament ran out","condition":{"key":"spool-empty","state":"raised"}}""",
+            2L to """{"id":2,"kind":"print.resumed","severity":"info","alert":false,"condition":{"key":"spool-empty","state":"cleared"}}""",
+        )
+        val alertTypes = setOf(1L)
+        var calls = 0
+        val loop = EventsLoop(
+            fetch = { q ->
+                queries += q
+                calls++
+                if (calls > 3) throw CancellationException("done")
+                val existing = stream.take(calls) // the Hub learns one more event before each ask
+                val rows = existing.filter { (id, _) -> id > (q.since ?: 0) && (!q.alertOnly || id in alertTypes) }
+                answer("""{"events":[${rows.joinToString(",") { it.second }}],"next":${existing.last().first}}""")
+            },
+            cursor = MemoryCursor(), hub = "hub-a", deliver = { delivered += it },
+            clock = { clock }, sleep = { sleeps += it; clock += it },
+        )
+        try { runBlocking { loop.run() } } catch (_: CancellationException) {}
+        val all = delivered.flatten()
+        assertTrue(all.first() is NotifyAction.Show)
+        assertEquals("alert:spool-empty", (all.first() as NotifyAction.Show).tag)
+        assertEquals("the clearing event reaches the Cancel branch", NotifyAction.Cancel("alert:spool-empty"), all.last())
+    }
+
+    @Test fun aNewFingerprintForgetsTheCursorAndStartsFromNow() {
+        val cursor = MemoryCursor(id = 500, hub = "hub-a", dismissed = setOf("x"))
+        run(cursor, answer("""{"events":[],"next":3}"""), hub = "hub-b")
+        assertNull(queries[0].since)
+        assertEquals("2026-11-17T12:00:00Z", queries[0].sinceAt)
+        assertEquals("hub-b", cursor.hub)
+        assertTrue(cursor.dismissed.isEmpty())
+    }
+
+    @Test fun theSameHubKeepsItsCursorAndDismissals() {
+        val cursor = MemoryCursor(id = 500, hub = "hub-a", dismissed = setOf("x"))
+        run(cursor, answer("""{"events":[],"next":500}"""), hub = "hub-a")
+        assertEquals(500L, queries[0].since)
+        assertEquals(setOf("x"), cursor.dismissed)
+    }
+
+    @Test fun aLowerNextIsANewStoreAndOlderIdsStayQuiet() {
+        val cursor = MemoryCursor(id = 500, dismissed = setOf("x"))
+        run(
+            cursor,
+            answer("""{"events":[{"id":2,"alert":true,"severity":"bad","title":"old"}],"next":3}"""),
+            answer("""{"events":[],"next":3}"""),
+        )
+        assertEquals(3L, cursor.id)
+        assertEquals(3L, queries[1].since)
+        assertTrue(cursor.dismissed.isEmpty())
+        assertTrue("nothing shown for the new store's old ids", delivered.isEmpty())
     }
 }

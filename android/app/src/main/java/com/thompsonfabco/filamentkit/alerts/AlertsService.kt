@@ -85,6 +85,7 @@ class AlertsService : Service() {
                 val end = EventsLoop(
                     fetch = fetcher(config),
                     cursor = store,
+                    hub = config.fingerprint,
                     deliver = { notifier.act(it) },
                 ).run()
                 // the switch going off ends this block through the flow above, so the write must not be cancelled half way

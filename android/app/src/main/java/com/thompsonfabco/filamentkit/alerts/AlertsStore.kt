@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import java.io.IOException
@@ -16,7 +17,7 @@ import kotlinx.coroutines.flow.map
 
 /**
  * What this phone keeps for alerts (R80 E4: the switch is stored on the device, the Hub stores nothing about it): the
- * switch "Alerts on this phone", the last event the watching service has seen, and the banners this phone dismissed.
+ * switch "Alerts on this phone", the last event the watching service has seen (with the Hub it belongs to), and the banners this phone dismissed.
  * Its own DataStore, so the pairing's store is never touched.
  */
 class AlertsStore(private val store: DataStore<Preferences>) : CursorStore {
@@ -48,6 +49,23 @@ class AlertsStore(private val store: DataStore<Preferences>) : CursorStore {
         store.edit { it[LAST_SEEN] = id }
     }
 
+    override suspend fun useHub(fingerprint: String) {
+        store.edit {
+            if (it[HUB] != fingerprint) {
+                it[HUB] = fingerprint
+                it.remove(LAST_SEEN)
+                it.remove(DISMISSED)
+            }
+        }
+    }
+
+    override suspend fun restart(next: Long) {
+        store.edit {
+            it[LAST_SEEN] = next
+            it.remove(DISMISSED)
+        }
+    }
+
     /** The banners dismissed here, by key. */
     val dismissed: Flow<Map<String, Dismissed>> = store.data
         .catch { if (it is IOException) emit(androidx.datastore.preferences.core.emptyPreferences()) else throw it }
@@ -68,6 +86,7 @@ class AlertsStore(private val store: DataStore<Preferences>) : CursorStore {
         private const val MAX_DISMISSED = 100
         private val ON = booleanPreferencesKey("alerts_on")
         private val LAST_SEEN = longPreferencesKey("last_seen_event")
+        private val HUB = stringPreferencesKey("hub_fingerprint")
         private val DISMISSED = stringSetPreferencesKey("dismissed")
 
         internal fun decode(entries: Set<String>): Map<String, Dismissed> = entries.mapNotNull { line ->

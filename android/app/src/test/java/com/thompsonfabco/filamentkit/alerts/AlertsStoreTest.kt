@@ -68,4 +68,24 @@ class AlertsStoreTest {
         assertFalse("event:1" in d)
         assertTrue("event:105" in d)
     }
+
+    @Test fun anotherHubForgetsTheCursorAndTheDismissalsButTheSameHubKeepsThem() = runBlocking {
+        store.useHub("aa")
+        store.setLastSeen(41)
+        store.dismiss("storage-low", AlertSeverity.Warn, 5)
+        store.useHub("aa")
+        assertEquals(41L, store.lastSeen())
+        assertEquals(1, store.dismissed.first().size)
+        store.useHub("bb")
+        assertNull(store.lastSeen())
+        assertTrue(store.dismissed.first().isEmpty())
+    }
+
+    @Test fun aRestartSetsTheCursorAndForgetsTheDismissals() = runBlocking {
+        store.setLastSeen(500)
+        store.dismiss("storage-low", AlertSeverity.Warn, 5)
+        store.restart(3)
+        assertEquals(3L, store.lastSeen())
+        assertTrue(store.dismissed.first().isEmpty())
+    }
 }
