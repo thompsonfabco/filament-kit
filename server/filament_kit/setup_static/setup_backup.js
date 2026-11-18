@@ -3,6 +3,34 @@
 // the setup code (or this computer's trust, as every change does).
 "use strict";
 
+// Texts of R84 section 7 that the catalogue does not hold yet (only HD2 opens it): the catalogue's own text wins once the key is there.
+const BK_TEXT = {
+  settings_backups_password_heading: "Backup password",
+  settings_backups_password_none: "No backup password is set. New backups are not encrypted.",
+  settings_backups_password_is_set: "A backup password is set. Every new backup is encrypted with it.",
+  settings_backups_password_warning: "Write this password down. Without it these backups cannot be restored, and Spoolwarden cannot recover it.",
+  settings_backups_password_set: "Set a backup password",
+  settings_backups_password_change: "Change the backup password",
+  settings_backups_password_remove: "Remove the backup password",
+  settings_backups_password_new: "Backup password",
+  settings_backups_password_new_change: "New backup password",
+  settings_backups_password_hint: "At least 10 characters.",
+  settings_backups_password_again: "Type it again",
+  settings_backups_password_short: "Use at least 10 characters.",
+  settings_backups_password_mismatch: "The two passwords do not match.",
+  settings_backups_password_saved: "The backup password is set. New backups are encrypted.",
+  settings_backups_password_removed: "The backup password is removed. New backups are plain; backups already made stay encrypted.",
+  settings_backups_password_remove_title: "Remove the backup password?",
+  settings_backups_password_remove_text: "New backups will not be encrypted. Backups already made stay encrypted, and you need their password to restore them.",
+  settings_backups_encrypted: "Encrypted",
+  settings_restore_password: "Password of this backup",
+  settings_restore_password_hint: "This backup is encrypted, and the Hub's backup password does not open it.",
+  settings_restore_password_need: "Enter the password of this backup.",
+  settings_restore_wrong_password: "Wrong password, or the file is damaged. Nothing was changed.",
+  settings_restore_summary_encrypted: "This backup is encrypted. Its contents are checked when the password is entered."
+};
+const bkT = (key, vars) => { const v = SW.t(key, vars); return v !== key ? v : BK_TEXT[key]; };
+
 // A reply that is a file: saved by the browser under the name the server gives.
 async function download(path, body, fallback) {
   const r = await fetch("/setup/api/" + path, { method: "POST", credentials: "same-origin",
@@ -52,7 +80,8 @@ function backupRow(b) {
     }) });
   return h("div", { class: "coll__item", role: "rowgroup", "data-key": b.name, "data-id": b.name },
     h("div", { class: "coll__row", role: "row" },
-      bkCell("title", 1, null, h("span", { class: "coll__title mono", textContent: b.at })),
+      bkCell("title", 1, null, h("span", { class: "coll__title mono", textContent: b.at }),
+        b.encrypted ? SW.status("note", { small: true, text: bkT("settings_backups_encrypted") }) : null),
       bkCell("kind", 2, SW.t("settings_backups_col_kind"), SW.t(bkKind[b.kind] || "settings_backups_kind_here")),
       bkCell("size", 2, SW.t("settings_backups_col_size"), SW.t("settings_backups_size", { kib: Math.max(1, Math.round(b.size / 1024)) })),
       bkCell("actions", 1, null, h("div", { class: "actions" }, get))),
@@ -67,6 +96,39 @@ function backupList(r) {
     ...r.backups.map(backupRow));
   SW.collection(table, { name: "backups" });
   return table;
+}
+
+// The backup password (R84 7): typed twice, never shown again; the Hub keeps it where only root reads it. `said(text)` reads the list
+// again and says the result in the new pane
+function passwordPane(r, said, result) {
+  const set = !!r.password_set, res = sbox(), state = h("p", { class: "muted", tabindex: "-1", textContent: bkT(set ? "settings_backups_password_is_set" : "settings_backups_password_none") });
+  const one = SW.field({ row: true, type: "secret", name: "backup_password", label: bkT(set ? "settings_backups_password_new_change" : "settings_backups_password_new"),
+    hint: bkT("settings_backups_password_hint"), attrs: { autocomplete: "new-password", minlength: "10" }, check: (x) => (x.length >= 10 ? null : bkT("settings_backups_password_short")) });
+  const two = SW.field({ row: true, type: "secret", name: "backup_password_again", label: bkT("settings_backups_password_again"), attrs: { autocomplete: "new-password" },
+    check: (x) => (x === one._control.value ? null : bkT("settings_backups_password_mismatch")) });
+  const form = h("form", { id: "set-backups-password", novalidate: true });
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const bad = [one, two].filter((f) => { const err = f._check(); SW.fieldError(f, err || null); return !!err; });
+    if (bad.length) return bad[0]._control.focus();
+    return needCode(async () => {
+      working(res, SW.t("common_saving"));
+      try { await api("backups/password", { password: one._control.value, code: theCode() }); } catch (x) {
+        if (x.locked) { SW.result(res, null); throw x; }
+        if (x.data && x.data.error === "too_short") { SW.result(res, null); SW.fieldError(one, x.data.text || bkT("settings_backups_password_short")); one._control.focus(); return; }
+        say(res, hubText(x.data && x.data.text || x.message), false);
+        return;
+      }
+      one._control.value = two._control.value = "";
+      await said(bkT("settings_backups_password_saved"));
+    });
+  });
+  const drop = SW.btn(bkT("settings_backups_password_remove"), { cls: "btn--ghost", action: "remove-backup-password", run: (e) => confirmed({ kind: "destructive", opener: e.currentTarget,
+    title: bkT("settings_backups_password_remove_title"), text: bkT("settings_backups_password_remove_text"), confirm: SW.t("common_remove") },
+  "backups/password/remove", {}, () => said(bkT("settings_backups_password_removed"))) });
+  form.append(one, two, h("div", { class: "actions" }, h("button", { class: "btn btn--primary", type: "submit", textContent: bkT(set ? "settings_backups_password_change" : "settings_backups_password_set") }), set ? drop : null), res);
+  if (result) SW.result(res, "ok", result);
+  return h("div", { class: "backup-password" }, h("h3", { class: "settings__heading", textContent: bkT("settings_backups_password_heading") }), state, SW.banner({ kind: "warn", inline: true, text: bkT("settings_backups_password_warning") }), form);
 }
 
 // Keep nightly backups for: its own small form group (the list it comes with needs the code), saved by the group's Save
@@ -85,10 +147,36 @@ function keepForm(r) {
   return form;
 }
 
+// The restore dialog (typed word); a backup the Hub's stored password does not open also asks for its password, checked first
+// (restore/password) so a wrong one leaves everything as it was
+function restoreAsk(s, opener) {
+  const pw = s.needs_password ? SW.field({ type: "secret", name: "restore_password", label: bkT("settings_restore_password"), hint: bkT("settings_restore_password_hint"),
+    attrs: { autocomplete: "off" }, check: (x) => (x ? null : bkT("settings_restore_password_need")) }) : null;
+  const out = SW.ask({ kind: "typed", word: "restore", opener, fields: pw ? [pw] : [],
+    title: SW.t("settings_restore_title"), text: SW.t("settings_restore_short", { host: s.host || SW.t("settings_restore_summary_other_hub"), created: s.created }),
+    body: h("p", { class: "dialog__text", textContent: SW.t("settings_restore_body") }), confirm: SW.t("settings_restore_confirm"),
+    run: async (values, { result }) => {
+      let r = null;
+      await needCode(async () => {
+        try {
+          if (pw) await api("restore/password", { password: values[0], code: theCode() });
+          r = await api("job", { name: "restore", confirm: values[values.length - 1].trim(), sha256: s.sha256, code: theCode() });
+        } catch (x) {
+          if (x.locked) throw x;
+          const wrong = x.data && x.data.error === "wrong_password";
+          SW.result(result, "bad", wrong ? (x.data.text || bkT("settings_restore_wrong_password")) : hubText(x.message));
+          if (wrong && pw) pw._control.focus();
+        }
+      });
+      return r || false;
+    } });
+  return out;
+}
+
 // Restore: three steps the person goes through (02 8.2)
 function restoreSteps() {
   const rbox = boxFor("restore"), sum = h("div", { class: "settings__summary" }), actions = h("div", { class: "actions" });
-  const file = SW.field({ type: "file", label: SW.t("settings_restore_file"), accept: ".zip,application/zip", attrs: { "aria-required": "false" } });
+  const file = SW.field({ type: "file", label: SW.t("settings_restore_file"), accept: ".zip,.enc,application/zip", attrs: { "aria-required": "false" } });
   const bar = SW.progress({ name: SW.t("settings_restore_uploading"), value: 0 });
   bar.hidden = true;
   const go = SW.btn(SW.t("settings_restore_step2"), { cls: "btn--primary", action: "upload-check", run: () => start() });
@@ -134,7 +222,9 @@ function restoreSteps() {
   const checked = (s) => {
     summary = s;
     stage = 3;
-    sum.replaceChildren(...[
+    if (s.needs_password) sum.replaceChildren(h("p", {}, SW.status("note", { small: true, text: bkT("settings_restore_summary_encrypted") })),
+      s.sha256 ? h("p", { class: "mono", textContent: SW.t("settings_restore_summary_sha", { hash: s.sha256 }) }) : null);
+    else sum.replaceChildren(...[
       line("settings_restore_summary_backup", { host: s.host || SW.t("settings_restore_summary_other_hub"), created: s.created, version: s.kit }),
       line(s.spoolman ? "settings_restore_summary_files_db" : "settings_restore_summary_files", { count: s.files }),
       line("settings_restore_summary_features", { list: s.modules.join(", ") || SW.t("common_none") }),
@@ -143,10 +233,7 @@ function restoreSteps() {
       line("settings_restore_summary_code"),
       h("p", { class: "mono", textContent: SW.t("settings_restore_summary_sha", { hash: s.sha256 }) })].filter(Boolean));
     actions.replaceChildren(
-      SW.btn(SW.t("settings_restore_button"), { cls: "btn--danger", action: "restore", run: (e) => confirmed({ kind: "typed", word: "restore", opener: e.currentTarget,
-        title: SW.t("settings_restore_title"), text: SW.t("settings_restore_short", { host: s.host || SW.t("settings_restore_summary_other_hub"), created: s.created }),
-        body: h("p", { class: "dialog__text", textContent: SW.t("settings_restore_body") }), confirm: SW.t("settings_restore_confirm") },
-      "job", (values) => ({ name: "restore", confirm: values[values.length - 1].trim(), sha256: s.sha256 }), () => { reset(); followApply(true); }) }),
+      SW.btn(SW.t("settings_restore_button"), { cls: "btn--danger", action: "restore", run: async (e) => { if (await restoreAsk(s, e.currentTarget)) { reset(); followApply(true); } } }),
       SW.btn(SW.t("settings_restore_discard"), { cls: "btn--ghost", action: "discard-upload", run: () => settingAct(rbox, "restore/forget", {}, () => reset()) }));
     paint();
     actions.querySelector("button").focus();
@@ -157,12 +244,17 @@ function restoreSteps() {
 
 function backupsGroup() {
   const feature = S.modules.find((m) => m.name === "backup"), box = boxFor("backup"), list = h("div");
+  const warn = SW.banner({ kind: "warn", inline: true, text: SW.t("settings_backups_warning") });
+  let said = null;
   const el = setGroup("backups", { desc: SW.t("settings_backups_desc"), badges: [badge("settings_backups_nightly", feature && feature.on ? "on" : "off")], body: [] });
   const body = el.querySelector(".group__body");
   const show = async () => {
     try {
       const r = await api("backups/list", { code: theCode() });
-      list.replaceChildren(backupList(r), keepForm(r));
+      const result = said;
+      said = null;
+      warn.hidden = !!r.password_set;                // "the zip is not encrypted" holds only while no password is set
+      list.replaceChildren(passwordPane(r, async (text) => { said = text; await show(); const s1 = list.querySelector(".backup-password > p"); if (s1) s1.focus(); }, result), backupList(r), keepForm(r));
     } catch (e) { if (e.locked) throw e; say(list, hubText(e.message), false); }
   };
   // Back up now: the job's strip follows it; the list reads again when it has ended
@@ -180,7 +272,7 @@ function backupsGroup() {
     say(box, SW.t(end && end.state === "failed" ? "settings_backups_failed" : "settings_backups_done"), end && end.state === "failed" ? false : true);
     if (SW.lock.state !== "locked") await show();
   }) });
-  body.append(SW.banner({ kind: "warn", inline: true, text: SW.t("settings_backups_warning") }),
+  body.append(warn,
     h("div", { class: "actions" }, now), box,
     heading("settings_backups_list"), codeRead("common_list_locked", list, show),
     heading("settings_restore_heading"), restoreSteps());
