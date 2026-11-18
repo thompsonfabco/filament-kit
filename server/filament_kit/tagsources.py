@@ -28,6 +28,7 @@ import urllib.parse
 import urllib.request
 
 from . import station_client, tags
+from .pairing import AmbiguousStation
 
 TIMEOUT = 4
 BACKOFF = 60
@@ -69,7 +70,10 @@ def _pinned(url: str, via_station: bool) -> tuple[str, int, str | None] | None:
     if not u.hostname:
         return None
     if via_station:
-        info = station_client._station_info()
+        try:
+            info = station_client._station_info()
+        except AmbiguousStation as e:       # never plain: the source fails like a dead one
+            raise ValueError(str(e)) from e
         return (u.hostname, info["port"], info["fp"]) if info else None
     if u.scheme.lower() == "https":
         return u.hostname, u.port or 443, station_client.pin_get(PIN_KIND, origin(url))

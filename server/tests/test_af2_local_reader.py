@@ -54,7 +54,7 @@ def test_the_first_test_pins_the_certificate_and_shows_its_fingerprint(reader):
     url, fp = reader
     out = local_reader.test(_cfg(url))
     assert out["ok"] is True and out["https"] is True and out["fp"] == fp and out["pin"] == "new"
-    assert out["warning"] is None
+    assert out["warning"] is None and local_reader.https_row(_cfg(url)) is None     # https: no row
     assert station_client.pin_get("reader", url) == fp
     again = local_reader.test(_cfg(url))
     assert again["ok"] is True and again["pin"] == "same" and again["fp"] == fp
@@ -97,23 +97,29 @@ def test_until_the_reader_serves_https_an_http_address_elsewhere_is_accepted_wit
     url = "http://gpu-box.example:7915"
     assert local_reader.needs_https(url) is True
     assert local_reader.check_url(url) is None                                # accepted as it always was
-    assert local_reader.https_row(_cfg(url)) == "The Label Reader at gpu-box.example:7915 is not using HTTPS."
+    assert local_reader.https_row(_cfg(url)) == {      # the one row: group Label Reader, a note, no fix
+        "group": "Label Reader", "state": "note", "fix": None,
+        "text": "The Label Reader at gpu-box.example:7915 is not using HTTPS. A later Label Reader version adds it."}
     monkeypatch.setattr(local_reader, "_reachable", lambda u: (_ for _ in ()).throw(
         local_reader.LocalReaderError("unreachable", "no answer here")))
     out = local_reader.test(_cfg(url))
     assert out["error"] == "no answer here"                                  # the call went as far as the connection
-    assert out["warning"] == local_reader.https_row(_cfg(url)) and out["fp"] is None and out["https"] is False
+    assert out["warning"] == local_reader.https_row(_cfg(url))["text"] and out["fp"] is None and out["https"] is False
 
 
-def test_with_the_rule_on_an_http_address_elsewhere_is_refused_with_the_text(monkeypatch):
+def test_with_the_rule_on_saving_an_http_address_elsewhere_is_refused_and_a_stored_one_becomes_needs_a_look(monkeypatch):
     monkeypatch.setattr(local_reader, "ENFORCE_HTTPS", True)
     assert local_reader.TEXT_NEEDS_HTTPS == "A Label Reader on another machine needs an https address."
     url = "http://gpu-box.example:7915"
     assert local_reader.check_url(url) == "A Label Reader on another machine needs an https address."
     assert local_reader.check_url("https://gpu-box.example:7915") is None
     assert local_reader.check_url("http://127.0.0.1:7915") is None
-    h = local_reader.health(_cfg(url))
-    assert h["ok"] is False and h["error"] == "A Label Reader on another machine needs an https address."
-    with pytest.raises(local_reader.LocalReaderError) as e:
-        local_reader._request(url + "/v1/health", body=None, timeout=1)
-    assert e.value.code == "needs_https"
+    assert local_reader.check_url("http://localhost:7915") is None
+    assert local_reader.https_row(_cfg(url)) == {
+        "group": "Label Reader", "state": "needs_a_look",
+        "text": "The Label Reader at gpu-box.example:7915 is not using HTTPS.",
+        "fix": "Update the Label Reader on that machine, then change its address to https:// in Settings > Label Reader."}
+    assert local_reader.https_row(_cfg("http://127.0.0.1:7915")) is None
+    monkeypatch.setattr(local_reader, "_reachable", lambda u: (_ for _ in ()).throw(
+        local_reader.LocalReaderError("unreachable", "no answer here")))
+    assert local_reader.health(_cfg(url))["error"] == "no answer here"       # a stored address keeps being used

@@ -63,6 +63,11 @@ class CertUnreadable(PairingError):
     """The certificate exists but this user may not read it (the CLI run without sudo)."""
 
 
+class AmbiguousStation(PairingError):
+    """Two Weigh Station pairings have told the Hub a certificate: the Hub has one `station.url`, so it cannot tell
+    which pin belongs to it (it would call one station with the other's certificate)."""
+
+
 class CodeSpent(PairingError):
     """The code was valid a short while ago: expired, redeemed, or dropped at the attempt limit."""
 
@@ -504,12 +509,16 @@ def station_plain_reason() -> str | None:
 
 
 def station_info() -> dict | None:
-    """`{"fp", "port", "version", "hello_at"}` for the Weigh Station pairing that said hello most recently with a
-    certificate, else None (no station paired, or only an older one that sends no fingerprint: plain HTTP)."""
+    """`{"fp", "port", "version", "hello_at"}` for the Weigh Station pairing that said hello with a certificate, else
+    None (no station paired, or only an older one that sends no fingerprint: plain HTTP). Raises AmbiguousStation when
+    two pairings have one: the Hub has a single station address (unpair the one that is gone)."""
     with _locked():
         found = [d for d in _load_devices() if d.get("claimed") is not None and device_type(d) and d.get("fp")]
     if not found:
         return None
-    d = max(found, key=lambda x: x.get("hello_at") or 0)
+    if len(found) > 1:
+        raise AmbiguousStation("two Weigh Stations are paired and the Hub has one station address: unpair the one "
+                               "that is gone (Settings > Devices)")
+    d = found[0]
     return {"fp": d["fp"], "port": int(d["port"]), "version": d.get("version") or "", "hello_at": d.get("hello_at")}
 

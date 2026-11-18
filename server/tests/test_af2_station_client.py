@@ -116,6 +116,19 @@ def test_no_station_pairing_at_all_is_as_before(stations):
     assert StationClient(f"http://127.0.0.1:{port}", backoff=0).state()["tag"] == "04:aa" and hits == ["/state"]
 
 
+def test_two_stations_that_said_hello_are_refused_not_guessed(stations):
+    https, plain = stations
+    port, fp = https()
+    _paired_station(fp, port)
+    _paired_station("ab" * 32, 5003)
+    plain_port, hits = plain()
+    with pytest.raises(StationUnreachable, match="two Weigh Stations are paired"):
+        StationClient(f"http://127.0.0.1:{plain_port}", backoff=0).state()
+    assert hits == [] and station_client.station_https("http://127.0.0.1:5003") == "unreachable"
+    from filament_kit import tagsources
+    assert tagsources.latest({"station": {"url": "http://127.0.0.1:1"}}) is None
+
+
 def test_a_dead_station_still_backs_off_after_one_failure():
     _paired_station("ab" * 32, 1)
     client = StationClient("http://127.0.0.1:1", timeout=1, backoff=60)

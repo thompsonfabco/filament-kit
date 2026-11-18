@@ -31,8 +31,10 @@ that link, and it is sent on reads only, never logged.
 HTTPS (R82 section 2 point 6): a reader on another machine is to be at an https address. The Hub pins its certificate
 at Test (`test`: trust on first use, the fingerprint in the result) and every call after that accepts only that
 certificate (a changed one: `LocalReaderError("cert_changed")`; Test again with `trust=True` takes the new one). The
-reader's own repository has to serve HTTPS first (R82 section 10 point 6), so until `ENFORCE_HTTPS` is switched on
-an `http://` address on another machine is accepted as it always was and `https_row` gives the Checks row.
+reader's own repository has to serve HTTPS first (R82 section 10 point 6; ruled 2026-11-17 21:12). While
+`ENFORCE_HTTPS` is False an `http://` address on another machine is accepted and used as today and `https_row` gives
+the one Checks row (state note, no fix). From the release that turns it on, saving such an address is refused
+(`check_url`), a stored one keeps working and its row becomes "needs a look" with a fix. Not a setting.
 """
 from __future__ import annotations
 
@@ -63,7 +65,11 @@ BUNDLE_CAP = 40 * 1048576        # the reader's own bundle limit is 25 MB; more 
 SUBMIT_TIMEOUT = 600             # the upload plus the reader's proof of work (a few seconds of CPU, more on a slow box)
 ENFORCE_HTTPS = False            # True once the reader serves HTTPS: an http:// address on another machine is then refused
 TEXT_NEEDS_HTTPS = "A Label Reader on another machine needs an https address."
-TEXT_NOT_HTTPS_ROW = "The Label Reader at {address} is not using HTTPS."
+TEXT_NOT_HTTPS_NOTE = "The Label Reader at {address} is not using HTTPS. A later Label Reader version adds it."
+TEXT_NOT_HTTPS_ROW = "The Label Reader at {address} is not using HTTPS."      # with the switch on
+TEXT_NOT_HTTPS_FIX = ("Update the Label Reader on that machine, then change its address to https:// in "
+                      "Settings > Label Reader.")
+ROW_GROUP = "Label Reader"
 TEXT_CERT_CHANGED = "The Label Reader at {address} presents a different certificate than the one the Hub trusts."
 TEXT_CERT_FIX = "Press Test in Settings > Label Reader to trust the new certificate."
 PIN_KIND = "reader"
@@ -72,7 +78,7 @@ FORBIDDEN_FIELDS = ("endpoint", "feedback_endpoint", "url", "address")     # nev
 
 class LocalReaderError(Exception):
     """The local reader could not answer. `code`: unreachable | bad_answer | version | refused | unauthorized |
-    busy | tier_unavailable | revise_unsupported | cert_changed | needs_https."""
+    busy | tier_unavailable | revise_unsupported | cert_changed."""
 
     def __init__(self, code: str, message: str):
         super().__init__(message)
@@ -122,10 +128,19 @@ def needs_https(url: str) -> bool:
     return u.scheme == "http" and bool(u.hostname) and not _loopback(u.hostname)
 
 
-def https_row(cfg: dict) -> str | None:
-    """The Checks row for a reader on another machine at an http address (TEXT_NOT_HTTPS_ROW), else None."""
+def https_row(cfg: dict) -> dict | None:
+    """The one Checks row for a reader on another machine at an http address, else None (127.0.0.1, localhost or an
+    https address). `{"group": "Label Reader", "state": "note" | "needs_a_look", "text", "fix": str | None}`: with
+    ENFORCE_HTTPS off a note with TEXT_NOT_HTTPS_NOTE and no fix; on, "needs_a_look" with TEXT_NOT_HTTPS_ROW and
+    TEXT_NOT_HTTPS_FIX. The row's registration is AF5's."""
     url = settings(cfg)["url"]
-    return TEXT_NOT_HTTPS_ROW.format(address=urlparse(url).netloc) if needs_https(url) else None
+    if not needs_https(url):
+        return None
+    address = urlparse(url).netloc
+    if ENFORCE_HTTPS:
+        return {"group": ROW_GROUP, "state": "needs_a_look", "text": TEXT_NOT_HTTPS_ROW.format(address=address),
+                "fix": TEXT_NOT_HTTPS_FIX}
+    return {"group": ROW_GROUP, "state": "note", "text": TEXT_NOT_HTTPS_NOTE.format(address=address), "fix": None}
 
 
 def write_token(token: str):
@@ -256,8 +271,6 @@ def _request(url: str, *, body: dict | None, timeout: float, auth: bool = False,
     """One call. `method` defaults to GET without a body, POST with one. `errors`: {reader error code or HTTP status:
     (kind, text)} tried before the generic mapping (the feedback calls' own words). `raw_cap`: the answer is bytes
     (a download) of at most that many, else `too_large`; without it the answer is a JSON object."""
-    if ENFORCE_HTTPS and needs_https(url):
-        raise LocalReaderError("needs_https", TEXT_NEEDS_HTTPS)
     _reachable(url)
     opener, pin = _opener_for(url)
     data = None if body is None else json.dumps(body).encode("utf-8")
@@ -462,10 +475,10 @@ def test(cfg: dict, timeout: float = HEALTH_TIMEOUT, trust: bool = False) -> dic
     """Settings > Label Reader's Test: `health(cfg)` plus `https` (bool), `fp` (the certificate's SHA-256 the reader
     presents, to show beside the result; None for http) and `pin`: "new" (kept now: trust on first use), "same",
     "changed" (not the one kept: the result says so and `trust=True` keeps the new one) or "replaced" (it was changed
-    and `trust` took it). For an http address on another machine `warning` holds TEXT_NOT_HTTPS_ROW (once
-    ENFORCE_HTTPS is on, `error` holds TEXT_NEEDS_HTTPS). Never raises."""
+    and `trust` took it). For an http address on another machine `warning` holds the row's text (`https_row`). Never
+    raises."""
     u = urlparse(settings(cfg)["url"])
-    out: dict = {"fp": None, "pin": None, "https": u.scheme == "https", "warning": https_row(cfg)}
+    out: dict = {"fp": None, "pin": None, "https": u.scheme == "https", "warning": (https_row(cfg) or {}).get("text")}
     if u.scheme == "https" and u.hostname:
         key = _origin(settings(cfg)["url"])
         known = station_client.pin_get(PIN_KIND, key)

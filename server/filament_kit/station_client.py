@@ -25,6 +25,8 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 
+from .pairing import AmbiguousStation
+
 # Texts for the Checks rows and the page (AF5 moves them to the catalogue).
 TEXT_STATION_CERT_CHANGED = "The Weigh Station's certificate is not the one the Hub trusts."
 TEXT_STATION_CERT_FIX = ("Restart the Weigh Station so it tells the Hub its new certificate "
@@ -146,7 +148,7 @@ def _station_info() -> dict | None:
     try:
         return pairing.station_info()
     except (OSError, ValueError):
-        return None
+        return None        # (AmbiguousStation is not caught here: the callers refuse, they never go plain)
 
 
 class StationClient:
@@ -164,7 +166,12 @@ class StationClient:
             failed = self._failed_at
         if failed is not None and time.monotonic() - failed < self.backoff:
             raise StationUnreachable("station unreachable (backing off)")
-        info, host = _station_info(), urllib.parse.urlsplit(self.url).hostname
+        try:
+            info = _station_info()
+        except AmbiguousStation as e:
+            self._fail()
+            raise StationUnreachable(str(e)) from e
+        host = urllib.parse.urlsplit(self.url).hostname
         try:
             if info and host:       # the station said hello with a certificate: HTTPS, that certificate only
                 status, raw, _seen = pinned_get(host, info["port"], "/state", info["fp"], self.timeout)
@@ -229,8 +236,11 @@ def station_https(url: str | None) -> str | None:
     "changed" (a different certificate: TEXT_STATION_CERT_CHANGED with TEXT_STATION_CERT_FIX) or "unreachable"."""
     if not url:
         return None
-    if _station_info() is None:
-        return "plain"
+    try:
+        if _station_info() is None:
+            return "plain"
+    except AmbiguousStation:
+        return "unreachable"
     try:
         StationClient(url, timeout=2, backoff=0).state()
     except StationCertChanged:

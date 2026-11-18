@@ -188,7 +188,11 @@ def test_announce_asks_again_while_the_hub_does_not_answer():
     api = _Api([(0, {"error": "unreachable"}), (0, {"error": "unreachable"}), (200, {})])
     waits = []
     assert server_api.announce(lambda: api, FP, 5003, wait=7, sleep=waits.append) is True
-    assert len(api.calls) == 3 and waits == [7, 7]
+    assert len(api.calls) == 3 and waits == [3, 6]          # quick at first, then at most `wait`
+    api = _Api([(0, {})] * 7 + [(200, {})])
+    waits = []
+    assert server_api.announce(lambda: api, FP, 5003, wait=10, sleep=waits.append) is True
+    assert waits == [3, 6, 10, 10, 10, 10, 10]
 
 
 def test_announce_gives_up_after_its_tries_and_on_a_bad_token_and_when_unpaired():

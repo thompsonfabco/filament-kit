@@ -347,7 +347,7 @@ def announce(api_of, fp: str | None, port: int, tries: int = 20, wait: float = 3
              plain: str | None = None) -> bool:
     """Tell the Hub the three values once the station has started (and so after its port or certificate changed). An
     unpaired station does nothing (it tells the Hub when pairing restarts it); a Hub that does not answer is asked
-    again every `wait` seconds, `tries` times. `api_of()` gives the current ServerApi. True when the Hub took it."""
+    again after 3, 6, 12, 24 s and then every `wait` seconds, `tries` times. `api_of()` gives the current ServerApi. True when the Hub took it."""
     for n in range(tries):
         api = api_of()
         if not api.paired:
@@ -359,6 +359,6 @@ def announce(api_of, fp: str | None, port: int, tries: int = 20, wait: float = 3
         if status == 401:       # the token is no good: pairing again is the way out, not asking
             return False
         if n + 1 < tries:
-            sleep(wait)
+            sleep(min(wait, 3 * 2 ** n))     # 3, 6, 12, 24 s, then `wait`: a Hub starting beside it is found quickly
     return False
 
