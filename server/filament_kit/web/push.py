@@ -1,6 +1,6 @@
 """Web Push for the phone web app. Imported only when `web.push` is true (default false); with it off no code in this
 module runs and the page shows no push control. It sends the Hub's alert events (R80): one notification per event, a
-condition once while it lasts, and a message that removes it when it clears.
+condition once while it lasts, and an alert that ends is replaced by the ending event's own quiet notification.
 
 Needs internet egress from the web unit to the browsers' push services (Apple / Google / Mozilla / Windows): the
 owner decides that; the kit changes no firewall rule. Subscriptions are kept in `FK_STATE/web/push.xml` (0600; the
@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import base64
 import errno
+import hashlib
 import json
 import logging
 import os
@@ -28,9 +29,13 @@ log = logging.getLogger(__name__)
 PUSH_HOSTS = ("push.apple.com", "fcm.googleapis.com", "push.services.mozilla.com", "notify.windows.com")
 MAX_SUBS = 10
 FEED_WAIT = 20.0        # seconds one wait on the Hub's events may last (the channel to the Hub times out at 30)
+REPLACE_TTL = 3600      # seconds a replacement (the notification of an ended alert) may wait: a day-late ending is noise
 FEED_RETRY = 10.0       # seconds before asking again after the Hub did not answer
 TEST_EVERY = 30.0       # seconds between "test" alerts
 TEST_BUDGET = 20.0      # seconds the test alert may take in all, however many subscriptions
+REPLACED_BY_ENDING = ("print-paused", "device-down")   # the conditions whose ending is news (R80 20:48): not storage, not low
+TAG_CONDITION, TAG_EVENT = "sw-condition-", "sw-event-"   # the notification tags alerts.js uses, so the page can tidy up
+NO_TOPIC: set[str] = set()   # push services (host) that refused the Topic header: it is left out for them from then on
 NOT_INSTALLED = "pywebpush is not installed on the server (pip install 'filament-kit[push]'); alerts cannot be sent"
 
 
@@ -219,38 +224,61 @@ def vapid() -> tuple[str, str]:
     return str(path), base64.urlsafe_b64encode(pub).rstrip(b"=").decode()
 
 
+def topic_of(tag: str) -> str:
+    """The Topic header for a tag: at most 32 characters of URL-safe base64 (a hash, so any tag fits). A push service
+    that honours it replaces a message it still holds with the same Topic by the newer one."""
+    return base64.urlsafe_b64encode(hashlib.sha256(tag.encode("utf-8")).digest()).rstrip(b"=").decode()[:32]
+
+
 def webpush_sender(subject: str):
-    """sender(info, payload) -> HTTP status, through pywebpush (imported here, so a missing package only fails
-    when an alert is sent)."""
-    def send(info: dict, payload: str) -> int:
+    """sender(info, payload, topic=None, ttl=None) -> HTTP status, through pywebpush (imported here, so a missing
+    package only fails when an alert is sent)."""
+    def send(info: dict, payload: str, topic: str | None = None, ttl: int | None = None) -> int:
         from pywebpush import WebPushException, webpush
         try:
-            r = webpush(info, payload, vapid_private_key=vapid()[0], ttl=6 * 3600, vapid_claims={"sub": subject},
-                        headers={"Urgency": "high"}, timeout=10)
+            r = webpush(info, payload, vapid_private_key=vapid()[0], ttl=ttl or 6 * 3600, vapid_claims={"sub": subject},
+                        headers={"Urgency": "high", **({"Topic": topic} if topic else {})}, timeout=10)
             return int(getattr(r, "status_code", 201))
         except WebPushException as e:
             return int(getattr(e.response, "status_code", 0) or 0)
     return send
 
 
+def _topic_refused(code: int) -> bool:
+    """A 4xx that may be the push service refusing the Topic header (not 'gone' 404/410, not 'slow down' 429)."""
+    return 400 <= code < 500 and code not in (404, 410, 429)
+
+
 def send_all(store: Store, title: str, body: str, tag: str, *, sender, url: str = "",
-             budget: float | None = None, clear: bool = False) -> dict:
+             budget: float | None = None, replace: bool = False) -> dict:
     """Send one alert to every subscription; the ones the push service says are gone (404 / 410) are dropped.
     {"sent": how many the push services took, "failed": [what went wrong, one line each], "removed": how many were
     dropped}. `budget` is the most seconds to spend, counted from when the subscriptions have been read: the
-    subscriptions left after it are not tried, but the first one always is. `clear`: a message that removes the
-    notification with this tag instead of showing one."""
+    subscriptions left after it are not tried, but the first one always is. `replace`: the notification of an ended
+    alert: same tag, silent, no new alert sound (`renotify` false), a short TTL. Every push carries a Topic made from
+    its tag; a service that answers 4xx to it gets the push once more without it and, when that is taken, is not sent
+    the Topic again."""
     subs = store.subs()
     deadline = None if budget is None else time.monotonic() + budget
-    payload = json.dumps({"title": title, "body": body, "tag": tag, "url": url, **({"clear": True} if clear else {})})
+    payload = json.dumps({"title": title, "body": body, "tag": tag, "url": url,
+                          **({"silent": True, "renotify": False} if replace else {})})
+    topic, ttl = topic_of(tag), (REPLACE_TTL if replace else None)
     dead = []
     sent, failed = 0, []
     for n, (ep, sub) in enumerate(subs.items()):
         if n and deadline is not None and time.monotonic() > deadline:
             failed.append(f"{urlparse(ep).hostname} not tried: out of time")
             continue
+        host = (urlparse(ep).hostname or "").lower()
         try:
-            code = sender(sub["info"], payload)
+            use = None if host in NO_TOPIC else topic
+            code = sender(sub["info"], payload, topic=use, ttl=ttl)
+            if use and _topic_refused(code):
+                again = sender(sub["info"], payload, topic=None, ttl=ttl)
+                if 0 < again < 400:
+                    NO_TOPIC.add(host)
+                    log.info("push service %s refused the Topic header: left out for it from now on", host)
+                code = again
         except Exception as e:  # noqa: BLE001 - one dead service must not stop the rest
             log.warning("push to %s failed: %s", urlparse(ep).hostname, type(e).__name__)
             failed.append(f"cannot reach {urlparse(ep).hostname} ({type(e).__name__})")
@@ -305,13 +333,17 @@ class Feed(threading.Thread):
             since = nxt
 
     def send(self, event: dict) -> None:
-        """One notification for one alert event; a condition that is already raised at that severity sends nothing,
-        a condition that clears removes its notification."""
+        """One notification for one alert event; a condition that is already raised at that severity sends nothing.
+        A condition that ends sends the ending event's own notification in place of the alert's (print paused or
+        runout, device down); nothing for any other ending, and no push that shows nothing."""
         cond = event.get("condition") or {}
         key = cond.get("key") if isinstance(cond, dict) else None
         if key and cond.get("state") != "raised":
-            if self.raised.pop(key, None) is not None:
-                send_all(self.store, "", "", key, sender=self.sender, url=self.url, clear=True)
+            if self.raised.pop(key, None) is not None and key.split(":")[0] in REPLACED_BY_ENDING and event.get("title"):
+                title, body = event_text(event)     # the ending's own notification takes the alert's place, quietly
+                send_all(self.store, title, body, TAG_CONDITION + key, sender=self.sender,
+                         url=event_url(self.url.rstrip("/"), event),
+                         replace=True)
             return
         if event.get("alert") is not True:
             return
@@ -320,7 +352,7 @@ class Feed(threading.Thread):
                 return
             self.raised[key] = event.get("severity")
         title, body = event_text(event)
-        send_all(self.store, title, body, key or f"event-{event.get('id')}", sender=self.sender,
+        send_all(self.store, title, body, TAG_CONDITION + key if key else f"{TAG_EVENT}{event.get('id')}", sender=self.sender,
                  url=event_url(self.url.rstrip("/"), event))
 
     def tick(self) -> None:

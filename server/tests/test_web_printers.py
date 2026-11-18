@@ -430,7 +430,7 @@ def pushapp(env, kit, monkeypatch):
     monkeypatch.setattr(push, "available", lambda: True)
     answer = {"code": 201}
 
-    def fake_sender(info, payload):                 # no network: the answer is whatever the test sets
+    def fake_sender(info, payload, **kw):                 # no network: the answer is whatever the test sets
         if isinstance(answer["code"], Exception):
             raise answer["code"]
         return answer["code"]
@@ -480,7 +480,7 @@ def test_push_send_drops_dead_subscriptions(env):
     store.add({"endpoint": "https://fcm.googleapis.com/a", "keys": {"p256dh": "k", "auth": "a"}})
     store.add({"endpoint": "https://fcm.googleapis.com/dead", "keys": {"p256dh": "k", "auth": "a"}})
 
-    def fake(info, payload):
+    def fake(info, payload, **kw):
         sent.append((info["endpoint"], json.loads(payload)["title"]))
         return 410 if info["endpoint"].endswith("dead") else 201
     push.send_all(store, "Print finished", "benchy", "job", sender=fake)
@@ -697,7 +697,7 @@ def test_push_send_all_stops_trying_after_its_budget(env, monkeypatch):
     store, now = _two_subs_and_a_clock(monkeypatch)
     tried = []
 
-    def slow(info, payload):
+    def slow(info, payload, **kw):
         tried.append(info["endpoint"])
         now[0] += 5.0
         return 201
@@ -710,7 +710,7 @@ def test_push_send_all_tries_one_subscription_even_when_the_budget_is_spent(env,
     store, now = _two_subs_and_a_clock(monkeypatch)
     tried = []
 
-    def sender(info, payload):
+    def sender(info, payload, **kw):
         tried.append(info["endpoint"])
         now[0] += 1.0
         return 201
@@ -729,7 +729,7 @@ def test_push_send_all_budget_starts_after_the_subscriptions_are_read(env, monke
         return subs
 
     monkeypatch.setattr(store, "subs", late_subs)
-    r = push.send_all(store, "t", "b", "x", sender=lambda info, payload: tried.append(1) or 201, budget=1.0)
+    r = push.send_all(store, "t", "b", "x", sender=lambda info, payload, **kw: tried.append(1) or 201, budget=1.0)
     assert len(tried) == 2 and r["sent"] == 2 and not r["failed"]
 
 
