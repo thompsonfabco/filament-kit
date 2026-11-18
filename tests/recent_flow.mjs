@@ -20,7 +20,9 @@ export default async (p) => {
   const ask = async (note) => {
     await p.type("textarea[name=note]", note);
     await p.click("button", "Ask the Label Reader");
-    await p.waitFor(`document.querySelector(".changes__title")`, "the suggestion");
+    // the page tells the person "up to a minute" and waits that long; the test waits for the answer as long as the page does (the default 8 s
+    // was shorter than the Label Reader's own limit, and the Hub's reader call is slow on a loaded machine)
+    await p.waitFor(`document.querySelector(".changes__title")`, "the suggestion", 60000);
   };
 
   // the list: four records, the newest first, the filter, the sources in words, the open record
