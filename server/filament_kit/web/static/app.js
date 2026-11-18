@@ -938,6 +938,14 @@ function navigation() {
 function tt(key, vars) {
   const STUB = {
     settings_alerts_recent: "Recent alerts",
+    history_recent_title: "Recent changes", history_none: "Nothing has changed on this spool yet.", history_undone: "(put back)", history_by: "by {who}",
+    history_undo_put_back: "Put back.", history_undo_changed_since: "This changed again since, so it cannot be undone.",
+    history_undo_too_old: "This is too old to be undone.", history_undo_already_undone: "This was already put back.",
+    history_undo_not_undoable: "This cannot be undone.", history_undo_failed: "Could not put this back.",
+    health_title: "Check history", health_show: "Show history", health_hide: "Hide history", health_days: "Last {days} days", health_30: "Show 30 days",
+    health_none: "No changes in this time.", health_since: "No history before {date}.", health_col_time: "Time", health_col_check: "Check",
+    health_col_from: "From", health_col_to: "To", health_state_ok: "fine", health_state_look: "needs a look", health_state_bad: "failing",
+    downloads_title: "Downloads", download_spoolman_spools: "Spools (Spoolman's file)", download_recent: "Recently added", download_usage: "Filament used",
     running_low_chip: "Running low ({count})",
     running_low_left: "{grams} g left",
     running_low_in_stock: { one: "{count} more in stock", other: "{count} more in stock" },
@@ -994,9 +1002,7 @@ function startAlerts() {
   SW_ALERTS.start({ host: alertHost, interval: 10000, href: alertHref,
     api: async (path) => {
       if (document.hidden) throw new Error("hidden");                                      // nothing is asked while the page is hidden
-      const res = await api(path), have = SW_ALERTS.state().cursor;
-      // a Hub whose ids are lower than the cursor was restored or reinstalled: ask again from the start (the cursor is kept only in the page)
-      if (res && res.next != null && have != null && Number(res.next) < have) setTimeout(startAlerts, 0);
+      const res = await api(path);          // a Hub whose ids went back (restored, reinstalled) is handled by the shared poll (alerts.js)
       if (res && Array.isArray(res.conditions)) closeStaleNotifications(res.conditions);
       return res;
     },
@@ -1061,11 +1067,72 @@ function hubSheet(opener, reuse) {
         + tt(d.backup && d.backup.nightly ? "hub_nightly_on" : "hub_nightly_off"))),
       group(tt("hub_group_reader"), h("p", {}, [d.reader && d.reader.engine, tt(d.reader && d.reader.key_set ? "hub_reader_key_set" : "hub_reader_key_missing")].filter(Boolean).join(" · "))),
       group(tt("hub_group_devices"), list((d.devices || []).map(dev))),
+      ...historyGroup(),
       d.records_kept != null ? group(tt("hub_group_recent"), h("p", {}, tt("hub_records_kept", { count: d.records_kept }))) : null,
       h("p", { class: "hubglance__links" }, h("a", { class: "btn", href: HUB_PAGE }, SW.t("common_open_hub_page")), " ", spoolmanLink(d.spoolman_url)),
     ];
   });
 }
+// ----- History (R84 sections 2, 3, 4): Undo after an action, a spool's last ten events, the check history, downloads -----
+// The Hub's answers: `activity` = {events: [{id, at, title, text, actor: {name}, undo: {possible, until?, why_not?}, undone}]}; Undo = POST events/<id>/undo.
+const undoWhy = (x) => { const c = x && x.data && x.data.code; return ["changed_since", "too_old", "already_undone", "not_undoable"].includes(c) ? tt("history_undo_" + c) : tt("history_undo_failed"); };
+async function undoEvent(id) {
+  try { await api(`events/${encodeURIComponent(id)}/undo`, { body: {} }); SW.toast(tt("history_undo_put_back"), "ok"); return true; }
+  catch (x) { SW.toast(undoWhy(x), "bad"); return false; }
+}
+// After an action on a spool the toast says what happened and, when the Hub can put it back, offers Undo (10 s; the toast holds it for people
+// who asked for no time limits). The action's answer names the event (`event_id`, R84 21:48 point 4); an older Hub's answer has none, and then
+// the spool's newest event is asked for. Returns true when Undo was offered, so a screen with an Undo of its own can leave it out.
+// `done` runs after a put back, to draw the spool again.
+async function offerUndo(spoolId, text, done, eventId) {
+  let e = eventId != null ? { id: eventId, undo: { possible: true } } : null;
+  if (!e) {
+    try { e = ((await api(`activity?subject=spool:${spoolId}&limit=1`)).events || [])[0]; } catch (x) { return false; }     // an older Hub has no activity: no Undo
+  }
+  if (!e || !e.undo || !e.undo.possible) return false;
+  SW.toast(text, "ok", { action: { label: SW.t("common_undo"), run: async () => { if (await undoEvent(e.id) && done) done(); } } });
+  return true;
+}
+function eventRow(e) {
+  const who = e.actor && e.actor.name ? " " + tt("history_by", { who: e.actor.name }) : "";
+  return h("li", { class: "history__row" }, h("span", { class: "history__text" }, (e.text || e.title || e.kind || "") + (e.undone ? " " + tt("history_undone") : "")),
+    h("span", { class: "history__when muted mono" }, whenText(e.at) + who));
+}
+// a spool's last ten events (R84 2.3); the list is read again when something was changed
+// A Hub with no activity route (an older one), or one that does not answer, shows no list at all: `load` answers whether there is one.
+function historyBox(id) {
+  const box = h("div", { class: "history" });
+  const load = async () => {
+    let list;
+    try { list = (await api(`activity?subject=spool:${id}&limit=10`)).events || []; } catch (x) { box.replaceChildren(); return false; }
+    box.replaceChildren(list.length ? h("ul", { class: "history__list" }, list.map(eventRow)) : h("p", { class: "muted" }, tt("history_none")));
+    return true;
+  };
+  return { box, load };
+}
+// the downloads of a phone (R84 6.5): the files come from the Hub through the twin, with the name the Hub gives
+const downloadLink = (key, label, query) => h("a", { class: "btn btn--ghost", href: `${BASE}/api/export/${key}.csv${query ? "?" + query : ""}`, download: `${key}.csv`, "data-action": "download-" + key }, label);
+// the check history (R84 4): the changes as a table (never colour alone), 7 days or 30
+function healthTable(days, region) {
+  return fill(region, tt("health_title"), async () => {
+    const r = await api(`health?days=${days}`), rows = r.changes || [];
+    const state = (s) => tt("health_state_" + s) || s;
+    const since = r.since ? h("p", { class: "muted" }, tt("health_since", { date: whenText(r.since) })) : null;
+    return [h("p", { class: "muted" }, tt("health_days", { days })), since,
+      rows.length ? h("table", { class: "health__table" }, h("thead", {}, h("tr", {}, ...["time", "check", "from", "to"].map((k) => h("th", { scope: "col" }, tt("health_col_" + k))))),
+        h("tbody", {}, rows.map((c) => h("tr", {}, h("td", {}, whenText(c.at)), h("td", {}, c.text || c.key || ""), h("td", {}, state(c.from)), h("td", {}, state(c.to))))))
+        : h("p", { class: "muted" }, tt("health_none")),
+      days === 7 ? SW.btn(tt("health_30"), { cls: "btn--ghost", action: "health-30", run: () => healthTable(30, region) }) : null];
+  });
+}
+function historyGroup() {
+  const region = h("div", { class: "health" });
+  const group = (title, ...kids) => h("section", { class: "settings__group" }, h("h2", { class: "settings__title" }, title), ...kids);
+  return [group(tt("health_title"), SW.btn(tt("health_show"), { cls: "btn--ghost", action: "health-show", run: (e) => { e.currentTarget.hidden = true; healthTable(7, region); } }), region),
+    group(tt("downloads_title"), h("p", { class: "downloads__row" }, downloadLink("spoolman-spools", tt("download_spoolman_spools")), " ", downloadLink("recent", tt("download_recent"))))];
+}
+window.SW_HISTORY = { offerUndo, undoEvent, downloadLink };           // printers.js uses these
+
 // The own entries of the Filament Catalog (R83 4): one form (Brand, Name, Material; the rest under "More (optional)") and the list with Remove.
 const CATALOG_MATERIALS = ["PLA", "PLA+", "PETG", "ABS", "ASA", "TPU", "PC", "PA", "PA-CF", "PVA", "HIPS"];   // the fallback until the Hub lists the materials it knows
 function catalogGroup() {
@@ -2250,7 +2317,8 @@ function openTab() {
       return [SW.swatch(hexOf(v.color_hex), { size: "l" }), h("div", { class: "spools__sum-text" }, h("b", { textContent: nameOf(v) }),
         h("span", { class: "muted", textContent: detail }))];
     };
-    const applyView = (v) => { view = v; sum.replaceChildren(...sumKids(v)); paintActions(); };
+    let loadHistory = null;                                    // set below: the spool's last ten events, read again after a change
+    const applyView = (v) => { view = v; sum.replaceChildren(...sumKids(v)); paintActions(); if (loadHistory) loadHistory(); };
     let readFailed = false;                                    // the spool could not be read: Preview and Link say so, the error has Try again
     const repaint = () => { disabled(previewBtn, holdWhy()); link(linkKey); };
     const refresh = () => fill(sum, SW.t("spool_title", { id }), async () => {
@@ -2391,7 +2459,9 @@ function openTab() {
             return SW.t("spool_sheet_weight_changes", { from: grams(r.before.remaining_g), to: left });
           }
           changed = true; applyView(r.view); wf._control.value = ""; wWas = false; wShot = null; wRev++; wLock("spool_weight_need_preview"); showWeight(false);
-          SW.toast(SW.t("spool_result_weight", { left })); SW.result(actAns, "ok", SW.t("spool_result_weight", { left }));
+          const wt = SW.t("spool_result_weight", { left });
+          offerUndo(id, wt, refresh, r.event_id).then((offered) => { if (!offered) SW.toast(wt); });         // Undo when the Hub can put it back (R84 3)
+          SW.result(actAns, "ok", wt);
           return null;
         }, { button });
       } finally { wWorking = false; }
@@ -2412,6 +2482,7 @@ function openTab() {
           if (!back) { if (undoFrom == null || Date.now() > undoUntil) undoFrom = r.before.location || null; undoUntil = Date.now() + 5000; }   // a second move in the window keeps the first place
           changed = true; applyView(r.view); refreshStorage();
           const text = SW.t("spool_result_moved", { location: r.view && r.view.location || l });
+          if (!back && await offerUndo(id, text, () => { refresh(); refreshStorage(); }, r.event_id)) { undoFrom = null; return text; }     // the Hub puts it back (R84 3); the 5 s Undo below is for a Hub that cannot
           if (back || !undoFrom) { undoFrom = null; return text; }
           setTimeout(() => { if (stamp === undoStamp && actAns.querySelector(".btn")) SW.result(actAns, "ok", text); }, 5000);   // Undo goes after 5 s
           return { text: SW.t("spool_result_moved_undo", { location: r.view && r.view.location || l, was: undoFrom }), action: { label: SW.t("common_undo"), run: () => moveTo(undoFrom, true) } };
@@ -2420,13 +2491,18 @@ function openTab() {
     }
     // Mark empty: asks first (04 12.1)
     async function markEmpty(opener) {
+      let emptied = null;                                      // the Hub's event for it, for Undo
       const name = view ? nameOf(view) : SW.t("spool_title", { id });
       const done = await SW.ask({ open: openHere, kind: "destructive", title: SW.t("spool_empty_title", { id }), text: SW.t("spool_sheet_empty_body", { name }),
         confirm: SW.t("spool_mark_empty"), opener, run: async () => {
-          try { const r = await api(`spools/${id}`, { body: { empty: true, dry_run: false } }); changed = true; applyView(r.view); return true; }
+          try { const r = await api(`spools/${id}`, { body: { empty: true, dry_run: false } }); emptied = r.event_id; changed = true; applyView(r.view); return true; }
           catch (e) { throw Object.assign(e, { text: () => says(e) }); }
         } });
-      if (done) { SW.toast(SW.t("spool_result_empty")); SW.result(actAns, "ok", SW.t("spool_result_empty")); }
+      if (done) {
+        const et = SW.t("spool_result_empty");
+        offerUndo(id, et, refresh, emptied).then((offered) => { if (!offered) SW.toast(et); });
+        SW.result(actAns, "ok", et);
+      }
     }
     // Load into a printer: the printers, then the slots, then the plan and Load (the routes of the load sheet of 04 6.5)
     const loadBox = h("div", { class: "spools__load", hidden: true });
@@ -2486,8 +2562,10 @@ function openTab() {
       h("div", { class: "spools__buttons" }, EDIT ? weightBtn : null, EDIT ? moveBtn : null, PRINTERS ? loadBtn : null), weightForm, loadBox,
       EDIT ? h("div", { class: "spools__danger" }, emptyBtn) : null, actAns) : null;
     if (other) other.hidden = true;                            // until the spool is read: its state decides which actions can be pressed
+    const hist = historyBox(id), historyPart = part(tt("history_recent_title"), hist.box);
+    historyPart.hidden = true; loadHistory = async () => { historyPart.hidden = !(await hist.load()); };
 
-    const dlg = SW.sheet({ title: SW.t("spool_title", { id }), body: h("div", { class: "spools__sheet" }, sum, openPart, other), onClose: () => {
+    const dlg = SW.sheet({ title: SW.t("spool_title", { id }), body: h("div", { class: "spools__sheet" }, sum, openPart, other, historyPart), onClose: () => {
       if (sheet && sheet.dlg === dlg) sheet = null;            // a sheet that was replaced by another one closes after the new one is set
       if (changed) { changed = false; if (shown && (asked || low)) find(lastQ); }
       if (shellView) shellView.paint(false);
@@ -2515,7 +2593,7 @@ function openTab() {
     if (lastTag && onScale(lastTag)) { weight._control.value = lastTag.scale.grams; weight._hint.textContent = SW.t("spools_scale_filled", { seconds: lastTag.scale.age_seconds }); }
     SW.openModal(dlg, opener);
     if (shellView) shellView.paint(false);
-    refresh();
+    refresh(); loadHistory();
   }
 
   const locsList = h("datalist", { id: "spools-locs" });

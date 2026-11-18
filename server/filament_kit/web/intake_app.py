@@ -44,6 +44,7 @@ from .slots import SlotError
 log = logging.getLogger(__name__)
 
 MAX_HINT = 2000
+EXPORT_MAX = 20 * 1024 * 1024        # a CSV passed on to a phone (R84 9.4): larger is refused, not cut
 STATIC = Path(__file__).parent / "static"
 
 HEADERS = {
@@ -263,6 +264,12 @@ class IntakeApp:
             ("/intake/api/alerts", self.api(self.alerts_twin), ["GET"]),
             ("/intake/api/spools/low", self.api(self.spools_low_twin), ["GET"]),
             ("/intake/api/storage-use", self.api(self.storage_use_twin), ["GET"]),
+            # history and data (R84 9.4): the activity list, Undo, the health history, analytics and the three downloads of a phone
+            ("/intake/api/activity", self.api(self.activity_twin), ["GET"]),
+            ("/intake/api/events/{event}/undo", self.api(self.undo_twin), ["POST"]),
+            ("/intake/api/health", self.api(self.health_twin), ["GET"]),
+            ("/intake/api/analytics", self.api(self.analytics_twin), ["GET"]),
+            ("/intake/api/export/{name}", self.api(self.export_twin), ["GET"]),
             ("/intake/api/presets", self.api(self.presets), ["GET"]),
             ("/intake/api/parents", self.api(self.parents), ["GET"]),
             ("/intake/api/line_add", self.api(self.line_add), ["POST"]),
@@ -745,6 +752,90 @@ class IntakeApp:
 
     async def storage_use_twin(self, request: Request):
         return await self._hub_get("/api/storage-use")
+
+    # ----- history and data (R84 9.4): each passes one Hub route on, with the parameters that route has and no others -----
+    ACTIVITY_PARAMS = ("subject", "actor", "kinds", "since", "limit")
+    EVENT_ID = re.compile(r"[A-Za-z0-9_.:-]{1,64}")
+    EXPORT_SETS = {"usage": "usage.csv", "recent": "recent.csv", "spoolman-spools": "spoolman-spools.csv"}   # the sets a phone may download (R84 9.2)
+
+    @staticmethod
+    def _bad(text: str) -> JSONResponse:
+        return JSONResponse({"error": text}, 400)
+
+    async def activity_twin(self, request: Request):
+        """The twin of `GET api/events?activity=1`: what was done, with who did it and whether it can be put back."""
+        q = {k: request.query_params[k] for k in self.ACTIVITY_PARAMS if k in request.query_params}
+        if "limit" in q and not q["limit"].isdigit():
+            return self._bad("limit must be a number")
+        q["limit"] = str(min(int(q.get("limit") or 50), 200))
+        return await self._hub_get("/api/events?" + urlencode({"activity": "1", **q}))
+
+    async def undo_twin(self, request: Request):
+        """Put one action back; the Hub's refusal ("changed_since", "too_old", "already_undone", "not_undoable") keeps its code."""
+        event = request.path_params["event"]
+        if not self.EVENT_ID.fullmatch(event):
+            return self._bad("that is not an event id")
+        try:
+            return await anyio.to_thread.run_sync(self.kit.post, f"/api/events/{quote(event, safe='')}/undo", {})
+        except SlotError as e:
+            st = e.http
+            return JSONResponse({"error": str(e), **({"code": e.code} if e.code else {})},
+                                st if isinstance(st, int) and 400 <= st < 600 and st != 401 else 502)
+
+    async def health_twin(self, request: Request):
+        days = request.query_params.get("days", "7")
+        if days not in ("7", "30"):
+            return self._bad("days is 7 or 30")
+        return await self._hub_get(f"/api/health?days={days}")
+
+    async def analytics_twin(self, request: Request):
+        q = {}
+        months = request.query_params.get("months")
+        if months is not None:
+            if not months.isdigit() or not 1 <= int(months) <= 13:
+                return self._bad("months is 1 to 13")
+            q["months"] = months
+        printer = request.query_params.get("printer")
+        if printer:
+            if not self.EVENT_ID.fullmatch(printer):
+                return self._bad("that is not a printer id")
+            q["printer"] = printer
+        return await self._hub_get("/api/analytics" + ("?" + urlencode(q) if q else ""))
+
+    async def export_twin(self, request: Request):
+        """A CSV file of the Hub's, passed on as a download (usage, recent, Spoolman's spools); no other set leaves through a phone."""
+        name = request.path_params["name"]
+        key = name[:-4] if name.endswith(".csv") else ""
+        if key not in self.EXPORT_SETS:
+            return JSONResponse({"error": "no such file"}, 404)
+        q = {}
+        if key == "usage":
+            days, printer = request.query_params.get("days"), request.query_params.get("printer")
+            if days is not None:
+                if not re.fullmatch(r"\d{1,3}", days):
+                    return self._bad("days must be a number")
+                q["days"] = days
+            if printer:
+                if not self.EVENT_ID.fullmatch(printer):
+                    return self._bad("that is not a printer id")
+                q["printer"] = printer
+
+        def fetch() -> bytes:
+            _, _, resp = self.kit.raw(f"/api/export/{name}" + ("?" + urlencode(q) if q else ""))
+            try:
+                return resp.read(EXPORT_MAX + 1)
+            finally:
+                resp.close()
+        try:
+            data = await anyio.to_thread.run_sync(fetch)
+        except SlotError as e:
+            st = e.http
+            return JSONResponse({"error": str(e), **({"code": e.code} if e.code else {})},
+                                st if isinstance(st, int) and 400 <= st < 600 and st != 401 else 502)
+        if len(data) > EXPORT_MAX:
+            return JSONResponse({"error": "that file is too large to pass on"}, 413)
+        return Response(data, media_type="text/csv; charset=utf-8",
+                        headers={"Content-Disposition": f'attachment; filename="{self.EXPORT_SETS[key]}"', "Cache-Control": "no-store"})
 
     async def hub_get(self, request: Request):
         return await self._hub_get("/api/hub")

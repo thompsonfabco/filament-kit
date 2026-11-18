@@ -244,6 +244,14 @@ main.standalone { width: min(calc(var(--s7) * 10), calc(100vw - 2 * var(--s4)));
 .pused__row > .btn { grid-column: 3; grid-row: 1 / span 2; min-height: var(--ctl); }
 .pused__row > .result { grid-column: 1 / -1; margin: 0; }
 .pused__row[data-state="undone"] > :not(.btn, .result) { color: var(--muted); text-decoration: line-through; }
+.pused__bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); margin-bottom: var(--s2); }
+.health__table, .pused__months { width: 100%; border-collapse: collapse; font-size: var(--fs-m); }
+.health__table :is(th, td), .pused__months :is(th, td) { text-align: left; padding: var(--s2); border-top: 1px solid var(--border); }
+.history__list { margin: 0; padding: 0; list-style: none; }
+.history__row { display: grid; gap: var(--s1); padding: var(--s2) 0; border-top: 1px solid var(--border); }
+.history__row:first-child { border-top: 0; }
+.history__text { overflow-wrap: anywhere; }
+.history__when { font-size: var(--fs-s); }
 
 .pset .kv__value { justify-content: space-between; }
 .pset .kv__key { color: var(--muted); }
