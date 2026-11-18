@@ -184,6 +184,23 @@ class LoadViewModelTest {
         assertEquals(SpoolResult.LoadedUnconfirmed("Workshop X1", "A2"), vm.state.value.finished)
     }
 
+    @Test fun aLoadTheHubSaysIsPendingIsAWaitingResult() = runTest(dispatcher) {
+        backend.real = plan(confirmed = false).copy(pending = true)
+        val vm = LoadPreviewViewModel(spool, "X1A", "A2", backend)
+        advanceUntilIdle()
+        vm.load()
+        advanceUntilIdle()
+        val result = vm.state.value.finished
+        assertEquals(SpoolResult.Waiting("Workshop X1", "A2"), result)
+        assertEquals("Waiting for the spool to load in A2.", LoadTexts.waitingIn("A2"))
+        assertEquals(result, SpoolResult.decode((result as SpoolResult).encode()))
+    }
+
+    @Test fun pendingWinsOverConfirmedAndAPlainLoadIsUnchanged() {
+        assertEquals(SpoolResult.Waiting("P", "A1"), loadResult(plan(confirmed = true).copy(pending = true), "P", "A1"))
+        assertEquals(SpoolResult.Loaded("P", "A1"), loadResult(plan(confirmed = true), "P", "A1"))
+    }
+
     @Test fun theSpoolTheHubReturnsReachesTheSpoolScreen() = runTest(dispatcher) {
         backend.real = plan(confirmed = true).copy(spool = spoolJson(214, location = "Workshop X1 A2"))
         val vm = LoadPreviewViewModel(spool, "X1A", "A2", backend)

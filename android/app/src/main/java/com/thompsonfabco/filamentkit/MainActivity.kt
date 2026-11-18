@@ -1178,7 +1178,10 @@ internal fun FilamentKitApp(
                         }
                         val searchVm: SearchViewModel = viewModel(factory = viewModelFactory {
                             initializer {
-                                SearchViewModel(loadLow = { currentApi().lowSpools().spools }) { q, sealedOnly ->
+                                SearchViewModel(
+                                    loadLow = { currentApi().lowSpools().spools },
+                                    loadSpoolmanUrl = { currentApi().spools("", null).spoolmanUrl },
+                                ) { q, sealedOnly ->
                                     currentApi().search(q, sealedOnly)
                                 }
                             }

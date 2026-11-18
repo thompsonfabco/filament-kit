@@ -47,7 +47,7 @@ class ApiPhase3Test {
     @Test fun clearSlotSendsDryRunAndReadsEveryField() = runBlocking {
         hub.handler = { _ ->
             200 to """{"slot": "A1", "spool": {"id": 7, "location": "Shelf"}, "moved_back": "Shelf", "waiting_ended": true,
-                "printer_cleared": true, "dry_run": false, "future": 1}"""
+                "printer_cleared": true, "dry_run": false, "text": "Said.", "future": 1}"""
         }
         val r = api.clearSlot("p-3", "A1", dryRun = false)
         assertEquals("POST", hub.requests[0].method)
@@ -59,6 +59,7 @@ class ApiPhase3Test {
         assertTrue(r.waitingEnded)
         assertTrue(r.printerCleared)
         assertFalse(r.dryRun)
+        assertEquals("Said.", r.text)
     }
 
     @Test fun clearSlotWithNoSpoolAndMissingFieldsReadsAsDefaults() = runBlocking {
@@ -68,6 +69,7 @@ class ApiPhase3Test {
         assertNull(r.movedBack)
         assertFalse(r.waitingEnded)
         assertFalse(r.printerCleared)
+        assertNull(r.text)
         assertTrue(r.dryRun)
         assertTrue(body(0)["dry_run"]!!.jsonPrimitive.content.toBoolean())
     }
@@ -154,11 +156,42 @@ class ApiPhase3Test {
             200 to """{"entries": [{"id": "a1", "brand": "Acme", "name": "Red", "material": "PLA", "added": "2026-11-01T10:00:00+00:00"},
                 {"brand": "No id"}, {"id": "b2", "brand": "Acme", "name": "Blue", "material": "PETG"}]}"""
         }
-        val list = api.localLibrary()
+        val library = api.localLibrary()
+        val list = library.entries
+        assertNull("an older Hub sends no materials", library.materials)
         assertEquals("/api/library/local", hub.requests[0].url.encodedPath)
         assertEquals(listOf("a1", "b2"), list.map { it.id })
         assertEquals("2026-11-01T10:00:00+00:00", list[0].added)
         assertNull(list[1].added)
+    }
+
+    @Test fun localLibraryReadsTheMaterialsAndWholeSecondTimes() = runBlocking {
+        hub.handler = { _ ->
+            200 to """{"entries": [{"id": "a1", "brand": "Acme", "name": "Red", "material": "PLA", "added": 1794873600},
+                {"id": "b2", "brand": "Acme", "name": "Blue", "material": "PETG", "added": null}],
+                "materials": ["PLA", "Wood PLA", " ", 5, "PEEK"]}"""
+        }
+        val library = api.localLibrary()
+        assertEquals(listOf("PLA", "Wood PLA", "PEEK"), library.materials)
+        assertEquals("1794873600", library.entries[0].added)
+        assertNull(library.entries[1].added)
+        hub.handler = { _ -> 200 to """{"entries": [], "materials": []}""" }
+        assertEquals("a catalog-less Hub's empty list is kept", emptyList<String>(), api.localLibrary().materials)
+    }
+
+    @Test fun hubTimesAsWholeSecondsAndAsIsoTextBothRead() = runBlocking {
+        hub.handler = { _ ->
+            200 to """{"name": "H", "version": "1", "newest": {"version": "2", "checked_at": 1794902400},
+                "catalog": {"version": "1.4", "checked_at": 1794902400}, "backup": {"last_at": 1794816000, "nightly": true},
+                "devices": [{"name": "P", "kind": "phone", "last_seen": 1794906000, "out_of_date": false, "this": true},
+                            {"name": "Q", "kind": "pc", "last_seen": null, "out_of_date": false, "this": false}]}"""
+        }
+        val h = api.hub()!!
+        assertEquals("1794902400", h.newest!!.checkedAt)
+        assertEquals("1794902400", h.catalog!!.checkedAt)
+        assertEquals("1794816000", h.backup!!.lastAt)
+        assertEquals("1794906000", h.devices[0].lastSeen)
+        assertNull(h.devices[1].lastSeen)
     }
 
     @Test fun addLocalEntryFormSendsValuesAndReadsTheEntry() = runBlocking {
@@ -189,6 +222,20 @@ class ApiPhase3Test {
         assertEquals("invalid_entry", e.code)
         assertEquals(
             listOf(EntryProblem("brand", "Brand is required."), EntryProblem("nozzle_max", "Must be above the lowest.")),
+            KitWire.problems(e),
+        )
+    }
+
+    @Test fun theHubsExactProblemsShapeIsRead() {
+        hub.handler = { _ ->
+            400 to """{"error": "invalid_entry", "message": "The entry is not valid.",
+                "problems": [{"field": "density", "text": "Density must be above 0."}, {"field": "material", "text": "Pick a material."}]}"""
+        }
+        val e = assertThrows(ApiError::class.java) {
+            runBlocking { api.addLocalEntryForm(buildJsonObject { put("brand", "A") }) }
+        }
+        assertEquals(
+            listOf(EntryProblem("density", "Density must be above 0."), EntryProblem("material", "Pick a material.")),
             KitWire.problems(e),
         )
     }

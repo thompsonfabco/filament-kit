@@ -886,6 +886,8 @@ data class ClearResult(
     /** The slot's setting on the printer was cleared too (Klipper, printer online). */
     val printerCleared: Boolean,
     val dryRun: Boolean,
+    /** The Hub's own sentence about what the printer still shows (Bambu Lab, R83); absent on older answers. */
+    val text: String? = null,
 )
 
 /** One row of Status: [state] is how the Hub rates it, [fix] the line that says what to do. */
@@ -948,8 +950,14 @@ data class HubAnswer(
     val hubPage: String?,
 )
 
-/** One of the owner's own Filament Catalog entries (`GET /api/library/local`). [added] is the Hub's time text. */
+/**
+ * One of the owner's own Filament Catalog entries (`GET /api/library/local`). [added] is a plain date `YYYY-MM-DD` as the
+ * Hub gives it (R83 section 10); `hubDay` reads that, ISO text and whole seconds since 1970.
+ */
 data class LocalEntry(val id: String, val brand: String, val name: String, val material: String, val added: String?)
+
+/** `GET /api/library/local`: the entries and the materials the catalog knows ([materials] null: an older Hub sent none). */
+data class LocalLibrary(val entries: List<LocalEntry>, val materials: List<String>?)
 
 /** One refused field of the catalog form: 400 `invalid_entry`, `problems: [{field, text}]`. */
 data class EntryProblem(val field: String, val text: String)
@@ -978,6 +986,7 @@ object KitWire {
             waitingEnded = o.bool("waiting_ended") ?: false,
             printerCleared = o.bool("printer_cleared") ?: false,
             dryRun = o.bool("dry_run") ?: true,
+            text = o.str("text")?.takeIf { it.isNotBlank() },
         )
     }
 
@@ -1023,6 +1032,14 @@ object KitWire {
 
     fun localEntries(root: JsonElement): List<LocalEntry> =
         ((root as? JsonObject)?.get("entries") as? JsonArray).orEmpty().mapNotNull { localEntry(it) }
+
+    /** The entries and, when the answer has a `materials` list, its non-blank names (an empty list stays empty). */
+    fun localLibrary(root: JsonElement): LocalLibrary {
+        val materials = ((root as? JsonObject)?.get("materials") as? JsonArray)?.mapNotNull {
+            (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.contentOrNull?.trim()?.takeIf { s -> s.isNotEmpty() }
+        }
+        return LocalLibrary(localEntries(root), materials)
+    }
 
     /** Null for an element without an id (it could not be removed). */
     fun localEntry(element: JsonElement): LocalEntry? {

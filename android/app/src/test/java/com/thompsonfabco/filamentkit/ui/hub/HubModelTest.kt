@@ -148,6 +148,14 @@ class HubModelTest {
         )
     }
 
+    @Test fun aDeviceWithoutAKindShowsItsNameAndDetailsWithNoLeadingSeparator() {
+        val d = hubSections(
+            answer().copy(devices = listOf(HubDevice("Old box", "", "0.6.0", null, outOfDate = false, thisOne = false))),
+            time,
+        ).first { it.group == HubGroup.Devices }
+        assertEquals(listOf(HubLine.Field("Old box", "0.6.0")), d.lines)
+    }
+
     @Test fun anUnknownDeviceKindIsShownAsTheHubWroteIt() {
         assertEquals("gadget", deviceKindText("gadget"))
         assertEquals("Tag Reader", deviceKindText("reader"))
@@ -167,6 +175,12 @@ class HubModelTest {
         assertEquals("Nov 17, 2026, 4:00 AM", hubTime("2026-11-17T09:00:00+00:00", ZoneId.of("America/New_York"), Locale.US)
             ?.replace(' ', ' '))
         assertEquals("yesterday", hubTime("yesterday", ZoneId.of("UTC"), Locale.US))
+        assertEquals("Nov 17, 2026, 4:00 AM", hubTime("1794906000", ZoneId.of("America/New_York"), Locale.US)?.replace(' ', ' '))
+        assertEquals("Nov 17, 2026, 4:00 AM", hubTime("1794906000.0", ZoneId.of("America/New_York"), Locale.US)?.replace(' ', ' '))
+        assertEquals("Nov 17, 2026", hubDay("1794906000", ZoneId.of("America/New_York"), Locale.US))
+        assertEquals("Nov 1, 2026", hubDay("2026-11-01", ZoneId.of("UTC"), Locale.US))
+        assertEquals("Nov 1, 2026", hubDay("2026-11-01T10:00:00+00:00", ZoneId.of("UTC"), Locale.US))
+        assertNull(hubDay(null))
         assertNull(hubTime(null))
         assertNull(hubTime(" "))
     }

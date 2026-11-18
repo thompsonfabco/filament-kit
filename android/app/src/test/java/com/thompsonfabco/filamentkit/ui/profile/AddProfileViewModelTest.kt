@@ -2,15 +2,19 @@ package com.thompsonfabco.filamentkit.ui.profile
 
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
+import com.thompsonfabco.filamentkit.net.LocalEntry
 import com.thompsonfabco.filamentkit.net.LocalEntryResult
+import com.thompsonfabco.filamentkit.net.LocalLibrary
 import com.thompsonfabco.filamentkit.net.ParentList
-import com.thompsonfabco.filamentkit.ui.profile.ProfileField.Bed
+import com.thompsonfabco.filamentkit.ui.profile.ProfileField.BedMax
+import com.thompsonfabco.filamentkit.ui.profile.ProfileField.BedMin
 import com.thompsonfabco.filamentkit.ui.profile.ProfileField.Density
 import com.thompsonfabco.filamentkit.ui.profile.ProfileField.Line
 import com.thompsonfabco.filamentkit.ui.profile.ProfileField.Material
 import com.thompsonfabco.filamentkit.ui.profile.ProfileField.MaxVolumetric
 import com.thompsonfabco.filamentkit.ui.profile.ProfileField.Notes
-import com.thompsonfabco.filamentkit.ui.profile.ProfileField.Nozzle
+import com.thompsonfabco.filamentkit.ui.profile.ProfileField.NozzleMax
+import com.thompsonfabco.filamentkit.ui.profile.ProfileField.NozzleMin
 import com.thompsonfabco.filamentkit.ui.profile.ProfileField.Parent
 import com.thompsonfabco.filamentkit.ui.profile.ProfileField.Vendor
 import kotlinx.coroutines.Dispatchers
@@ -48,8 +52,10 @@ class AddProfileViewModelTest {
         vm.set(Vendor, " SUNLU ")
         vm.set(Line, "PLA+ 2.0")
         vm.set(Material, "PLA")
-        vm.set(Nozzle, "205-230")
-        vm.set(Bed, "55-65")
+        vm.set(NozzleMin, "205")
+        vm.set(NozzleMax, "230")
+        vm.set(BedMin, "55")
+        vm.set(BedMax, "65")
         vm.set(Density, "1.24")
         vm.set(MaxVolumetric, "21")
         vm.set(Parent, "SUNLU PLA+ 2.0")
@@ -85,7 +91,7 @@ class AddProfileViewModelTest {
     }
 
     @Test fun aSingleNozzleTemperatureIsBothEndsOfTheRange() {
-        val entry = buildProfileEntry(mapOf(Vendor to "A", Line to "B", Material to "PETG", Nozzle to "250", Notes to "dry first"))
+        val entry = buildProfileEntry(mapOf(Vendor to "A", Line to "B", Material to "PETG", NozzleMin to "250", Notes to "dry first"))
         assertEquals(
             Json.parseToJsonElement("""{"nozzle_temperature_range_low":["250"],"nozzle_temperature_range_high":["250"]}"""),
             entry["fields"],
@@ -141,27 +147,6 @@ class AddProfileViewModelTest {
         assertTrue(vm.state.value.dirty)
     }
 
-    @Test fun readsRanges() {
-        assertEquals("190" to "220", readRange("190-220"))
-        assertEquals("190" to "220", readRange(" 190 – 220 "))
-        assertEquals("205" to "205", readRange("205"))
-        assertEquals("55.5" to "65", readRange("55.5-65"))
-        assertNull(readRange("hot"))
-        assertNull(readRange("190-"))
-    }
-
-    @Test fun anUnreadableNozzleRangeIsCaughtBeforeSending() = runTest(dispatcher) {
-        val vm = AddProfileViewModel(api)
-        filled(vm)
-        vm.set(Nozzle, "hot")
-        vm.save()
-        advanceUntilIdle()
-        assertTrue(api.posted.isEmpty())
-        assertEquals(setOf(Nozzle), vm.state.value.badRange)
-        vm.set(Nozzle, "190-220")
-        assertTrue(vm.state.value.badRange.isEmpty())
-    }
-
     @Test fun invalidEntryProblemsAreListedAndNamedFieldsGetThemToo() = runTest(dispatcher) {
         val problems = listOf(
             "fields.filament_density '9' is outside 0.5-3.0 g/cm3", "nozzle range low 240 is above high 230",
@@ -177,7 +162,7 @@ class AddProfileViewModelTest {
         advanceUntilIdle()
         val s = vm.state.value
         assertEquals(problems, s.problems)
-        assertEquals(setOf(Density, Nozzle), s.fieldProblems.keys)
+        assertEquals(setOf(Density, NozzleMin), s.fieldProblems.keys)
         assertEquals(problems[0], s.fieldProblems[Density])
         assertFalse(s.saved)
         assertNull("problems are shown instead of a general failure", s.failure)
@@ -189,7 +174,7 @@ class AddProfileViewModelTest {
     @Test fun problemsNameTheirField() {
         assertEquals(ProfileField.MaxVolumetric, fieldOf("fields.filament_max_volumetric_speed 'x' is not a number"))
         assertEquals(ProfileField.Parent, fieldOf("bambu_parent 'Foo' is not a Bambu Studio preset"))
-        assertEquals(ProfileField.Bed, fieldOf("bed range 70-60 is reversed"))
+        assertEquals(ProfileField.BedMin, fieldOf("bed range 70-60 is reversed"))
         assertEquals(ProfileField.Vendor, fieldOf("vendor is empty"))
         assertNull(fieldOf("schema_version must be 1"))
     }
@@ -261,6 +246,134 @@ class AddProfileViewModelTest {
         assertNull(vm.state.value.failure)
     }
 
+    // --- the Hub builds the entry (R83 section 4) ---
+
+    @Test fun theFormSendsValuesAndTheHubBuildsTheEntry() = runTest(dispatcher) {
+        api.formEnabled = true
+        val vm = AddProfileViewModel(api)
+        filled(vm)
+        val expected = Json.parseToJsonElement(
+            """{"brand":"SUNLU","name":"PLA+ 2.0","material":"PLA","nozzle_min":205,"nozzle_max":230,"bed_min":55,"bed_max":65,
+            "density":1.24,"max_volumetric_speed":21,"bambu_parent":"SUNLU PLA+ 2.0","notes":"From the box label"}""",
+        )
+        assertEquals(expected, vm.values())
+        vm.save()
+        advanceUntilIdle()
+        assertEquals(listOf(expected), api.forms)
+        assertTrue("the app built no entry itself", api.posted.isEmpty())
+        val s = vm.state.value
+        assertTrue(s.added)
+        assertFalse(s.saved)
+        assertTrue("the form is empty for the next one", s.values.isEmpty())
+        assertFalse(s.dirty)
+        vm.set(Notes, "x")
+        assertFalse("typing again drops the Added line", vm.state.value.added)
+    }
+
+    @Test fun onlyTheThreeFieldsAreSentWhenNothingElseWasTyped() {
+        assertEquals(
+            Json.parseToJsonElement("""{"brand":"A","name":"B","material":"PETG"}"""),
+            formValues(mapOf(Vendor to " A ", Line to "B", Material to "PETG", Notes to " ", Density to "")),
+        )
+        assertEquals("a word that is not a number goes as typed", JsonPrimitive("hot"), formValues(mapOf(Density to "hot"))["density"])
+    }
+
+    @Test fun anOlderHubWithoutTheFormRouteGetsTheOldPath() = runTest(dispatcher) {
+        val vm = AddProfileViewModel(api) // formEnabled is false: the form route answers 404
+        filled(vm)
+        vm.save()
+        advanceUntilIdle()
+        assertEquals(1, api.posted.size)
+        assertTrue(vm.state.value.saved)
+        assertFalse(vm.state.value.added)
+    }
+
+    @Test fun refusedFieldsAreShownUnderTheirFieldsAndTheRestAsBullets() = runTest(dispatcher) {
+        api.formEnabled = true
+        api.failure = ApiError(
+            400, "invalid_entry", "not valid",
+            JsonObject(
+                mapOf(
+                    "problems" to JsonArray(
+                        listOf(
+                            buildJsonObject { put("field", "density"); put("text", "Density must be 0.5 to 3") },
+                            buildJsonObject { put("field", "nozzle_max"); put("text", "Nozzle to is below from") },
+                            buildJsonObject { put("field", "other"); put("text", "Something else") },
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val vm = AddProfileViewModel(api)
+        filled(vm)
+        vm.save()
+        advanceUntilIdle()
+        val s = vm.state.value
+        assertEquals(mapOf(Density to "Density must be 0.5 to 3", NozzleMax to "Nozzle to is below from"), s.fieldProblems)
+        assertEquals(listOf("Something else"), s.problems)
+        assertFalse(s.added)
+        assertEquals("the typing is kept", "1.24", s.values[Density])
+    }
+
+    @Test fun theMaterialChoiceComesFromTheHubAndTheFixedListIsTheFallback() = runTest(dispatcher) {
+        api.materials = listOf("PLA", "Wood PLA", "PEEK")
+        val vm = AddProfileViewModel(api)
+        advanceUntilIdle()
+        assertEquals(listOf("PLA", "Wood PLA", "PEEK"), vm.state.value.materials)
+        val older = FakeProfileApi()
+        val old = AddProfileViewModel(older)
+        advanceUntilIdle()
+        assertNull("an older Hub sends none: the screen uses CatalogTexts.MATERIALS", old.state.value.materials)
+        val missing = FakeProfileApi().apply { entriesError = ApiError(404, "not_found", "Not found") }
+        val m = AddProfileViewModel(missing)
+        advanceUntilIdle()
+        assertNull(m.state.value.materials)
+    }
+
+    @Test fun theListOpensReadsOnceAndRemoveAsksFirst() = runTest(dispatcher) {
+        api.entries = mutableListOf(LocalEntry("a", "SUNLU", "PLA+", "PLA", "2026-11-01"), LocalEntry("b", "Eryone", "Silk", "PLA", null))
+        val vm = AddProfileViewModel(api)
+        vm.toggleEntries()
+        advanceUntilIdle()
+        assertEquals(listOf("a", "b"), vm.state.value.entries!!.map { it.id })
+        vm.toggleEntries()
+        vm.toggleEntries()
+        advanceUntilIdle()
+        assertEquals("one read for the form's materials, one for the list; closing and opening again adds none", 2, api.listCalls)
+        vm.askRemove(vm.state.value.entries!![0])
+        assertEquals("Remove SUNLU PLA+ from your own entries? Slicer presets are rebuilt.", CatalogTexts.removeQuestion("SUNLU", "PLA+"))
+        assertTrue("nothing is removed until asked", api.removed.isEmpty())
+        vm.cancelRemove()
+        vm.confirmRemove()
+        advanceUntilIdle()
+        assertTrue(api.removed.isEmpty())
+        vm.askRemove(vm.state.value.entries!![0])
+        vm.confirmRemove()
+        advanceUntilIdle()
+        assertEquals(listOf("a"), api.removed)
+        assertEquals(listOf("b"), vm.state.value.entries!!.map { it.id })
+        assertNull(vm.state.value.removeAsk)
+    }
+
+    @Test fun anEntryThatIsGoneAlreadyIsNotAnError() = runTest(dispatcher) {
+        api.entries = mutableListOf(LocalEntry("a", "SUNLU", "PLA+", "PLA", null))
+        api.removeError = ApiError(404, "not_found", "no such entry")
+        val vm = AddProfileViewModel(api)
+        vm.toggleEntries(); advanceUntilIdle()
+        vm.askRemove(vm.state.value.entries!![0])
+        vm.confirmRemove(); advanceUntilIdle()
+        assertNull(vm.state.value.entriesFailure)
+        assertNull(vm.state.value.removeAsk)
+    }
+
+    @Test fun anOlderHubHasNoListAndSaysSo() = runTest(dispatcher) {
+        api.entriesError = ApiError(404, "not_found", "Not found")
+        val vm = AddProfileViewModel(api)
+        vm.toggleEntries(); advanceUntilIdle()
+        assertTrue(vm.state.value.entriesUnavailable)
+        assertNull(vm.state.value.entriesFailure)
+    }
+
     @Test fun parentsAreLoadedForTheMaterialAfterAPause() = runTest(dispatcher) {
         api.parentLists["PETG"] = ParentList(listOf("Generic PETG", "SUNLU PETG"), synced = true)
         val vm = AddProfileViewModel(api)
@@ -282,6 +395,35 @@ private class FakeProfileApi : ProfileApi {
     override suspend fun parents(material: String): ParentList {
         parentCalls += material
         return parentLists[material] ?: ParentList(emptyList(), synced = false)
+    }
+
+    var formEnabled = false
+    val forms = mutableListOf<JsonObject>()
+    var entries = mutableListOf<LocalEntry>()
+    var entriesError: Exception? = null
+    var listCalls = 0
+    val removed = mutableListOf<String>()
+    var removeError: Exception? = null
+
+    override suspend fun addLocalEntryForm(values: JsonObject): LocalEntry {
+        if (!formEnabled) throw ApiError(404, "not_found", "Not found")
+        forms += values
+        failure?.let { throw it }
+        return LocalEntry("new", "", "", "", null)
+    }
+
+    var materials: List<String>? = null
+
+    override suspend fun localLibrary(): LocalLibrary {
+        listCalls++
+        entriesError?.let { throw it }
+        return LocalLibrary(entries.toList(), materials)
+    }
+
+    override suspend fun removeLocalEntry(id: String) {
+        removed += id
+        entries.removeAll { it.id == id }
+        removeError?.let { throw it }
     }
 
     override suspend fun addLocalProfile(entry: JsonObject): LocalEntryResult {

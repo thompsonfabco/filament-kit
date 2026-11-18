@@ -1,0 +1,3 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/search/SearchTexts.kt | Open Spoolman | text of the EV7b screens; moves to the string catalogue with EV2, its proposed key is in the EV7b report
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/search/SearchTexts.kt | http:// | text of the EV7b screens; moves to the string catalogue with EV2, its proposed key is in the EV7b report
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/search/SearchTexts.kt | https:// | text of the EV7b screens; moves to the string catalogue with EV2, its proposed key is in the EV7b report

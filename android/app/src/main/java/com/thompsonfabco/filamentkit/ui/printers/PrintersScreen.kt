@@ -82,6 +82,7 @@ import com.thompsonfabco.filamentkit.ui.components.SwDialog
 import com.thompsonfabco.filamentkit.ui.components.SwDialogButton
 import com.thompsonfabco.filamentkit.ui.components.SwEmptyState
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
+import com.thompsonfabco.filamentkit.ui.components.SwIconSize
 import com.thompsonfabco.filamentkit.ui.components.SwIconButton
 import com.thompsonfabco.filamentkit.ui.components.SwMenu
 import com.thompsonfabco.filamentkit.ui.components.SwMenuItem
@@ -154,7 +155,7 @@ fun PrintersScreen(
     }
     val space = SpoolwardenTheme.space
     val offline = state.problem is Problem.Unreachable
-    ScreenTopBarActions { Overflow(!offline, viewModel::refresh, viewModel::openFind, { viewModel.openAddKlipper() }) }
+    ScreenTopBarActions { Overflow(!offline, viewModel::refresh, viewModel::openFind, viewModel::openGuide) }
     // the progress line shows a refresh, so the pull gesture only starts one
     val listBody: @Composable (Modifier) -> Unit = { listModifier ->
         PullToRefreshBox(isRefreshing = false, onRefresh = viewModel::refresh, modifier = listModifier.fillMaxSize()) {
@@ -174,7 +175,7 @@ fun PrintersScreen(
                             title = stringResource(R.string.printers_empty_title),
                             text = stringResource(R.string.printer_list_empty_text),
                             primary = SwAction(stringResource(R.string.common_refresh), viewModel::refresh),
-                            secondary = if (offline) null else SwAction(stringResource(R.string.common_add_klipper_printer)) { viewModel.openAddKlipper() },
+                            secondary = if (offline) null else SwAction(stringResource(R.string.printers_add)) { viewModel.openGuide() },
                         )
                     },
                     error = state.problem?.takeUnless { offline }?.let { problemText(it) },
@@ -184,7 +185,8 @@ fun PrintersScreen(
                 ) {
                     PrinterLists(
                         state, offline, onOpen, onReplaceCode,
-                        onAdd = viewModel::openAdd, onAddKlipper = viewModel::openAddKlipper,
+                        onAdd = { viewModel.openAdd(it) }, onAddKlipper = { host, port -> viewModel.openAddKlipper(host, port) },
+                        onAddGuided = viewModel::openGuide,
                         useCardDetail = useCardDetail,
                         useSheetDetail = useSheetDetail || usePaneDetail,
                         expandedIds = expandedIds,
@@ -227,6 +229,8 @@ fun PrintersScreen(
             }
         }
     }
+    state.guide?.let { GuideSheet(it, state.found, onPairAgain, viewModel) }
+    state.mapOffer?.let { MapOfferDialog(it, viewModel) { id -> viewModel.dismissMapOffer(); onOpen(id) } }
     state.dialog?.let { AddBambuDialog(it, onPairAgain, viewModel) }
     state.klipper?.let { AddKlipperDialog(it, onPairAgain, viewModel) }
     state.find?.let { FindSheetContent(it, onPairAgain, viewModel) }
@@ -235,7 +239,7 @@ fun PrintersScreen(
 private const val MS_PER_S = 1000L
 
 @Composable
-private fun Overflow(online: Boolean, onRefresh: () -> Unit, onFind: () -> Unit, onAddKlipper: () -> Unit) {
+private fun Overflow(online: Boolean, onRefresh: () -> Unit, onFind: () -> Unit, onAdd: () -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
         SwIconButton(R.drawable.sw_ic_more, stringResource(R.string.common_more_actions), { open = true })
@@ -246,7 +250,7 @@ private fun Overflow(online: Boolean, onRefresh: () -> Unit, onFind: () -> Unit,
                 enabled = online,
             )
             SwMenuItem(
-                stringResource(R.string.common_add_klipper_printer), { open = false; onAddKlipper() }, icon = R.drawable.sw_ic_plus,
+                stringResource(R.string.printers_add), { open = false; onAdd() }, icon = R.drawable.sw_ic_plus,
                 enabled = online,
             )
         }
@@ -261,6 +265,7 @@ internal fun ColumnScope.PrinterLists(
     onReplaceCode: (String) -> Unit,
     onAdd: (Printer) -> Unit,
     onAddKlipper: (host: String, port: Int) -> Unit,
+    onAddGuided: () -> Unit = {},
     useCardDetail: Boolean = false,
     useSheetDetail: Boolean = false,
     expandedIds: List<String> = emptyList(),
@@ -325,7 +330,7 @@ internal fun ColumnScope.PrinterLists(
     }
     Column {
         SwButton(
-            stringResource(R.string.common_add_klipper_printer), { onAddKlipper("", PrintersViewModel.DEFAULT_KLIPPER_PORT) },
+            stringResource(R.string.printers_add), onAddGuided,
             kind = SwButtonKind.Plain, enabled = !offline,
         )
         if (offline && found.isEmpty()) NeedsHubReason()
@@ -414,7 +419,7 @@ internal fun PrinterTile(p: Printer, slots: List<SlotLook>, modifier: Modifier =
     val said = listOfNotNull(
         p.name, model, stringResource(kind.word),
         if (shown.isEmpty()) null else stringResource(R.string.common_field_label, stringResource(R.string.printers_col_slots)),
-    ).plus(shown.map { if (it.empty) empty else stringResource(R.string.a11y_swatch, it.hex.removePrefix("#").uppercase()) })
+    ).plus(shown.map { slotWords(it, empty) })
         .plus(listOfNotNull(if (more > 0) stringResource(R.string.printers_slots_more, more) else null, fixLine(p.state)?.let { stringResource(it) }))
         .joinToString(", ")
     SwTile(
@@ -433,7 +438,10 @@ internal fun PrinterTile(p: Printer, slots: List<SlotLook>, modifier: Modifier =
                 itemVerticalAlignment = Alignment.CenterVertically,
             ) {
                 // a slot with a colour is a full ring in it (the Hub gives no level here); a free one is the dashed ring
-                shown.forEach { slot -> SpoolRing(slot.hex, 1f, RingSize.Small, Modifier.testTag(SLOT_RING_TAG), empty = slot.empty) }
+                shown.forEach { slot ->
+                    SpoolRing(slot.hex, 1f, RingSize.Small, Modifier.testTag(SLOT_RING_TAG), empty = slot.drawnEmpty)
+                    if (slot.waiting) WaitingMark()
+                }
                 if (more > 0) Text(stringResource(R.string.printers_slots_more, more), style = MaterialTheme.typography.bodySmall)
             }
         }
@@ -466,17 +474,37 @@ private fun Swatches(slots: List<SlotLook>) {
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
         shown.forEach { slot ->
-            val words = if (slot.empty) {
-                stringResource(R.string.a11y_swatch_empty)
-            } else {
-                stringResource(R.string.a11y_swatch, slot.hex.removePrefix("#").uppercase())
-            }
-            ColorSwatch(slot.hex, Modifier.semantics { contentDescription = words }, empty = slot.empty)
+            val words = slotWords(slot, stringResource(R.string.a11y_swatch_empty))
+            ColorSwatch(slot.hex, Modifier.semantics { contentDescription = words }, empty = slot.drawnEmpty)
+            if (slot.waiting) WaitingMark()
         }
         if (more > 0) {
             Text(stringResource(R.string.printers_slots_more, more), style = MaterialTheme.typography.bodySmall)
         }
     }
+}
+
+/**
+ * What a slot's swatch says to a screen reader. A waiting slot says so, with its colour when it is known.
+ */
+@Composable
+private fun slotWords(slot: SlotLook, emptyWords: String): String {
+    val colour = if (slot.drawnEmpty) null else stringResource(R.string.a11y_swatch, slot.hex.removePrefix("#").uppercase())
+    return when {
+        slot.waiting -> listOfNotNull(colour, stringResource(R.string.slot_waiting)).joinToString(", ")
+        slot.empty -> emptyWords
+        else -> colour.orEmpty()
+    }
+}
+
+/**
+ * The mark beside the swatch of a slot that waits for its spool to load (R83 section 3.5). The dashed ring of the
+ * design is not drawn by the shared swatch, which this change does not open, so the waiting slot keeps its colour and
+ * gets a small clock.
+ */
+@Composable
+internal fun WaitingMark(modifier: Modifier = Modifier) {
+    SwIcon(R.drawable.sw_ic_clock, null, modifier, size = SwIconSize.Small, tint = SpoolwardenTheme.colors.muted)
 }
 
 /**
@@ -555,7 +583,7 @@ private fun AddBambuDialog(d: AddDialog, onPairAgain: () -> Unit, viewModel: Pri
             enabled = code.isNotBlank(),
             busy = d.busy,
         ),
-        cancel = SwAction(stringResource(R.string.common_cancel), viewModel::cancelAdd),
+        cancel = SwAction(stringResource(if (d.guided) R.string.common_back else R.string.common_cancel), viewModel::cancelAdd),
         cancelEnabled = !d.busy,
     ) {
         val facts = stringResource(R.string.printer_add_facts, model, d.serial)
@@ -592,7 +620,10 @@ private fun AddKlipperDialog(d: KlipperDialog, onPairAgain: () -> Unit, viewMode
             kind = SwButtonKind.Main,
             busy = d.busy,
         ),
-        cancel = SwAction(stringResource(R.string.common_cancel), viewModel::cancelAddKlipper),
+        cancel = SwAction(
+            stringResource(if (d.guided && d.createdId == null) R.string.common_back else R.string.common_cancel),
+            viewModel::cancelAddKlipper,
+        ),
         cancelEnabled = !d.busy,
     ) {
         FormField(
@@ -613,6 +644,80 @@ private fun AddKlipperDialog(d: KlipperDialog, onPairAgain: () -> Unit, viewMode
         )
         d.problem?.let { ProblemNotice(it, onPairAgain) }
         if (d.busy) BusyReason(R.string.common_busy_wait)
+    }
+}
+
+/**
+ * Step 1 of the guided add (R82 section 5): the found list first, each row with "Use this printer"; "Looking…" while
+ * the search runs; "None found. Type its address in the next step." when nothing answered; the address by hand last.
+ */
+@Composable
+private fun GuideSheet(g: AddGuide, found: List<Printer>, onPairAgain: () -> Unit, viewModel: PrintersViewModel) {
+    val space = SpoolwardenTheme.space
+    val rows = guideRows(found, g.scanned)
+    SwSheet(onDismiss = viewModel::closeGuide) {
+        Column(
+            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = space.s4).padding(bottom = space.s4),
+            verticalArrangement = Arrangement.spacedBy(space.s3),
+        ) {
+            Text(
+                stringResource(R.string.printers_add), Modifier.semantics { heading() },
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Text(PrinterTexts.GUIDE_FOUND, Modifier.semantics { heading() }, style = MaterialTheme.typography.titleSmall)
+            g.problem?.let { FindProblem(it, onPairAgain) }
+            if (rows.isNotEmpty()) {
+                Panel {
+                    rows.forEachIndexed { i, row ->
+                        if (i > 0) Divider()
+                        GuideRowView(row, viewModel)
+                    }
+                }
+            }
+            when {
+                g.searching -> BusyReason(R.string.add_picker_looking)
+                rows.isEmpty() -> Text(PrinterTexts.GUIDE_NONE, style = MaterialTheme.typography.bodyMedium, color = SpoolwardenTheme.colors.muted)
+            }
+            SwButton(PrinterTexts.GUIDE_BY_ADDRESS, viewModel::addByAddress, Modifier.fillMaxWidth(), kind = SwButtonKind.Plain)
+        }
+    }
+}
+
+@Composable
+private fun GuideRowView(row: GuideRow, viewModel: PrintersViewModel) {
+    val space = SpoolwardenTheme.space
+    val (title, address) = when (row) {
+        is GuideRow.Known -> modelLine(row.printer) to ((if (row.printer.family == "klipper") row.printer.host else null) ?: row.printer.ip)
+        is GuideRow.Scanned -> stringResource(R.string.common_klipper) to "${row.found.host}:${row.found.port}"
+    }
+    val use = stringResource(R.string.printers_use_name, listOfNotNull(title, address?.takeIf { it.isNotBlank() }).joinToString(" "))
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row).padding(space.s3),
+        horizontalArrangement = Arrangement.spacedBy(space.s3),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleSmall)
+            if (!address.isNullOrBlank()) Text(address, style = SpoolwardenTheme.type.dataSmall)
+        }
+        SwButton(
+            stringResource(R.string.printers_use), { viewModel.useGuideRow(row) },
+            Modifier.semantics { contentDescription = use }, kind = SwButtonKind.Plain,
+        )
+    }
+}
+
+/** The last step: "Map its slots now?" Map slots opens the new printer, where the existing slot mapping is. */
+@Composable
+private fun MapOfferDialog(offer: MapOffer, viewModel: PrintersViewModel, onMap: (String) -> Unit) {
+    SwDialog(
+        title = PrinterTexts.MAP_TITLE,
+        onClose = viewModel::dismissMapOffer,
+        confirm = SwDialogButton(PrinterTexts.MAP_NOW, { onMap(offer.id) }, kind = SwButtonKind.Main),
+        cancel = SwAction(PrinterTexts.MAP_LATER, viewModel::dismissMapOffer),
+    ) {
+        Text(offer.name, style = MaterialTheme.typography.titleSmall)
+        Text(PrinterTexts.MAP_BODY, style = MaterialTheme.typography.bodyMedium)
     }
 }
 

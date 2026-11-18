@@ -11,6 +11,8 @@ import com.thompsonfabco.filamentkit.net.Printer
 import com.thompsonfabco.filamentkit.net.PrinterDetail
 import com.thompsonfabco.filamentkit.net.PrinterStatus
 import com.thompsonfabco.filamentkit.net.PrinterSummary
+import com.thompsonfabco.filamentkit.net.SlotPending
+import com.thompsonfabco.filamentkit.net.SlotSpool
 import com.thompsonfabco.filamentkit.net.UnloadResult
 import com.thompsonfabco.filamentkit.ui.components.StatusKind
 import kotlinx.coroutines.CompletableDeferred
@@ -27,6 +29,7 @@ import kotlinx.serialization.json.put
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -171,6 +174,23 @@ class PrintersListTest {
         vm.refresh(); runCurrent()
         assertEquals(listOf("A"), backend.detailCalls)
         assertEquals(listOf(SlotLook("2B2B2E", false), SlotLook("", true)), vm.state.value.swatches["A"])
+    }
+
+    @Test fun aWaitingSlotKeepsItsColourAndIsMarked() = runTest(dispatcher) {
+        val up = printer("A")
+        backend.list = listOf(up)
+        backend.details["A"] = detail(
+            up, AmsSlot(0, "A1", "", "", present = false, pending = SlotPending(7)),
+            AmsSlot(1, "A2", "", "", present = false, spool = SlotSpool(id = 7, colorHex = "E0A030"), pending = SlotPending(7)),
+        )
+        val vm = PrintersViewModel(backend)
+        vm.refresh(); runCurrent()
+        val looks = vm.state.value.swatches["A"].orEmpty()
+        assertEquals(listOf(true, true), looks.map { it.waiting })
+        assertEquals("no colour known: the dashed ring stays", true, looks[0].drawnEmpty)
+        assertEquals("colour known: drawn in it", false, looks[1].drawnEmpty)
+        assertEquals("E0A030", looks[1].hex)
+        assertEquals(true, SlotLook("", true).drawnEmpty)
     }
 
     @Test fun aPrinterThatDoesNotAnswerHasNoSwatchesAndTheListStays() = runTest(dispatcher) {
@@ -405,6 +425,97 @@ class PrintersListTest {
         vm.submitAddKlipper("voron.example", "7125", "")
         runCurrent()
         assertEquals(Problem.FeatureOff("klipper"), vm.state.value.klipper!!.problem)
+    }
+
+    // --- the guided add ---
+
+    @Test fun theGuideLooksForKlipperPrintersAndListsTheFoundOnesFirst() = runTest(dispatcher) {
+        val bambu = printer("B", state = "not_configured", configured = false)
+        backend.list = listOf(printer("A"), bambu)
+        backend.scanResult = listOf(
+            KlipperFound("a", "192.0.2.57", 7125, "voron"),
+            KlipperFound("b", "192.0.2.58", 7125, "done", configured = true),
+        )
+        val vm = PrintersViewModel(backend)
+        vm.openGuide()
+        assertTrue("Looking while the search runs", vm.state.value.guide!!.searching)
+        runCurrent()
+        val g = vm.state.value.guide!!
+        assertFalse(g.searching)
+        assertEquals(listOf<String?>(null), backend.scans)
+        val rows = guideRows(vm.state.value.found, g.scanned)
+        assertEquals(listOf(GuideRow.Known(bambu), GuideRow.Scanned(KlipperFound("a", "192.0.2.57", 7125, "voron"))), rows)
+    }
+
+    @Test fun aSearchAnswerAlreadyInTheHubsFoundListIsNotListedTwice() {
+        val klipper = printer("K", state = "not_configured", configured = false, family = "klipper").copy(host = "192.0.2.57")
+        val rows = guideRows(listOf(klipper), listOf(KlipperFound("a", "192.0.2.57", 7125), KlipperFound("c", "192.0.2.60", 7125)))
+        assertEquals(listOf(GuideRow.Known(klipper), GuideRow.Scanned(KlipperFound("c", "192.0.2.60", 7125))), rows)
+    }
+
+    @Test fun nothingFoundLeavesTheAddressByHand() = runTest(dispatcher) {
+        val vm = PrintersViewModel(backend)
+        vm.openGuide(); runCurrent()
+        assertTrue(guideRows(vm.state.value.found, vm.state.value.guide!!.scanned).isEmpty())
+        vm.addByAddress()
+        assertNull(vm.state.value.guide)
+        assertEquals(KlipperDialog(host = "", port = 7125, guided = true), vm.state.value.klipper)
+    }
+
+    @Test fun aKlipperFeatureThatIsOffIsNotAnErrorOfTheGuide() = runTest(dispatcher) {
+        backend.scanError = ApiError(409, "module_off", "off", kotlinx.serialization.json.JsonObject(mapOf("module" to kotlinx.serialization.json.JsonPrimitive("klipper"))))
+        val vm = PrintersViewModel(backend)
+        vm.openGuide(); runCurrent()
+        val g = vm.state.value.guide!!
+        assertFalse(g.searching)
+        assertNull(g.problem)
+        assertEquals(emptyList<KlipperFound>(), g.scanned)
+    }
+
+    @Test fun useThisOpensTheDetailsAndBackReturnsToTheGuide() = runTest(dispatcher) {
+        backend.scanResult = listOf(KlipperFound("a", "192.0.2.57", 7126, "voron"))
+        val vm = PrintersViewModel(backend)
+        vm.openGuide(); runCurrent()
+        vm.useGuideRow(guideRows(vm.state.value.found, vm.state.value.guide!!.scanned).single())
+        assertNull(vm.state.value.guide)
+        assertEquals(KlipperDialog(host = "192.0.2.57", port = 7126, guided = true), vm.state.value.klipper)
+        vm.cancelAddKlipper(); runCurrent()
+        assertNull(vm.state.value.klipper)
+        assertNotNull("Back is the guide again", vm.state.value.guide)
+    }
+
+    @Test fun aBambuRowAsksForTheAccessCodeInTheSameStepAndBackReturns() = runTest(dispatcher) {
+        val found = printer("B", state = "not_configured", configured = false)
+        backend.list = listOf(found)
+        val vm = PrintersViewModel(backend)
+        vm.openGuide(); runCurrent()
+        vm.useGuideRow(GuideRow.Known(found))
+        assertTrue(vm.state.value.dialog!!.guided)
+        vm.cancelAdd(); runCurrent()
+        assertNull(vm.state.value.dialog)
+        assertNotNull(vm.state.value.guide)
+    }
+
+    @Test fun anAddedPrinterOffersToMapItsSlotsOnceAndLaterDropsTheOffer() = runTest(dispatcher) {
+        backend.addResult = printer("K1", family = "klipper")
+        val vm = PrintersViewModel(backend)
+        vm.openAddKlipper("voron.example", 7125, guided = true)
+        vm.submitAddKlipper("voron.example", "7125", "Voron", "key")
+        runCurrent()
+        assertEquals(MapOffer("K1", "Workshop X1"), vm.state.value.mapOffer)
+        assertEquals(listOf("K1" to "key"), backend.keys)
+        vm.dismissMapOffer()
+        assertNull(vm.state.value.mapOffer)
+    }
+
+    @Test fun aFailedAddOffersNoMapping() = runTest(dispatcher) {
+        backend.addError = ApiError(400, "bad", "no")
+        val vm = PrintersViewModel(backend)
+        vm.openAddKlipper("voron.example", 7125, guided = true)
+        vm.submitAddKlipper("voron.example", "7125", "", "")
+        runCurrent()
+        assertNull(vm.state.value.mapOffer)
+        assertNotNull(vm.state.value.klipper)
     }
 
     // --- Find Klipper printers ---

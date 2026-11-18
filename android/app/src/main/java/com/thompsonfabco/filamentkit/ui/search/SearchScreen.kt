@@ -2,6 +2,7 @@ package com.thompsonfabco.filamentkit.ui.search
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.nfc.NfcAdapter
 import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
@@ -21,6 +22,7 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -53,7 +55,10 @@ import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
 import com.thompsonfabco.filamentkit.ui.components.SwCardDetail
 import com.thompsonfabco.filamentkit.ui.components.SwCollection
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
+import com.thompsonfabco.filamentkit.ui.components.ScreenTopBarActions
 import com.thompsonfabco.filamentkit.ui.components.SwIconButton
+import com.thompsonfabco.filamentkit.ui.components.SwMenu
+import com.thompsonfabco.filamentkit.ui.components.SwMenuItem
 import com.thompsonfabco.filamentkit.ui.components.SwPaneLayout
 import com.thompsonfabco.filamentkit.ui.components.SwSheetDetail
 import com.thompsonfabco.filamentkit.ui.components.ScreenState
@@ -96,6 +101,8 @@ data class SearchUi(
     val lowOnly: Boolean = false,
     val low: List<LowSpool> = emptyList(),
     val lowLoaded: Boolean = false,
+    /** Where Spoolman's own page is, as the Hub gave it; null: the Hub gave none (or is older), so there is no item. */
+    val spoolmanUrl: String? = null,
 )
 
 /** Spool search; [search] is `api.search(q, sealedOnly)`, asked of the session's current client at each call. */
@@ -103,6 +110,8 @@ class SearchViewModel(
     private val pauseMs: Long = TYPING_PAUSE_MS,
     /** `api.lowSpools()`; null: the Hub has no running-low list, so there is no filter. */
     private val loadLow: (suspend () -> List<LowSpool>)? = null,
+    /** `api.spools(...).spoolmanUrl`; null: the Hub gives none, so there is no Open Spoolman item. */
+    private val loadSpoolmanUrl: (suspend () -> String?)? = null,
     private val search: suspend (q: String, sealedOnly: Boolean) -> List<JsonObject>,
 ) : ViewModel() {
     private val _state = MutableStateFlow(SearchUi())
@@ -153,6 +162,21 @@ class SearchViewModel(
     }
 
     fun clear() = setQuery("")
+
+    /** Asks the Hub where Spoolman's page is, once per screen. Any failure (an older Hub's 404 too) leaves no item. */
+    fun loadSpoolmanLink() {
+        val load = loadSpoolmanUrl ?: return
+        viewModelScope.launch {
+            try {
+                val url = spoolmanLink(load())
+                _state.update { it.copy(spoolmanUrl = url) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(spoolmanUrl = null) }
+            }
+        }
+    }
 
     /** The "Running low" chip: shows the list of low spools (least first, as the Hub gives it) instead of the search. */
     fun setLowOnly(on: Boolean) {
@@ -205,6 +229,14 @@ internal fun rememberNfcState(): NfcState {
     return state
 }
 
+/** Opens [url] in the phone's browser; a phone with none leaves the screen as it is. */
+internal fun openInBrowser(context: Context, url: String) {
+    try {
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    } catch (_: android.content.ActivityNotFoundException) {
+    }
+}
+
 /** Opens the system's NFC settings. */
 internal fun openNfcSettings(context: Context) {
     context.startActivity(Intent(Settings.ACTION_NFC_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -232,6 +264,19 @@ fun SearchScreen(
     val context = LocalContext.current
     val space = SpoolwardenTheme.space
     val colors = SpoolwardenTheme.colors
+    LaunchedEffect(vm) { vm.loadSpoolmanLink() }
+    // Open Spoolman (R83 section 7): in the screen's menu, only when the Hub gave the address
+    ui.spoolmanUrl?.let { url ->
+        ScreenTopBarActions {
+            var open by remember { mutableStateOf(false) }
+            Box {
+                SwIconButton(R.drawable.sw_ic_more, stringResource(R.string.common_more_actions), { open = true })
+                SwMenu(open, { open = false }) {
+                    SwMenuItem(SearchTexts.OPEN_SPOOLMAN, { open = false; openInBrowser(context, url) })
+                }
+            }
+        }
+    }
     val presentation = rememberDetailPresentation()
     val useCardDetail = presentation == DetailPresentation.Card && spoolDetail != null
     val useSheetDetail = presentation == DetailPresentation.Sheet && spoolDetail != null
@@ -457,7 +502,7 @@ private fun LowSpoolsList(ui: SearchUi, onOpen: (SpoolSummary) -> Unit, online: 
         loaded = ui.lowLoaded,
         loading = ui.busy,
         isEmpty = ui.lowLoaded && ui.low.isEmpty(),
-        empty = { Text(pluralStringResource(R.plurals.running_low_home, 0, 0), style = MaterialTheme.typography.bodyLarge) },
+        empty = { Text(stringResource(R.string.running_low_empty), style = MaterialTheme.typography.bodyLarge) },
         error = ui.failure?.let { hubFailureText(it) },
         onTryAgain = onTryAgain,
         offline = !online,

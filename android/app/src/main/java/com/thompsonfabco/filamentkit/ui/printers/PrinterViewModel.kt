@@ -7,6 +7,7 @@ import com.thompsonfabco.filamentkit.net.AmsSlot
 import com.thompsonfabco.filamentkit.net.AmsUnit
 import com.thompsonfabco.filamentkit.net.Api
 import com.thompsonfabco.filamentkit.net.ApiError
+import com.thompsonfabco.filamentkit.net.ClearResult
 import com.thompsonfabco.filamentkit.net.CommandResult
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
 import com.thompsonfabco.filamentkit.net.KlipperFound
@@ -44,6 +45,10 @@ interface PrinterBackend {
     suspend fun printer(id: String): PrinterDetail
     suspend fun command(id: String, action: String): CommandResult
     suspend fun unload(id: String, label: String, dryRun: Boolean): UnloadResult
+
+    /** Clear slot (R83 section 3); a backend without it answers like an older Hub (404). */
+    suspend fun clearSlot(id: String, label: String, dryRun: Boolean): ClearResult =
+        throw ApiError(404, "not_found", PrinterTexts.CLEAR_UPDATE_HUB)
 }
 
 class ApiPrinterBackend(private val current: () -> Api) : PrinterBackend, PrinterToolsBackend, PrinterEditBackend {
@@ -62,6 +67,7 @@ class ApiPrinterBackend(private val current: () -> Api) : PrinterBackend, Printe
     override suspend fun printer(id: String) = api.printer(id)
     override suspend fun command(id: String, action: String) = api.command(id, action)
     override suspend fun unload(id: String, label: String, dryRun: Boolean) = api.unload(id, label, dryRun)
+    override suspend fun clearSlot(id: String, label: String, dryRun: Boolean) = api.clearSlot(id, label, dryRun)
     override suspend fun startMap(id: String) = api.startMap(id)
     override suspend fun mapStatus(id: String) = api.mapStatus(id)
     override suspend fun report(id: String) = api.printerReport(id)
@@ -237,6 +243,12 @@ object PrinterHelp {
  */
 data class UnloadAsk(val label: String, val spool: String, val spoolId: Int?, val location: String)
 
+/**
+ * The question before Clear slot, asked after its dry run said what would happen: [spool] is the recorded spool as the
+ * question names it (null: none is recorded) and [place] where it goes back to.
+ */
+data class ClearAsk(val label: String, val spool: String?, val place: String?, val note: String? = null)
+
 /** A result line: what it says and whether it is good news. */
 data class Note(val say: Say, val ok: Boolean = true)
 
@@ -257,8 +269,13 @@ data class PrinterUiState(
     val unloadAsk: UnloadAsk? = null,
     /** The unload itself is being written: the question stays open and cannot be left. */
     val unloading: Boolean = false,
-    /** The last unload's result, or why it failed. */
+    /** The last unload's or clear's result, or why it failed. */
     val slotNote: Note? = null,
+    /** A second sentence of the result in [slotNote]: the waiting spool that is waiting no more (R83 section 3). */
+    val slotAlso: String? = null,
+    val clearAsk: ClearAsk? = null,
+    /** The clear itself is being written: the question stays open and cannot be left. */
+    val clearing: Boolean = false,
 ) {
     val loaded: Boolean get() = printer != null
     val paused: Boolean get() = status?.gcodeState == "PAUSE"
@@ -346,7 +363,7 @@ class PrinterViewModel(
     fun askUnload(slot: AmsSlot) {
         val spool = slot.spool ?: return
         if (_state.value.slotBusy != null || _state.value.unloading) return
-        _state.update { it.copy(slotBusy = slot.label, slotNote = null, unloadAsk = null) }
+        _state.update { it.copy(slotBusy = slot.label, slotNote = null, slotAlso = null, unloadAsk = null) }
         viewModelScope.launch {
             guard(onError = { p -> _state.update { it.copy(slotNote = Note(p.say(), ok = false)) } }) {
                 val r = backend.unload(id, slot.label, dryRun = true)
@@ -372,11 +389,60 @@ class PrinterViewModel(
                 val r = backend.unload(id, ask.label, dryRun = false)
                 val where = r.location.ifBlank { r.movedBack.firstOrNull()?.location.orEmpty() }.ifBlank { ask.location }
                 _state.update {
-                    it.copy(slotNote = Note(Say.Words(R.string.printer_unload_done, listOf(ask.label, ask.spoolId ?: "?", where))))
+                    it.copy(
+                        slotNote = Note(Say.Words(R.string.printer_unload_done, listOf(ask.label, ask.spoolId ?: "?", where))),
+                        slotAlso = PrinterTexts.UNLOAD_WAITING_ENDED.takeIf { r.waitingEnded },
+                    )
                 }
                 done = true
             }
             _state.update { it.copy(unloading = false, unloadAsk = null) }
+            if (done) refresh() // the slot now shows no spool
+        }
+    }
+
+    // --- clear slot (R83 section 3): on every slot; the Hub forgets the spool recorded there ---
+
+    /** Asks what clearing [slot] would do (dry run), then opens the question. An older Hub (404) is told to update. */
+    fun askClear(slot: AmsSlot) {
+        if (_state.value.slotBusy != null || _state.value.unloading || _state.value.clearing) return
+        _state.update { it.copy(slotBusy = slot.label, slotNote = null, slotAlso = null, clearAsk = null) }
+        viewModelScope.launch {
+            guard(onError = { p -> _state.update { it.copy(slotNote = Note(p.say(), ok = false)) } }) {
+                try {
+                    val r = backend.clearSlot(id, slot.label, dryRun = true)
+                    val spool = r.spool?.let(PrinterTexts::spoolName)
+                    val note = PrinterTexts.clearNote(r.text, bambu = isBambu())
+                    _state.update { it.copy(clearAsk = ClearAsk(slot.label, spool, r.movedBack, note)) }
+                } catch (e: ApiError) {
+                    if (e.status != NOT_FOUND) throw e
+                    _state.update { it.copy(slotNote = Note(Say.FromHub(PrinterTexts.CLEAR_UPDATE_HUB), ok = false)) }
+                }
+            }
+            _state.update { it.copy(slotBusy = null) }
+        }
+    }
+
+    /** The printer on screen is a Bambu Lab one (its family, not the slot label); unknown until the printer is loaded. */
+    private fun isBambu(): Boolean = _state.value.printer?.family == "bambu"
+
+    /** Leaving the question is refused while the clear is being written. */
+    fun cancelClear() = _state.update { if (it.clearing) it else it.copy(clearAsk = null) }
+
+    fun confirmClear() {
+        val ask = _state.value.clearAsk ?: return
+        if (_state.value.clearing) return
+        _state.update { it.copy(clearing = true) }
+        viewModelScope.launch {
+            var done = false
+            guard(onError = { p -> _state.update { it.copy(slotNote = Note(p.say(), ok = false)) } }) {
+                val r = backend.clearSlot(id, ask.label, dryRun = false)
+                val note = PrinterTexts.clearNote(r.text, bambu = isBambu())
+                val text = PrinterTexts.clearDone(ask.label, ask.spool, r.movedBack ?: ask.place, r.waitingEnded, r.printerCleared, note)
+                _state.update { it.copy(slotNote = Note(Say.FromHub(text))) }
+                done = true
+            }
+            _state.update { it.copy(clearing = false, clearAsk = null) }
             if (done) refresh() // the slot now shows no spool
         }
     }
@@ -418,6 +484,8 @@ class PrinterViewModel(
     }
 
     companion object {
+        private const val NOT_FOUND = 404
+
         /**
          * The server's command reply is `{ok, reply: {ok, reply: <printer's answer>}}`. A good one says what was done;
          * a refusal says what the Hub's `message` says, as sent, and until the Hub sends one "The printer said no:

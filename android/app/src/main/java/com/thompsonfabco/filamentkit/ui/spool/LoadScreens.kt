@@ -47,6 +47,8 @@ import com.thompsonfabco.filamentkit.ui.components.ScreenState
 import com.thompsonfabco.filamentkit.ui.components.SwSkeletonRows
 import com.thompsonfabco.filamentkit.ui.components.SwTile
 import com.thompsonfabco.filamentkit.ui.printers.PrinterHelp
+import com.thompsonfabco.filamentkit.ui.printers.WaitingMark
+import com.thompsonfabco.filamentkit.ui.swatchColor
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import kotlinx.coroutines.launch
 
@@ -180,7 +182,8 @@ private const val SKELETON_ROWS = 3
 /** "PETG · Bambu Lab PETG HF Orange · in use": the parts the printer or the inventory gave. */
 @Composable
 private fun slotLine(s: AmsSlot): String = listOfNotNull(
-    if (PrinterHelp.slotEmpty(s)) stringResource(R.string.common_empty) else s.type.ifBlank { null },
+    if (PrinterHelp.slotWaiting(s)) stringResource(R.string.slot_waiting)
+    else if (PrinterHelp.slotEmpty(s)) stringResource(R.string.common_empty) else s.type.ifBlank { null },
     s.spool?.name?.ifBlank { null }?.takeUnless { PrinterHelp.slotEmpty(s) },
     stringResource(R.string.spool_load_in_use).takeIf { s.active },
 ).joinToString(DOT)
@@ -246,7 +249,10 @@ fun LoadSlotsScreen(
 private fun SlotRow(slot: AmsSlot, units: List<AmsUnit>, enabled: Boolean, onClick: () -> Unit) {
     val colors = SpoolwardenTheme.colors
     val space = SpoolwardenTheme.space
-    val empty = PrinterHelp.slotEmpty(slot)
+    val waiting = PrinterHelp.slotWaiting(slot)
+    val hex = slot.colorHex.ifBlank { slot.spool?.colorHex }
+    // a waiting slot keeps its spool's colour when it is known, with the clock mark of the printers list
+    val empty = PrinterHelp.slotEmpty(slot) && !(waiting && swatchColor(hex) != null)
     Row(
         Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row).clickable(enabled = enabled, onClick = onClick),
         horizontalArrangement = Arrangement.spacedBy(space.s3), verticalAlignment = Alignment.CenterVertically,
@@ -255,7 +261,8 @@ private fun SlotRow(slot: AmsSlot, units: List<AmsUnit>, enabled: Boolean, onCli
             PrinterHelp.slotLabel(slot, units), Modifier.widthIn(min = SpoolwardenTheme.sizes.slotLabel),
             style = SpoolwardenTheme.type.data, color = if (enabled) colors.text else colors.muted,
         )
-        ColorSwatch(slot.colorHex.ifBlank { slot.spool?.colorHex }, empty = empty)
+        ColorSwatch(hex, empty = empty)
+        if (waiting) WaitingMark()
         Text(slotLine(slot), Modifier.weight(1f).padding(vertical = space.s2), style = MaterialTheme.typography.bodyMedium, color = if (enabled) colors.text else colors.muted)
         if (enabled) SwIcon(R.drawable.sw_ic_chevron, null, tint = colors.muted)
     }

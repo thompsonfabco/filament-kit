@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
+import java.time.Instant
+import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -57,15 +59,35 @@ sealed interface HubLine {
 /** A group with what it shows. */
 data class HubSection(val group: HubGroup, val lines: List<HubLine>)
 
-/** [iso] (the Hub's time, ISO 8601 with offset) in the phone's zone and language; the text as given when it is not a time. */
-fun hubTime(iso: String?, zone: ZoneId = ZoneId.systemDefault(), locale: Locale = Locale.getDefault()): String? {
-    if (iso.isNullOrBlank()) return null
+/**
+ * The Hub's time as an instant: a number is whole seconds since 1970 (what the Hub sends now), a text is ISO 8601 with
+ * an offset (an older Hub); null when it is neither.
+ */
+internal fun hubInstant(raw: String?): Instant? {
+    val text = raw?.trim().orEmpty()
+    if (text.isEmpty()) return null
+    text.toDoubleOrNull()?.let { return if (it.isFinite()) runCatching { Instant.ofEpochSecond(it.toLong()) }.getOrNull() else null }
     return try {
-        DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT).withLocale(locale)
-            .format(OffsetDateTime.parse(iso).atZoneSameInstant(zone))
+        OffsetDateTime.parse(text).toInstant()
     } catch (_: Exception) {
-        iso
+        null
     }
+}
+
+/** [raw] (the Hub's time: ISO 8601 with offset; seconds since 1970 are read too) in the phone's zone and language; the text as given when it is not a time. */
+fun hubTime(raw: String?, zone: ZoneId = ZoneId.systemDefault(), locale: Locale = Locale.getDefault()): String? {
+    if (raw.isNullOrBlank()) return null
+    val at = hubInstant(raw) ?: return raw
+    return DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT).withLocale(locale).format(at.atZone(zone))
+}
+
+/** Like [hubTime], the day only ("Nov 17, 2026"); a plain `YYYY-MM-DD` text (a library entry's `added`) is read as that day. */
+fun hubDay(raw: String?, zone: ZoneId = ZoneId.systemDefault(), locale: Locale = Locale.getDefault()): String? {
+    if (raw.isNullOrBlank()) return null
+    val format = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale)
+    runCatching { return format.format(LocalDate.parse(raw.trim())) }
+    val at = hubInstant(raw) ?: return raw
+    return format.format(at.atZone(zone))
 }
 
 internal fun deviceKindText(kind: String): String = when (kind) {
@@ -122,7 +144,7 @@ fun hubSections(h: HubAnswer, time: (String?) -> String? = { hubTime(it) }): Lis
     if (h.devices.isNotEmpty()) {
         add(HubSection(HubGroup.Devices, h.devices.map { d ->
             val parts = buildList {
-                add(deviceKindText(d.kind))
+                if (d.kind.isNotBlank()) add(deviceKindText(d.kind))
                 add(d.version ?: HubTexts.VERSION_NOT_KNOWN)
                 time(d.lastSeen)?.let { add("${HubTexts.LAST_SEEN} $it") }
                 if (d.outOfDate) add(HubTexts.OUT_OF_DATE)
