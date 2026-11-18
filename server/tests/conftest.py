@@ -42,6 +42,23 @@ def _made_up_host_name(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _roomy_disk_for_alerts(monkeypatch):
+    """The status rows and the alert code measure the disk (alerts.py, EA3): no test result may depend on how full the
+    machine running it is. Only calls made from alerts.py see a roomy disk; every other caller gets the real answer, and a
+    test that wants a full disk sets `alerts.shutil.disk_usage` itself (the later patch wins)."""
+    import shutil
+    import sys
+    from collections import namedtuple
+    real, usage = shutil.disk_usage, namedtuple("usage", "total used free")
+
+    def disk_usage(path):
+        if sys._getframe(1).f_globals.get("__name__") == "filament_kit.alerts":
+            return usage(1000 * 1000 ** 3, 100 * 1000 ** 3, 900 * 1000 ** 3)
+        return real(path)
+    monkeypatch.setattr(shutil, "disk_usage", disk_usage)
+
+
+@pytest.fixture(autouse=True)
 def _no_real_journal(monkeypatch):
     """No test writes audit lines into the machine's real journal (/dev/log on Linux and CI): a test that checks the
     journal route patches `cli._journal_address` itself."""
@@ -178,6 +195,16 @@ def old_rows(out: str) -> list[str]:
 def free_port() -> int:
     from fakes import serving
     return serving.free_port()
+
+
+@pytest.fixture
+def dead_port():
+    """A port nothing can answer for the whole test: a socket bound and never listening, so a connection is refused
+    and no other process (pytest runs side by side, and their fake servers draw from the same ports) can take it."""
+    from fakes import serving
+    sock = serving.bind()
+    yield sock.getsockname()[1]
+    sock.close()
 
 
 @pytest.fixture

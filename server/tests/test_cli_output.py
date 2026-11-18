@@ -76,7 +76,7 @@ def test_status_is_grouped_as_the_overview_with_a_header_and_a_summary(cfg, caps
     headings = [x for x in lines if x and not x.startswith(" ") and x != lines[0]]
     assert headings[:-1] == ["Hub", "Spoolman", "Label Reader", "Devices", "Filament Catalog"]
     assert re.fullmatch(r"\d+ needs? a look - \d+ OK - \d+ notes?", headings[-1])
-    assert headings[-1] == "2 need a look - 1 OK - 5 notes"
+    assert headings[-1] == "2 need a look - 2 OK - 5 notes"      # the Storage row is the second OK
     assert lines[-3:] == ["", headings[-1], ""]
 
 

@@ -31,6 +31,7 @@ log = logging.getLogger("filament_kit.watch")
 PAUSE_SETTLE = 2.0          # seconds to wait for the stage or the sensor that says why a print paused
 POLL = 5.0                  # seconds between looks at whether each printer answers
 OFFLINE_GRACE = 30.0        # seconds a printer must stay offline before printer.offline (a reconnect is not news)
+ERROR_REPEAT = 1800.0       # seconds before the same printer error code of the same printer is told again (R475 LOW 2)
 BAMBU_ONLINE = ("connected", "needs_developer_mode")
 KLIPPER_ONLINE = ("connected", "unknown_model")
 ACTIVE = ("RUNNING", "PAUSE")
@@ -48,10 +49,12 @@ class _Printer:
     def __init__(self):
         self.state: str | None = None        # RUNNING / PAUSE / FINISH / FAILED / IDLE / OTHER; None = not seen yet
         self.job = ""
+        self.percent = 0                     # the last percent seen while the job was active (for a job that ends unseen)
         self.started_at: float | None = None
         self.pending = False                 # a pause is waiting for its reason
         self.timer: threading.Timer | None = None
-        self.errors: set[str] = set()        # printer error codes already told
+        self.errors: set[str] = set()        # printer error codes there now (a code gone and back is new again ...)
+        self.told: dict[str, float] = {}     # ... unless it was told in the last ERROR_REPEAT seconds: code -> clock
         self.online: bool | None = None      # None = not known; False = known offline (told or first sight)
         self.offline_told = False
         self.offline_since: float | None = None
@@ -191,7 +194,8 @@ class Watcher:
             p = self._p.get(pid)
             if p is None or p.state not in ACTIVE or self._skip(pid, p.job):
                 return
-            self._finish(pid, p, "FAILED", {"percent": 0, "job": p.job, "fail": "error", "error": "klippy_shutdown"})
+            self._finish(pid, p, "FAILED", {"percent": p.percent, "job": p.job, "fail": "error",
+                                       "error": "klippy_shutdown"})
 
     # ---- the one state machine
     def _skip(self, pid: str, job: str) -> bool:
@@ -204,6 +208,8 @@ class Watcher:
             p.state = new
             if obs["job"]:
                 p.job = obs["job"]
+            if new in ACTIVE and obs.get("percent"):
+                p.percent = obs["percent"]
             if prev is None or first:                         # first sight: learn, write nothing
                 p.errors = (set(obs["hms"]) | ({obs["error"]} if obs["error"] else set())) if bambu else set()
                 if new != "PAUSE" and self.sink.is_raised(f"print-paused:{pid}"):
@@ -275,7 +281,7 @@ class Watcher:
                     log.exception("watcher: reading %s for its pause", pid)
                     obs = None
                 if obs is None:
-                    obs = {"state": "PAUSE", "job": p.job, "percent": 0, "hms": {}}
+                    obs = {"state": "PAUSE", "job": p.job, "percent": p.percent, "hms": {}}
                 if obs["state"] != "PAUSE":
                     return False
             kind, data = self._reason(obs, final)
@@ -312,10 +318,13 @@ class Watcher:
     def _errors(self, pid: str, p: _Printer, obs: dict) -> None:
         """printer.error for each error code that was not there before (HMS codes and the print error)."""
         now = {**obs["hms"], **({obs["error"]: obs.get("stage") or ""} if obs["error"] else {})}
+        at = self._clock()
         for code, text in now.items():
-            if code not in p.errors:
+            if code not in p.errors and at - p.told.get(code, -ERROR_REPEAT) >= ERROR_REPEAT:
                 self._write("printer.error", pid, {"code": code, "text": text})
+                p.told[code] = at
         p.errors = set(now)
+        p.told = {c: t for c, t in p.told.items() if at - t < ERROR_REPEAT}
 
     # ---- do the printers answer
     def _online(self, pid: str, family: str) -> bool | None:
@@ -472,8 +481,8 @@ def check_devices(sink, station_url: str | None, devices: list[dict]) -> None:
 
 
 def row_key(row) -> str:
-    """The key of a Checks row: its own `key` when it has one (EA3 may give Row one), else the group and the
-    first two words of its text without digits (the text of a row changes with its numbers, its key must not)."""
+    """The key of a Checks row: its own `key` (every status.Row has one: the same whether the row is OK or needs a
+    look). A row-like object without one (a test's) gets the group and the first two words of its text without digits."""
     k = getattr(row, "key", "")
     if k:
         return k
@@ -488,7 +497,9 @@ def check_rows(sink, rows) -> None:
     seen = {}
     for r in rows:
         if r.state in ("ok", "fail"):
-            seen[row_key(r)] = r
+            k = row_key(r)
+            if not (k in seen and seen[k].state == "fail"):      # one key, one row: a row that needs a look is not hidden
+                seen[k] = r
     raised = _raised(sink, "check")
     hub = {"type": "hub"}
     for key, r in seen.items():

@@ -166,6 +166,12 @@ def _utc(now: datetime | None) -> datetime:
 
 # ---------------------------------------------------------------- elements
 
+def _same(ev: dict) -> tuple:
+    """What makes two events the one event (not its id): a hand-over sent twice is stored once."""
+    return (ev["at"], ev["kind"], ev["severity"], tuple(ev["subject"].values()), tuple(ev["actor"].values()),
+            tuple(sorted(ev["data"].items())))
+
+
 def _party(p, types: tuple[str, ...], what: str) -> dict:
     if isinstance(p, str):
         p = {"type": p}
@@ -471,6 +477,33 @@ class EventStore:
         key). A kind that raises a condition raises it (a later raise of the same key replaces the stored one: the
         newest raise wins); a kind that clears one clears it, whether or not it was raised (`condition.cleared`
         clears the key in its value `key`)."""
+        ev = self._prepare(kind, subject, actor, data, severity, key, now)
+        return self._commit(ev)
+
+    def write_many(self, items: list[dict]) -> list[int]:
+        """Write a hand-over of events (each item: kind, subject, actor, data, now, as `write`) all or none, and
+        again without doubling: every item is checked before anything is written (an EventError names the item), and
+        an item the store already holds (the same time, kind, subject, actor and values: what a resent hand-over
+        carries) is not written again. Returns each item's id, in order."""
+        evs = []
+        for i, it in enumerate(items):
+            try:
+                evs.append(self._prepare(it["kind"], it.get("subject"), it.get("actor"), it.get("data"),
+                                         it.get("severity"), it.get("key"), it.get("now")))
+            except EventError as e:
+                raise EventError(f"event {i + 1} of {len(items)}: {e}") from None
+        held: dict[tuple, int] = {}
+        if evs:
+            for old in self._events_after(0, (), min(e["at"] for e in evs)):
+                held.setdefault(_same(old), old["id"])
+        ids = []
+        for ev in evs:
+            known = held.get(_same(ev))
+            ids.append(known if known is not None else self._commit(ev)["id"])
+        return ids
+
+    def _prepare(self, kind, subject, actor, data, severity, key, now) -> dict:
+        """The event `write` would store, checked, with id 0."""
         k = event_kinds.get(kind)
         if k is None:
             raise EventError(f"Unknown event kind {kind!r}.")
@@ -503,6 +536,9 @@ class EventStore:
               "actor": actor, "data": values,
               "condition": {"key": ckey, "state": "raised" if k.condition == event_kinds.RAISES else "cleared"}
               if ckey else None}
+        return ev
+
+    def _commit(self, ev: dict) -> dict:
         tlock, cond = _shared_for(self.root)
         with tlock:
             self._ensure_root()
@@ -607,7 +643,8 @@ class EventStore:
         at or after it; oldest first, at most `limit` (1 to 1000), whose kind starts with one of `kinds` (a list or a
         comma-separated string of prefixes; none = all). `wait` (0 to 55 s) blocks until such an event exists; the
         answer is empty after the time. Returns {"events": [...], "next": id, "oldest": lowest id kept}: continue
-        with since=next."""
+        with since=next. `next` is the store's highest id, also when nothing is new (never an echo of `since`: a
+        `since` above it, from another Hub, shows as next < since); only a page cut by `limit` ends at its last event."""
         since = max(int(since or 0), 0)
         limit = min(max(int(limit or LIMIT_DEFAULT), 1), LIMIT_MAX)
         at_text = _iso(since_at)
@@ -621,12 +658,16 @@ class EventStore:
             newest = self.last_id()
             if seen is None or newest > seen:
                 seen = newest
-                evs = copy.deepcopy(self._events_after(since, prefixes, at_text)[:limit])
+                found = self._events_after(since, prefixes, at_text)
+                evs = copy.deepcopy(found[:limit])
                 if evs:
-                    return {"events": evs, "next": evs[-1]["id"], "oldest": self.oldest()}
+                    # cut by `limit`: continue after the last one given; else everything up to the store's highest id
+                    # is covered (what is in between does not match), so `next` is that
+                    return {"events": evs, "next": evs[-1]["id"] if len(found) > limit else max(evs[-1]["id"], newest),
+                            "oldest": self.oldest()}
             left = deadline - time.monotonic()
             if left <= 0:
-                return {"events": [], "next": since, "oldest": self.oldest()}
+                return {"events": [], "next": self.last_id(), "oldest": self.oldest()}
             with cond:
                 cond.wait(min(POLL, left))               # a writer in this process wakes it at once; another
                                                          # process is noticed by the next look at next-id
@@ -692,6 +733,10 @@ def store() -> EventStore:
 
 def write(kind: str, subject, actor, data: dict | None = None, **kw) -> dict:
     return store().write(kind, subject, actor, data, **kw)
+
+
+def write_many(items: list[dict]) -> list[int]:
+    return store().write_many(items)
 
 
 def read(since: int = 0, limit: int = LIMIT_DEFAULT, kinds=None, wait: float = 0, *, since_at=None) -> dict:

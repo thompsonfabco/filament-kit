@@ -458,3 +458,40 @@ def test_the_filament_system_is_read_only_for_a_pause(klipper, monkeypatch):
     printing(fake)
     fake.push({"print_stats": {"state": "paused"}})
     assert wait_for(lambda: True in calls)                      # a pause reads the filament system too
+
+
+# ---------------------------------------------------------------- R475 LOW 2: a flapping HMS code is not news every time
+
+def test_a_hms_code_that_goes_and_comes_back_is_told_once_in_half_an_hour(bambu, sink, store):
+    """R80 s2 says "a new printer error code appears" and is silent on repeats; a code that clears and returns (a notice
+    that flaps) wrote one alert each time. Smallest reading: the same code of the same printer is told again only after
+    watch.ERROR_REPEAT seconds."""
+    now = [1000.0]
+    wt = watch.Watcher(sink, settle=0.2, grace=0, clock=lambda: now[0]).attach(bambu=bambu)
+    try:
+        start_print(bambu)
+        hms, other = [{"attr": 0x03000100, "code": 0x00010001}], [{"attr": 0x07000100, "code": 0x00020002}]
+        bambu.send({"hms": hms})
+        bambu.send({"hms": []})
+        now[0] += 60
+        bambu.send({"hms": hms})                                    # back after a minute: not news
+        bambu.send({"hms": other})                                  # another code: news at once
+        bambu.send({"hms": []})
+        now[0] += watch.ERROR_REPEAT
+        bambu.send({"hms": hms})                                    # back after half an hour: told again
+        codes = [e["data"]["code"] for e in store.read()["events"] if e["kind"] == "printer.error"]
+        assert codes == ["0300_0100_0001_0001", "0700_0100_0002_0002", "0300_0100_0001_0001"]
+    finally:
+        wt.stop()
+
+
+def test_klippy_shutdown_in_a_job_reports_the_last_percent_seen(klipper, store):
+    """R475 LOW 3: print.failed (klippy_shutdown) said percent 0; it carries the last percent the watcher saw."""
+    fake, fam, wt, pid = klipper
+    printing(fake, pct=0.4)
+    assert wait_for(lambda: kinds(store) == ["print.started"])
+    printing(fake, pct=0.55)
+    assert wait_for(lambda: wt._p[pid].percent == 55)
+    wt.on_klipper(pid, "job_ended", {})
+    ev = store.read()["events"][-1]
+    assert ev["kind"] == "print.failed" and ev["data"]["error"] == "klippy_shutdown" and ev["data"]["percent"] == "55"

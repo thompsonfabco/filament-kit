@@ -179,3 +179,50 @@ def test_a_rename_writes_one_location_renamed_and_no_spool_moved(store):
 def test_a_rename_that_matches_no_spool_still_says_so(store):
     inventory.rename_locations(FakeSm([]), [storage.Rename("A", "B")])
     assert store.read()["events"][0]["data"]["spools"] == "0"
+
+
+# ---------------------------------------------------------------- R475 LOW 4: no store write under inventory's lock
+
+class LockWatcher(NullSink):
+    """Notes whether inventory's `_LOCK` is held (by this thread) at each write."""
+
+    def __init__(self):
+        self.held = []
+
+    def write(self, kind, subject, actor=None, data=None, **kw):
+        self.held.append((kind, inventory._LOCK._depth))
+
+
+def test_the_events_of_an_add_are_written_after_the_lock_is_released(sm):
+    watcher = LockWatcher()
+    event_sink.set_sink(watcher)
+    inventory.add_spools(sm, [item(count=2)], RULES, dry=False)
+    assert [k for k, _ in watcher.held] == ["spool.added", "spool.added"]
+    assert [d for _, d in watcher.held] == [0, 0]                     # before: 1, the store wrote under the lock
+
+
+def test_opening_and_linking_write_their_events_outside_the_lock_too(sm):
+    watcher = LockWatcher()
+    event_sink.set_sink(watcher)
+    sid = inventory.add_spools(sm, [item(sealed=True)], RULES, dry=False).spool_ids[0]
+    watcher.held.clear()
+    inventory.open_spool(sm, sid, UID, RULES, dry=False)
+    assert watcher.held and all(d == 0 for _, d in watcher.held)
+
+
+def test_held_keeps_the_order_the_actor_and_flushes_when_the_block_raises():
+    got = []
+
+    class Sink(NullSink):
+        def write(self, kind, subject, actor=None, data=None, **kw):
+            got.append((kind, actor["type"]))
+    event_sink.set_sink(Sink())
+    with pytest.raises(RuntimeError):
+        with event_sink.held():
+            with event_sink.acting({"type": "page"}):
+                event_sink.emit("spool.moved", {"type": "spool", "id": "1"})
+            with event_sink.held():                                    # nested: the outer block writes
+                event_sink.emit("spool.weighed", {"type": "spool", "id": "1"})
+            assert got == []
+            raise RuntimeError("boom")
+    assert got == [("spool.moved", "page"), ("spool.weighed", "hub")]

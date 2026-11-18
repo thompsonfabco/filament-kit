@@ -4,7 +4,6 @@ import threading
 import pytest
 
 from filament_kit.spoolman import Spoolman, SpoolmanError
-from conftest import free_port
 
 NAMES = ["nfc_id", "prev_location", "box_humidity", "humidity_checked", "nozzle_range", "bed_range", "line"]
 
@@ -24,9 +23,9 @@ def test_ensure_fields_idempotent(spoolman_url, spoolman_fake_store):
     assert (types["box_humidity"], types["humidity_checked"]) == ("float", "datetime")
 
 
-def test_unreachable_raises():
+def test_unreachable_raises(dead_port):
     with pytest.raises(SpoolmanError) as ei:
-        Spoolman(f"http://127.0.0.1:{free_port()}", timeout=2).ping()
+        Spoolman(f"http://127.0.0.1:{dead_port}", timeout=2).ping()
     assert ei.value.status is None
     assert "spoolman_unreachable" in str(ei.value)
 

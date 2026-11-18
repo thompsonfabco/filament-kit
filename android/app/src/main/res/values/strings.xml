@@ -2283,12 +2283,12 @@
     <string name="printer_set_readonly">Read-only here: printer changes from the public address are off. Open this page on the home address to add, change or forget a printer, or allow them on the Hub page under Settings.</string>
     <string name="settings_alerts_blocked">Notifications are blocked for this site. Allow them in the phone\'s settings.</string>
     <string name="settings_alerts_default_title">Printer</string>
-    <string name="settings_alerts_on">On: this phone gets print alerts.</string>
+    <string name="settings_alerts_on">On: this phone gets alerts.</string>
     <string name="settings_alerts_sent">Sent.</string>
     <string name="settings_alerts_test">Send a test alert</string>
-    <string name="settings_alerts_title">Print alerts on this phone</string>
+    <string name="settings_alerts_title">Alerts on this phone</string>
     <string name="settings_alerts_toggle">Notify this phone</string>
-    <string name="settings_alerts_unsupported">This browser cannot receive print alerts. On iPhone, add Spoolwarden to the Home Screen first.</string>
+    <string name="settings_alerts_unsupported">This browser cannot receive alerts. Alerts on iPhone work only from the Home Screen.</string>
     <string name="settings_saved_on_phone">Saved on this phone.</string>
     <string name="settings_theme_help">New phones start with the Hub\'s theme for new devices.</string>
     <string name="settings_this_hub">This Hub</string>
@@ -4096,4 +4096,325 @@
         <item quantity="one">%1$d location · %2$s with a limit</item>
         <item quantity="other">%1$d locations · %2$s with a limit</item>
     </plurals>
+    <!-- 1=printer -->
+    <string name="alert_title_runout">Filament ran out on %1$s</string>
+    <!-- 1=job 2=percent -->
+    <string name="alert_text_runout">%1$s is paused at %2$s %%. Load filament and resume at the printer.</string>
+    <!-- 1=job -->
+    <string name="alert_text_runout_no_percent">%1$s is paused. Load filament and resume at the printer.</string>
+    <!-- 1=printer -->
+    <string name="alert_title_paused">%1$s is paused</string>
+    <!-- 1=job 2=percent -->
+    <string name="alert_text_paused">%1$s is paused at %2$s %%.</string>
+    <!-- 1=job -->
+    <string name="alert_text_paused_no_percent">%1$s is paused.</string>
+    <!-- 1=printer -->
+    <string name="alert_title_failed">Print stopped on %1$s</string>
+    <!-- 1=job 2=percent -->
+    <string name="alert_text_failed">%1$s stopped at %2$s %%.</string>
+    <!-- 1=job -->
+    <string name="alert_text_failed_no_percent">%1$s stopped.</string>
+    <string name="alert_cancelled">It was cancelled.</string>
+    <!-- 1=printer -->
+    <string name="alert_title_error">%1$s reports a problem</string>
+    <!-- 1=code -->
+    <string name="alert_text_error_code">Error code %1$s.</string>
+    <!-- 1=printer -->
+    <string name="alert_title_finished">Print finished on %1$s</string>
+    <!-- 1=job -->
+    <string name="alert_text_finished">%1$s is done.</string>
+    <string name="alert_title_storage_warn">Storage on the Hub is almost full</string>
+    <!-- 1=free 2=total 3=percent -->
+    <string name="alert_text_storage_warn">%1$s free of %2$s (%3$s %% used).</string>
+    <string name="alert_title_storage_bad">Storage on the Hub is full</string>
+    <!-- 1=free 2=total -->
+    <string name="alert_text_storage_bad">%1$s free of %2$s. Backups and new photos may fail.</string>
+    <!-- 1=filament -->
+    <string name="alert_title_low">Running low: %1$s</string>
+    <!-- 1=id 2=grams -->
+    <string name="alert_text_low">Spool %1$s has %2$s g left.</string>
+    <!-- 1=count -->
+    <plurals name="alert_text_low_more">
+        <item quantity="one">%1$d more in stock.</item>
+        <item quantity="other">%1$d more in stock.</item>
+    </plurals>
+    <string name="alert_text_low_last">It is the last one.</string>
+    <!-- 1=device -->
+    <string name="alert_title_device_down">%1$s stopped answering</string>
+    <!-- 1=time -->
+    <string name="alert_text_device_down">Last answer %1$s.</string>
+    <!-- 1=printer -->
+    <string name="alert_title_offline">%1$s is offline</string>
+    <!-- 1=time -->
+    <string name="alert_text_offline">Last seen %1$s.</string>
+    <string name="alert_open_printer">Open the printer</string>
+    <string name="alert_show_storage">Show storage use</string>
+    <string name="alert_show_low">Show running low</string>
+    <string name="alert_open_devices">Open Devices</string>
+    <string name="alert_printer_unknown">the printer</string>
+    <string name="alert_job_unknown">The print</string>
+    <string name="alert_device_unknown">A device</string>
+    <string name="alert_test_title">Test alert</string>
+    <string name="alert_test_text">If you can read this, alerts reach this device.</string>
+    <!-- 1=printer -->
+    <string name="event_title_print_started">Print started on %1$s</string>
+    <!-- 1=job -->
+    <string name="event_text_print_started">%1$s started.</string>
+    <!-- 1=printer -->
+    <string name="event_title_print_resumed">Print resumed on %1$s</string>
+    <!-- 1=job -->
+    <string name="event_text_print_resumed">%1$s is running again.</string>
+    <!-- 1=printer -->
+    <string name="event_title_printer_online">%1$s is online</string>
+    <string name="event_text_printer_online">It answers again.</string>
+    <!-- 1=printer -->
+    <string name="event_title_usage_recorded">Filament use recorded on %1$s</string>
+    <!-- 1=job 2=grams 3=spool -->
+    <string name="event_text_usage_recorded">%1$s: %2$s g from spool %3$s.</string>
+    <!-- 1=filament -->
+    <string name="event_title_spool_ok">No longer running low: %1$s</string>
+    <!-- 1=spool -->
+    <string name="event_text_spool_ok">Spool %1$s is above the limit again, or it was emptied or removed.</string>
+    <!-- 1=spool -->
+    <string name="event_title_spool_added">Spool %1$s added</string>
+    <!-- 1=name -->
+    <string name="event_text_spool_added">%1$s was added.</string>
+    <!-- 1=spool -->
+    <string name="event_title_spool_opened">Spool %1$s opened</string>
+    <!-- 1=name -->
+    <string name="event_text_spool_opened">%1$s was opened.</string>
+    <!-- 1=spool -->
+    <string name="event_title_spool_weighed">Spool %1$s weighed</string>
+    <!-- 1=before 2=after -->
+    <string name="event_text_spool_weighed">%1$s g before, %2$s g now.</string>
+    <!-- 1=spool -->
+    <string name="event_title_spool_moved">Spool %1$s moved</string>
+    <!-- 1=before 2=after -->
+    <string name="event_text_spool_moved">From %1$s to %2$s.</string>
+    <!-- 1=spool -->
+    <string name="event_title_spool_emptied">Spool %1$s marked empty</string>
+    <!-- 1=name -->
+    <string name="event_text_spool_emptied">%1$s is empty.</string>
+    <!-- 1=spool -->
+    <string name="event_title_spool_loaded">Spool %1$s loaded</string>
+    <!-- 1=slot -->
+    <string name="event_text_spool_loaded">Loaded into %1$s.</string>
+    <!-- 1=spool -->
+    <string name="event_title_spool_unloaded">Spool %1$s unloaded</string>
+    <!-- 1=slot -->
+    <string name="event_text_spool_unloaded">Taken out of %1$s.</string>
+    <!-- 1=name -->
+    <string name="event_text_spool_changed">%1$s.</string>
+    <string name="event_title_storage_ok">Storage on the Hub is fine again</string>
+    <!-- 1=free 2=total -->
+    <string name="event_text_storage_ok">%1$s free of %2$s.</string>
+    <!-- 1=device -->
+    <string name="event_title_device_up">%1$s is answering again</string>
+    <string name="event_text_device_up">It answers again.</string>
+    <string name="event_title_check_failed">A check needs a look</string>
+    <string name="event_title_check_ok">A check is fine again</string>
+    <string name="event_title_condition_cleared">An alert ended</string>
+    <!-- 1=key 2=reason -->
+    <string name="event_text_condition_cleared">%1$s: %2$s.</string>
+    <string name="event_reason_reconciled">it is no longer true</string>
+    <string name="event_reason_subject_removed">what it was about was removed</string>
+    <string name="event_reason_feature_off">the check is gone</string>
+    <string name="event_title_location_renamed">Storage location renamed</string>
+    <!-- 1=from 2=to 3=spools -->
+    <string name="event_text_location_renamed">%1$s is now %2$s. %3$s spools were updated.</string>
+    <string name="alerts_type_runout">Filament ran out</string>
+    <string name="alerts_type_paused">Print paused</string>
+    <string name="alerts_type_failed">Print failed or stopped</string>
+    <string name="alerts_type_printer_error">Printer error</string>
+    <string name="alerts_type_finished">Print finished</string>
+    <string name="alerts_type_storage">Storage almost full</string>
+    <string name="alerts_type_running_low">Spool running low</string>
+    <string name="alerts_type_device_down">Device stopped answering</string>
+    <string name="alerts_type_device_down_hint">A Weigh Station or a printer stopped answering.</string>
+    <string name="alerts_error_body">Send the alert settings as named values.</string>
+    <!-- 1=field -->
+    <string name="alerts_error_unknown">%1$s is not an alert setting.</string>
+    <!-- 1=type 2=types -->
+    <string name="alerts_error_type">%1$s is not an alert type. The types are: %2$s.</string>
+    <!-- 1=field -->
+    <string name="alerts_error_flag">%1$s must be on or off.</string>
+    <!-- 1=low 2=high -->
+    <string name="alerts_error_whole">Enter a whole number, %1$s to %2$s.</string>
+    <!-- 1=bad -->
+    <string name="alerts_error_warn_below_bad">The storage warning must be lower than %1$s %% used, where storage counts as full.</string>
+    <string name="storage_use_disk_state">The Hub\'s disk</string>
+    <string name="storage_use_disk_backups">The backups disk</string>
+    <string name="storage_use_item_backups">Backups</string>
+    <string name="storage_use_item_photos">Photos of recently added spools</string>
+    <string name="storage_use_item_reader">Label Reader on this Hub</string>
+    <string name="storage_use_item_events">Events</string>
+    <string name="storage_use_item_logs">Logs</string>
+    <!-- 1=free 2=total 3=percent -->
+    <string name="storage_use_row">Storage: %1$s free of %2$s (%3$s %% used)</string>
+    <string name="storage_use_fix">Show storage use (Hub page, Overview)</string>
+    <!-- 1=count -->
+    <plurals name="status_running_low">
+        <item quantity="one">Running low: %1$d spool</item>
+        <item quantity="other">Running low: %1$d spools</item>
+    </plurals>
+    <string name="status_running_low_fix">spoolwarden spools low</string>
+    <!-- 1=reason -->
+    <string name="status_alerts_unsaved">Alerts settings could not be saved (%1$s).</string>
+    <string name="status_alerts_unsaved_fix">Check that the Hub\'s state folder can be written, then change an alert setting again.</string>
+    <!-- 1=reason -->
+    <string name="status_alerts_unreadable">Alerts settings could not be read (%1$s).</string>
+    <string name="status_alerts_unreadable_fix">Fix or remove alerts.xml in the Hub\'s state folder; the defaults apply meanwhile.</string>
+    <!-- 1=count -->
+    <string name="cli_alerts_heading">Alerts · %1$d of 8 on</string>
+    <string name="cli_alerts_columns">Key|Alert|Events|State</string>
+    <string name="cli_alerts_state_on">on</string>
+    <string name="cli_alerts_state_off">off</string>
+    <!-- 1=state -->
+    <string name="cli_alerts_last_spool">Spool running low only when it is the last spool of that filament: %1$s</string>
+    <!-- 1=grams 2=warn 3=bad -->
+    <string name="cli_alerts_limits">Running low under %1$s g · Storage warning at %2$s %% used (bad at %3$s %%, or under 1 GB free)</string>
+    <string name="cli_alerts_change">Change them: sudo spoolwarden alerts set -h</string>
+    <!-- 1=count 2=grams 3=warn -->
+    <string name="cli_alerts_summary">%1$d of 8 on · running low under %2$s g · storage warning at %3$s %% used</string>
+    <!-- 1=alert -->
+    <string name="cli_alerts_set_on">%1$s alerts are on.</string>
+    <!-- 1=alert -->
+    <string name="cli_alerts_set_off">%1$s alerts are off.</string>
+    <!-- 1=grams -->
+    <string name="cli_alerts_set_low">Running low under %1$s g.</string>
+    <!-- 1=percent -->
+    <string name="cli_alerts_set_warn">Storage warning at %1$s %% used.</string>
+    <!-- 1=type -->
+    <string name="cli_alerts_unknown_type">%1$s is not an alert type.</string>
+    <!-- 1=types -->
+    <string name="cli_alerts_unknown_type_fix">the types are: %1$s.</string>
+    <!-- 1=usage -->
+    <string name="cli_alerts_need_value">Say on or off, or a number: %1$s</string>
+    <!-- 1=seconds -->
+    <string name="cli_alerts_test_sent">Test alert sent. Every device that asks in the next %1$s seconds gets it.</string>
+    <string name="cli_events_columns">Id|Time|Kind|Subject|What</string>
+    <!-- 1=count -->
+    <plurals name="cli_events_count">
+        <item quantity="one">%1$d event.</item>
+        <item quantity="other">%1$d events.</item>
+    </plurals>
+    <!-- 1=keys -->
+    <string name="cli_events_raised">Raised now: %1$s</string>
+    <string name="cli_events_none">No events.</string>
+    <string name="cli_events_gap">Note: some events were deleted by age.</string>
+    <!-- 1=id -->
+    <string name="cli_events_following">Following events after %1$s. Ctrl-C ends.</string>
+    <!-- 1=value -->
+    <string name="cli_events_bad_since">%1$s is not an event number or a time.</string>
+    <string name="cli_events_bad_since_fix">give a number such as 1412, or a time such as 2026-11-17 04:00.</string>
+    <!-- 1=reason -->
+    <string name="cli_events_unreadable">The events could not be read (%1$s).</string>
+    <string name="cli_events_unreadable_fix">run it with sudo: sudo spoolwarden events</string>
+    <!-- 1=count 2=grams -->
+    <plurals name="cli_low_heading">
+        <item quantity="one">%1$d spool running low (at or under %2$s g)</item>
+        <item quantity="other">%1$d spools running low (at or under %2$s g)</item>
+    </plurals>
+    <string name="cli_low_columns">Spool|Filament|Left|Location|Stock</string>
+    <!-- 1=grams -->
+    <string name="cli_low_left">%1$s g</string>
+    <!-- 1=count -->
+    <plurals name="cli_low_in_stock">
+        <item quantity="one">%1$d more in stock</item>
+        <item quantity="other">%1$d more in stock</item>
+    </plurals>
+    <string name="cli_low_last">Last one</string>
+    <!-- 1=grams -->
+    <string name="cli_low_none">No spools are running low (at or under %1$s g).</string>
+    <string name="cli_low_change">Change the limit: sudo spoolwarden alerts set running-low &lt;grams></string>
+    <!-- 1=time -->
+    <string name="alert_since">since %1$s</string>
+    <string name="alert_just_now">just now</string>
+    <!-- 1=count -->
+    <plurals name="alert_minutes_ago">
+        <item quantity="one">%1$d minute ago</item>
+        <item quantity="other">%1$d minutes ago</item>
+    </plurals>
+    <!-- 1=count -->
+    <plurals name="alert_hours_ago">
+        <item quantity="one">%1$d hour ago</item>
+        <item quantity="other">%1$d hours ago</item>
+    </plurals>
+    <!-- 1=count -->
+    <plurals name="alert_days_ago">
+        <item quantity="one">%1$d day ago</item>
+        <item quantity="other">%1$d days ago</item>
+    </plurals>
+    <!-- 1=count -->
+    <plurals name="alert_more">
+        <item quantity="one">%1$d more alert</item>
+        <item quantity="other">%1$d more alerts</item>
+    </plurals>
+    <string name="alert_list_title">Alerts</string>
+    <string name="alert_list_raised">Happening now</string>
+    <string name="alert_list_earlier">Last 7 days</string>
+    <string name="alert_list_empty">No alerts in the last 7 days.</string>
+    <string name="alert_notify_blocked">Blocked in this browser\'s settings</string>
+    <string name="alert_notify_blocked_hint">Allow notifications for this address in the browser\'s site settings, then switch this on again.</string>
+    <string name="alert_notify_unsupported">This browser cannot show notifications</string>
+    <string name="alert_notify_hint">With the tab in the background they can arrive up to a minute late.</string>
+    <string name="alert_notify_unsupported_hint">Open the Hub at its public address, which has a certificate this browser trusts.</string>
+    <string name="settings_group_alerts">Alerts</string>
+    <string name="settings_alerts_desc">What Spoolwarden warns you about, and where.</string>
+    <!-- 1=count -->
+    <string name="settings_alerts_summary">%1$d of 8 on</string>
+    <string name="settings_alerts_last_spool">Only when it is the last spool of that filament</string>
+    <string name="settings_alerts_running_low">Running low under</string>
+    <string name="settings_alerts_running_low_unit">g</string>
+    <string name="settings_alerts_running_low_hint">Opened spools at or under this are listed as running low.</string>
+    <string name="settings_alerts_storage_warn">Storage warning at</string>
+    <string name="settings_alerts_storage_unit" formatted="false">% used</string>
+    <!-- 1=percent -->
+    <string name="settings_alerts_storage_hint">The Hub treats %1$s %% used, and always less than 1 GB free, as bad.</string>
+    <string name="settings_alerts_this_device">On this device</string>
+    <string name="settings_alerts_browser">Notifications in this browser</string>
+    <string name="settings_alerts_browser_hint">Shown while a Spoolwarden tab is open in this browser. With the tab in the background they can arrive up to a minute late.</string>
+    <string name="settings_alerts_save">Save alerts</string>
+    <!-- 1=fields -->
+    <string name="settings_alerts_saved">Saved: %1$s.</string>
+    <string name="settings_alerts_recent">Recent alerts</string>
+    <string name="settings_alerts_phone_hint">Android shows a small permanent notification while Spoolwarden watches the Hub.</string>
+    <string name="alerts_watching_title">Watching the Hub for alerts</string>
+    <string name="settings_alerts_switch">Alerts on this phone</string>
+    <string name="settings_alerts_denied_help">Android is not allowing notifications for Spoolwarden. Allow them in the phone\'s settings, then turn this on.</string>
+    <string name="settings_alerts_local_network_help">Spoolwarden needs the Local network permission to watch the Hub. Allow it, then turn this on.</string>
+    <string name="alerts_unavailable">This Hub does not send alerts yet. Update the Hub to get them.</string>
+    <string name="alerts_action_list">Show alerts</string>
+    <string name="alerts_channel_alerts">Alerts</string>
+    <string name="alerts_channel_watching">Watching the Hub</string>
+    <string name="running_low_empty">Nothing is running low.</string>
+    <string name="running_low_title">Running low</string>
+    <!-- 1=count -->
+    <string name="running_low_show_all">Show all %1$d</string>
+    <!-- 1=id -->
+    <string name="running_low_spool">Spool %1$s</string>
+    <!-- 1=grams -->
+    <string name="running_low_left">%1$s g left</string>
+    <!-- 1=count -->
+    <plurals name="running_low_in_stock">
+        <item quantity="one">%1$d more in stock</item>
+        <item quantity="other">%1$d more in stock</item>
+    </plurals>
+    <string name="running_low_last_one">Last one</string>
+    <!-- 1=count -->
+    <string name="running_low_chip">Running low (%1$d)</string>
+    <!-- 1=count -->
+    <plurals name="running_low_home">
+        <item quantity="one">%1$d spool running low</item>
+        <item quantity="other">%1$d spools running low</item>
+    </plurals>
+    <string name="storage_use_title">Storage use</string>
+    <!-- 1=free -->
+    <string name="storage_use_free">%1$s free</string>
+    <string name="storage_use_where_backups">Open Backups</string>
+    <!-- 1=count -->
+    <string name="storage_use_where_photos">Recently added keeps the last %1$d</string>
+    <string name="storage_use_where_reader">Settings > Label Reader</string>
+    <!-- 1=reason -->
+    <string name="storage_use_unreadable">Could not read the storage use. %1$s</string>
 </resources>

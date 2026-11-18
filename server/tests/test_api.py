@@ -4,7 +4,6 @@ import pytest
 from fakes.claude_fake import FakeClaude
 from starlette.testclient import TestClient
 
-from conftest import free_port
 from filament_kit import config, inventory, pairing
 from filament_kit.api import create_app
 from filament_kit.spoolman import Spoolman
@@ -260,8 +259,8 @@ def test_missing_spool_404(sm):
     assert r.status_code == 404 and r.json()["error"] == "not_found" and r.json()["message"]
 
 
-def test_spoolman_down_503():
-    dead = Spoolman(f"http://127.0.0.1:{free_port()}", timeout=2)
+def test_spoolman_down_503(dead_port):
+    dead = Spoolman(f"http://127.0.0.1:{dead_port}", timeout=2)
     c = client(dead)
     r = c.get("/api/spools", headers=auth(token()))
     assert r.status_code == 503
@@ -383,7 +382,7 @@ def test_add_and_link_tag_not_landing_502_partial(sm, monkeypatch):
     assert "tag did not land" in body["message"]
 
 
-def test_read_spoolman_down_503_refunds_cap(sm):
+def test_read_spoolman_down_503_refunds_cap(sm, dead_port):
     import anthropic
     import httpx
     fake = FakeClaude(READ)
@@ -392,7 +391,7 @@ def test_read_spoolman_down_503_refunds_cap(sm):
     assert read(c, tok, [("a.jpg", JPEG)]).status_code == 200
     reads = config.paths().state / "reads.json"
     assert len(json.loads(reads.read_text())) == 1
-    dead = Spoolman(f"http://127.0.0.1:{free_port()}", timeout=2)
+    dead = Spoolman(f"http://127.0.0.1:{dead_port}", timeout=2)
     c_dead = client(dead, fake)
     r = read(c_dead, tok, [("a.jpg", JPEG)])
     assert r.status_code == 503 and r.json()["error"] == "spoolman_unreachable"

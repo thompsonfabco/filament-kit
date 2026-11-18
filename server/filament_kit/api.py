@@ -11,6 +11,7 @@ import json
 import logging
 import math
 import re
+from datetime import datetime
 from pathlib import Path
 
 from starlette.applications import Starlette
@@ -21,7 +22,7 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, Response
 from starlette.routing import Route
 
-from . import (API_VERSION, __version__, config, hostaddr, intake, intake_history, inventory, modules, pairing, profiles_api, reader_corrections, setup_page,
+from . import (API_VERSION, __version__, alerts_api, config, event_sink, events, hostaddr, intake, intake_history, inventory, modules, pairing, profiles_api, reader_corrections, setup_page,
                station_flow, station_requests, storage, storage_api, tags)
 from .intake import CapReached, PhotoError, ReadCap, ReadError, RefundRefused
 from .bridge import camera, family, hardware, loading, mapping, pending, registry, usage
@@ -192,9 +193,16 @@ WEB_ROUTES = (
     ("POST", "/api/profiles/web/generate"),
     ("POST", "/api/profiles/web/updates_accept"),
     ("POST", "/api/profiles/web/restore_deleted"),
+    ("GET", "/api/events"),
+    ("POST", "/api/events/web"),
+    ("GET", "/api/alerts"),
+    ("POST", "/api/alerts/test"),
+    ("GET", "/api/spools/low"),
+    ("GET", "/api/storage-use"),
 )
 _WEB_MATCH = {(m, re.compile(re.sub(r"\{\w+\}", "[^/]+", re.sub(r"\{\w+:path\}", ".+", r)))) for m, r in WEB_ROUTES}
 WEB_ONLY_PREFIX = "/api/profiles/web/"  # the web unit's preset writes: no phone or PC calls them
+WEB_ONLY_PATHS = ("/api/events/web",)   # the web unit's hand-over of its spool events (R80 E1)
 
 
 def _device_name(device: str | None) -> str:
@@ -205,6 +213,14 @@ def _device_name(device: str | None) -> str:
         return next((d.get("name") or device for d in pairing.devices() if d.get("id") == device), device)
     except Exception:  # noqa: BLE001 - a name is a courtesy
         return device
+
+
+def _is_intake_device(device: str) -> bool:
+    """The token is the kit's own phone web app's pairing (INTAKE_DEVICE), not another web unit's."""
+    try:
+        return any(d["id"] == device and d["name"] == INTAKE_DEVICE for d in pairing.devices())
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _web_may(method: str, path: str) -> bool:
@@ -252,10 +268,16 @@ def _authed(fn):
         if (scope == "web" and _printer_write(request.method, path)
                 and not await run_in_threadpool(_web_printer_changes_ok, device)):
             return _err(403, "public_printer_changes_off", PUBLIC_PRINTER_CHANGES_OFF)
-        if scope != "web" and path.startswith(WEB_ONLY_PREFIX):
+        if scope != "web" and (path.startswith(WEB_ONLY_PREFIX) or path in WEB_ONLY_PATHS):
             return _err(403, "forbidden", "this route is for the web unit only")
         request.state.device = device
-        return await fn(request)
+        # what this request changes is written as an event done by this device (R80 E1); only a change writes one
+        # the name is looked up when an event is written, not for every request (pairing.devices() reads a file)
+        actor = {"type": "device", "id": device}
+        if request.method not in ("GET", "HEAD", "OPTIONS"):
+            actor["name"] = functools.partial(_device_name, device)
+        with event_sink.acting(actor):
+            return await fn(request)
     return _handle(wrapper)
 
 
@@ -1272,6 +1294,89 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         (storage_api.view; the web app's twin and `spoolwarden locations --json` give the same data)."""
         return JSONResponse(await run_in_threadpool(storage_api.current_view, sm, storage.current()))
 
+    def _number(q, name: str, kind=int):
+        raw = q.get(name)
+        if raw in (None, ""):
+            return None
+        try:
+            return kind(raw)
+        except ValueError:
+            raise BadRequest(f"{name} must be a number", name) from None
+
+    @_authed
+    async def events_get(request: Request):
+        """The Hub's events (alerts_api.events_answer, R80 section 8): `since` (an id) or `since_at` (a time, UTC),
+        `wait` up to 55 s, `kinds` (prefixes, comma separated), `limit`, `alert=1` (only what an alert type that is
+        on covers) and `client` (the Hub page's browser id, for its test alert)."""
+        q = request.query_params
+        since, since_at = _number(q, "since"), q.get("since_at") or None
+        if since is not None and since_at:
+            raise BadRequest("give since or since_at, not both")
+        if since is not None and since < 0:
+            raise BadRequest("since must be 0 or more", "since")
+        if since_at:
+            try:
+                since_at = alerts_api.parse_time(since_at)
+            except ValueError as e:
+                raise BadRequest(str(e), "since_at") from None
+        client = (q.get("client") or "").strip()[:80]
+        callers = [f"device:{request.state.device}"] + ([f"client:{client}"] if client else [])
+        out = await run_in_threadpool(functools.partial(
+            alerts_api.events_answer, since=since, since_at=since_at, wait=_number(q, "wait", float) or 0,
+            kinds=q.get("kinds") or None, limit=_number(q, "limit") or events.LIMIT_DEFAULT,
+            alert=q.get("alert", "").lower() in ("1", "true", "yes"), callers=callers))
+        return JSONResponse(out)
+
+    @_authed
+    async def events_web(request: Request):
+        """The web unit's own spool events, handed over (R80 E1): only `spool.*` kinds; the Hub gives the id, keeps the
+        `at` and sets the actor (`device` for the phone web app, `connector` for the connector's tools)."""
+        body = await _json(request)
+        items = body.get("events")
+        if not isinstance(items, list) or len(items) > 500:
+            raise BadRequest("events must be a list of at most 500 events", "events")
+        device = request.state.device
+        fallback = "device" if await run_in_threadpool(_is_intake_device, device) else "connector"
+        batch = []
+        for it in items:
+            if not isinstance(it, dict) or not str(it.get("kind", "")).startswith("spool."):
+                raise BadRequest("the web unit may hand over spool.* events only", "events")
+            at = it.get("at")
+            when = datetime.fromisoformat(alerts_api.parse_time(at).replace("Z", "+00:00")) if at else None
+            actor = it.get("actor") if isinstance(it.get("actor"), dict) else {}
+            kind = actor.get("type") if actor.get("type") in ("device", "connector") else fallback
+            batch.append((it["kind"], it.get("subject") or {"type": "spool"},
+                          {"type": kind, "id": str(actor.get("id") or device), "name": str(actor.get("name") or "")},
+                          it.get("data") or {}, when))
+        # all or none, and a resent hand-over writes nothing twice (events.write_many)
+        written = await run_in_threadpool(events.write_many, [
+            {"kind": k, "subject": sub, "actor": act, "data": data, "now": at} for k, sub, act, data, at in batch])
+        return JSONResponse({"ok": True, "ids": written})
+
+    @_authed
+    async def alerts_get(request: Request):
+        return JSONResponse(await run_in_threadpool(alerts_api.alerts_view))
+
+    @_authed
+    async def alerts_test(request: Request):
+        """A test alert for the caller: nothing is stored; the caller's next `GET api/events` carries it as `test`
+        (once, within 60 s). The caller is the Hub page's browser id (`client`) or the device of the token."""
+        try:
+            body = await request.json()
+        except ValueError:
+            body = {}
+        client = str(body.get("client") or "").strip()[:80] if isinstance(body, dict) else ""
+        caller = f"client:{client}" if client else f"device:{request.state.device}"
+        return JSONResponse({"ok": True, "test": await run_in_threadpool(alerts_api.queue_test, caller)})
+
+    @_authed
+    async def spools_low(request: Request):
+        return JSONResponse(await run_in_threadpool(alerts_api.low_view, sm))
+
+    @_authed
+    async def storage_use(request: Request):
+        return JSONResponse(await run_in_threadpool(alerts_api.storage_view))
+
     @_authed
     async def station_state(request: Request):
         client = await run_in_threadpool(station_client)
@@ -1317,6 +1422,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             Route("/api/label-reader/corrections/{cid}/remove", _corr(corrections_remove), methods=["POST"]),
             Route("/api/tags/{uid}", tag_lookup),
             Route("/api/spools", spool_search),
+            Route("/api/spools/low", spools_low),
             Route("/api/filaments", filament_list),
             Route("/api/vendors", vendor_list),
             Route("/api/spools/{id:int}/link", spool_link, methods=["POST"]),
@@ -1324,6 +1430,11 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             Route("/api/spools/{id:int}", spool_update, methods=["PATCH"]),
             Route("/api/locations", locations),
             Route("/api/storage", storage_list),
+            Route("/api/storage-use", storage_use),
+            Route("/api/events", events_get),
+            Route("/api/events/web", events_web, methods=["POST"]),
+            Route("/api/alerts", alerts_get),
+            Route("/api/alerts/test", alerts_test, methods=["POST"]),
             Route("/app.apk", apk),
             Route("/api/station", station_state),
             Route("/api/station/hello", station_hello),

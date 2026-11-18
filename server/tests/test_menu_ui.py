@@ -520,7 +520,7 @@ def test_config_full_screen_ctrl_c_leaves_at_once_saying_what_was_not_saved(full
 
 
 def test_config_full_screen_secret_is_starred_and_never_drawn(fullscreen, capsys, monkeypatch):
-    code, scr = fullscreen(["4", "2"] + typed("sk-ant-TOPSECRET") + ["\n", "s", "q", "q"])
+    code, scr = fullscreen(["5", "2"] + typed("sk-ant-TOPSECRET") + ["\n", "s", "q", "q"])
     shown = "\n".join(scr.text(i) for i in range(len(scr.frames)))
     assert "sk-ant" not in shown and "Anthropic API key (Enter keeps it): ****************" in shown
     assert code == 0 and (config.paths().etc / "anthropic_key").read_text().strip() == "sk-ant-TOPSECRET"

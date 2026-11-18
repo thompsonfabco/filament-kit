@@ -89,6 +89,35 @@ def sink():
     return _sink
 
 
+_held: contextvars.ContextVar = contextvars.ContextVar("event_held", default=None)
+
+
+@contextlib.contextmanager
+def held():
+    """Events emitted inside this block are kept and written, in order, when the OUTERMOST block ends: the code that
+    reports from under a lock (inventory's `_LOCK`) takes the lock INSIDE this block, so the store's write (it costs
+    O(month)) never lengthens the time the lock is held (R475 LOW 4). Actor and batch are taken when `emit` is called."""
+    if _held.get() is not None:
+        yield
+        return
+    queue: list = []
+    token = _held.set(queue)
+    try:
+        yield
+    finally:
+        _held.reset(token)
+        for kind, subject, actor, data, kw in queue:
+            _write(kind, subject, actor, data, kw)
+
+
+def _write(kind, subject, actor, data, kw):
+    try:
+        return _sink.write(kind, subject, actor, data, **kw)
+    except Exception:  # noqa: BLE001
+        log.exception("event %s not written", kind)
+        return None
+
+
 _weight_hook = None
 
 
@@ -108,7 +137,15 @@ def weight_changed(sm) -> None:
 
 
 def current_actor() -> dict:
-    return _actor.get() or HUB
+    """The actor of this request or task, else the Hub. A name given as a function (`acting`) is looked up here, the
+    first time an event needs it, so a request that writes no event never pays for it."""
+    a = _actor.get()
+    if a and callable(a.get("name")):
+        try:
+            a["name"] = a["name"]()
+        except Exception:  # noqa: BLE001 - a name is a courtesy
+            a["name"] = ""
+    return a or HUB
 
 
 def new_batch() -> str:
@@ -118,7 +155,8 @@ def new_batch() -> str:
 @contextlib.contextmanager
 def acting(actor: dict | str | None = None, batch: str | None = None):
     """Events written inside this block (in this thread or task) have `actor`, and the spool events of one request
-    share `batch` (a given id, else a new one)."""
+    share `batch` (a given id, else a new one). The actor's `name` may be a function: it is called once, when the first
+    event is written."""
     a = _actor.set({"type": actor} if isinstance(actor, str) else actor)
     b = _batch.set(batch or _batch.get() or new_batch())
     try:
@@ -148,11 +186,11 @@ def current_batch() -> str:
 def emit(kind: str, subject, data: dict | None = None, *, actor=None, **kw):
     """Report an event to the sink in force; returns the event or None. `actor` defaults to the one `acting` set.
     Never raises: whatever the sink does, the change that reported goes on."""
-    try:
-        return _sink.write(kind, subject, actor or current_actor(), data, **kw)
-    except Exception:  # noqa: BLE001
-        log.exception("event %s not written", kind)
+    actor = actor or current_actor()
+    if _held.get() is not None:                         # under a lock: written when the lock is released (`held`)
+        _held.get().append((kind, subject, actor, data, kw))
         return None
+    return _write(kind, subject, actor, data, kw)
 
 
 def spool_subject(spool: dict | None, spool_id=None) -> dict:

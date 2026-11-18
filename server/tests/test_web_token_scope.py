@@ -110,8 +110,26 @@ def test_every_listed_route_is_one_the_web_unit_writes():
     calls = _calls_in_web() | {slots.printer_path("1"), slots.load_path("1", "1"), "/api/printers/1/slots/1/unload",
                                "/api/printers/1/camera/1"}
     for method, template in api.WEB_ROUTES:
+        if (method, template) in LISTED_BEFORE_THE_WEB_UNIT_CALLS_THEM:
+            continue
         rx = re.compile(re.sub(r"\{\w+\}", "[^/]+", re.sub(r"\{\w+:path\}", ".+", template)))
         assert any(rx.fullmatch(c) for c in calls), (method, template)
+
+
+# The events and alerts routes (R80 E1, EA3) are listed for the web unit before it calls them: its side (EA4: the
+# hand-over, the push sender, the web twins) comes after. The next test makes EA4 delete each line here once its code
+# calls the route, so this list cannot outlive the gap.
+LISTED_BEFORE_THE_WEB_UNIT_CALLS_THEM = {
+    ("GET", "/api/events"), ("POST", "/api/events/web"), ("GET", "/api/alerts"), ("POST", "/api/alerts/test"),
+    ("GET", "/api/spools/low"), ("GET", "/api/storage-use")}
+
+
+def test_a_route_listed_ahead_of_the_web_unit_is_not_yet_called_by_it():
+    calls = _calls_in_web()
+    for method, template in LISTED_BEFORE_THE_WEB_UNIT_CALLS_THEM:
+        assert (method, template) in api.WEB_ROUTES
+        rx = re.compile(re.sub(r"\{\w+\}", "[^/]+", template))
+        assert not any(rx.fullmatch(c) for c in calls), f"{template} is called now: drop it from the list above"
 
 
 def test_a_slash_in_a_path_cannot_reach_a_listed_route_by_another_shape():

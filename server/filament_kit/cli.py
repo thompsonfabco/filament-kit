@@ -25,7 +25,7 @@ from pathlib import Path
 
 from . import __version__
 from . import storage, storage_api
-from . import hostaddr, apply, config, inventory, klipper_cli, library, locations_cli, menu_ui, modules, output, pairing, qr, secret_input, steps
+from . import hostaddr, alerts, alerts_api, alerts_cli, apply, config, event_sink, inventory, klipper_cli, library, locations_cli, menu_ui, modules, output, pairing, qr, secret_input, steps
 from . import status as status_rows
 from .bridge import registry
 from .profiles import builds, lines as lines_mod
@@ -103,7 +103,8 @@ def cmd_status(client_factory, station_pairing: str | None = None) -> int:
     if not (output.json_mode() or output.quiet()):
         output.out(status_rows.header_line())
         output.out()
-    return 0 if status_rows.print_rows(rows, summary=True) else output.FAILED
+    extra = status_rows.numbers() if output.json_mode() and "server" in modules.enabled(config.load()) else None
+    return 0 if status_rows.print_rows(rows, summary=True, extra=extra) else output.FAILED
 
 
 def _library_status_lines() -> None:
@@ -732,7 +733,7 @@ _VOICES = (("auto", "Piper (natural; a 60-80 MB download)"), ("espeak", "espeak-
 _SETUP_WORDS = {"server": "Hub", "station": "Weigh Station", "all-in-one": "Hub with Weigh Station", "custom": "Custom"}
 # The setup sentence of `features setup` (06 9.6) and the new words for the three setups (N27).
 _SETUP_SENTENCE = {"server": "Hub", "station": "Weigh Station only", "all-in-one": "Hub with Weigh Station"}
-FEATURES_ROW = 11          # the number the main list gives Features: the texts that point at it say so
+FEATURES_ROW = 12          # the number the main list gives Features: the texts that point at it say so
 _APPLY_KEYS = ("station.tts", "web.public_url", "station.url", "spoolman_url")     # saving these applies (modules apply)
 
 
@@ -740,10 +741,11 @@ class _Item:
     """One setting of the menu: its label, the kind of answer and the key `config set` knows it by (06 8.3)."""
 
     def __init__(self, id, label, kind, key, *, choices=(), sep="", low=0, high=0, words="", restarts=False,
-                 keep_spaces=False):
+                 keep_spaces=False, alert=""):
         self.id, self.label, self.kind, self.key = id, label, kind, key
         self.choices, self.sep, self.low, self.high, self.words = choices, sep, low, high, words
         self.restarts, self.keep_spaces = restarts, keep_spaces
+        self.alert = alert           # an Alerts item: the type key, or the field of the alert rules (06 8.3, 9.17)
 
 
 _ITEMS = {i.id: i for i in (
@@ -751,6 +753,12 @@ _ITEMS = {i.id: i for i in (
     _Item("name", "Display name", "text", "server_name"),
     _Item("spoolman", "Spoolman address", "text", "spoolman_url"),
     _Item("storage", "Storage locations", "storage", None),
+    *[_Item("alert_" + k, alerts_api.say("alerts_type_" + k), "bool", None, alert="type:" + k) for k in alerts.KEYS],
+    _Item("alert_last", "Only when it is the last spool of that filament", "bool", None, alert="last_spool_only"),
+    _Item("alert_low", "Running low under", "int", None, low=alerts.LOW_G_MIN, high=alerts.LOW_G_MAX,
+          words="of grams, 10 to 2000", alert="running_low_g"),
+    _Item("alert_warn", "Storage warning at", "int", None, low=1, high=99, words="of % used, 1 to 99",
+          alert="storage_warn_percent"),
     _Item("engine", "Engine order", "choice", "intake.reader", choices=_ENGINES),
     _Item("apikey", "Anthropic API key", "secret", "anthropic_key"),
     _Item("model", "Claude model", "text", "model", restarts=True),
@@ -769,11 +777,12 @@ _ITEMS = {i.id: i for i in (
 )}
 
 # the groups, in the Hub page's order (03 10.1): id, title
-_GROUPS = (("appearance", "Appearance"), ("general", "General"), ("storage", "Storage locations"),
+_GROUPS = (("appearance", "Appearance"), ("general", "General"), ("storage", "Storage locations"), ("alerts", "Alerts"),
            ("reader", "Label Reader"), ("backups", "Backups and restore"), ("network", "Network and addresses"),
            ("passphrase", "Web passphrase"), ("catalog", "Filament Catalog"), ("voice", "Weigh Station voice"))
 _GROUP_ITEMS = {"appearance": ("theme",), "general": ("name", "spoolman"),
                 "storage": ("storage",),
+                "alerts": tuple("alert_" + k for k in alerts.KEYS) + ("alert_last", "alert_low", "alert_warn"),
                 "reader": ("engine", "apikey", "model", "reads", "address", "tier", "keep"),
                 "backups": ("days",), "network": ("public", "station", "hosts", "changes"),
                 "passphrase": ("passphrase",), "catalog": ("token",), "voice": ("voice",)}
@@ -795,6 +804,11 @@ def _general_value(cfg: dict, key: str):
         from . import backup
         return backup.keep_days(cfg)
     return setup_helper.general_value(cfg, key)
+
+
+def _alert_value(settings: dict, field: str):
+    """One Alerts item's value in the Hub's alert rules (`type:<key>`, or a field of `alerts.load()`)."""
+    return settings["types"][field[5:]] if field.startswith("type:") else settings[field]
 
 
 def _set_path(cfg: dict, key: str, value) -> None:
@@ -824,6 +838,8 @@ class _ConfigMenu:
     def stored(self, it: _Item, cfg: dict | None = None):
         if it.kind == "storage":
             return self.storage_editor().base
+        if it.alert:
+            return _alert_value(alerts.load(), it.alert)
         return _general_value(self.cfg if cfg is None else cfg, it.key)
 
     def storage_editor(self) -> "locations_cli.StorageEditor":
@@ -889,6 +905,11 @@ class _ConfigMenu:
                 err = local_reader.check_url(text)
                 if err:
                     raise _Sentence(f"the {label} is not usable: {err.rstrip('.')}.")
+            if it.alert and it.kind == "int":
+                try:
+                    return alerts_api.whole(text, it.low, it.high)
+                except alerts_api.AlertsRefused as e:
+                    raise _Sentence(str(e)) from None
             if it.kind == "int":
                 return _check_general(it, int(text))
             if it.kind == "list":
@@ -1019,6 +1040,11 @@ class _ConfigMenu:
             return str(self.value(it["name"])), False
         if gid == "storage":
             return locations_cli.summary(self.storage_editor().rows), False
+        if gid == "alerts":
+            now = {k: self.value(_ITEMS["alert_" + k]) for k in alerts.KEYS}
+            return alerts_api.say("cli_alerts_summary", count=sum(1 for v in now.values() if v),
+                                  grams=self.value(it["alert_low"]), warn=self.value(it["alert_warn"])).replace(
+                " · ", sep), False
         if gid == "reader":
             from . import intake
             order = intake.reader_order(cfg)
@@ -1269,6 +1295,22 @@ class _ConfigMenu:
         restarts = any(_ITEMS[i].restarts for i in self.staged)
         applies = any(_ITEMS[i].key in _APPLY_KEYS for i in self.staged)
         renamed = ""
+        rules = {i: self.staged[i] for i in self.staged if _ITEMS[i].alert}
+        if rules:                           # the Hub's alert rules (alerts.xml): the same code the Hub page's save runs
+            body: dict = {"types": {}}
+            for iid, value in rules.items():
+                field = _ITEMS[iid].alert
+                if field.startswith("type:"):
+                    body["types"][field[5:]] = value
+                else:
+                    body[field] = value
+            try:
+                alerts_api.save(body)
+            except (alerts_api.AlertsRefused, OSError) as e:
+                ui.error(f"nothing was saved: {str(e).rstrip('.')}. Your changes are still here.")
+                return
+            for iid in rules:
+                del self.staged[iid]
         if "storage" in self.staged:        # first: it is the part that can need Spoolman and take a while
             try:
                 renamed = self.storage_editor().save_rows(self.staged["storage"]).get("text", "")
@@ -1307,7 +1349,7 @@ class _ConfigMenu:
         """Put the staged settings into `new`; the sentence saying what is wrong, or None."""
         for iid, value in self.staged.items():
             it = _ITEMS[iid]
-            if it.kind in ("secret", "storage"):
+            if it.kind in ("secret", "storage") or it.alert:
                 continue
             if it.key == "backup.keep_days":
                 new.setdefault("backup", {})["keep_days"] = value
@@ -1363,7 +1405,8 @@ def _check_general(it: _Item, raw):
 
 def _item_note(it: _Item) -> str:
     return {"text": "Enter to type a new value; an empty answer keeps it.",
-            "int": f"A whole number, {it.words}. Enter to change it.",
+            "int": f"A whole number {it.words}. Enter to change it." if it.alert
+            else f"A whole number, {it.words}. Enter to change it.",
             "list": "Separate the entries with " + ("commas." if it.sep == "," else "spaces."),
             "choice": "Enter to choose.", "bool": "Enter switches it on or off.",
             "secret": "Typed hidden. It is never shown back."}[it.kind]
@@ -1371,7 +1414,7 @@ def _item_note(it: _Item) -> str:
 
 def _group_note(gid: str) -> str:
     return {"appearance": "How new devices look.", "general": "The Hub's name and its Spoolman.",
-            "storage": "Where spools are put away.", "reader": "Reads a spool's label from a photo.",
+            "storage": "Where spools are put away.", "alerts": "What Spoolwarden warns you about.", "reader": "Reads a spool's label from a photo.",
             "backups": "One zip with everything the kit keeps.", "network": "How the Hub is reached.",
             "passphrase": "Approves Claude's connector on the web access page.",
             "catalog": "Known filaments and their settings.", "voice": "The voice the Weigh Station speaks with."}[gid]
@@ -1463,6 +1506,12 @@ def cmd_config_show(sm_factory=None) -> int:
             if it.kind == "storage":
                 lines += _storage_show_lines(rows, sm_factory)
                 continue
+            if it.alert:                      # the Hub's alert rules: shown, but a setting of alerts.xml, not a key
+                value = menu.stored(it)
+                rows.append({"label": it.label, "key": None, "value": value})
+                gap = " " * (label_width - len(it.label) + 2)
+                lines.append(f"  {it.label}{gap}{menu.show(it, value)}")
+                continue
             if it.kind == "secret":
                 is_set = menu.is_set(it)
                 doc["secrets"][it.key] = {"set": is_set}
@@ -1502,7 +1551,8 @@ _OLD_STORAGE_KEYS = ("locations", "placement.pla_location", "placement.box_prefi
 
 
 def _set_keys() -> list[str]:
-    return [it.key for it in _ITEMS.values() if it.kind not in ("secret", "storage") and it.id != "spoolman"]
+    return [it.key for it in _ITEMS.values() if it.kind not in ("secret", "storage") and not it.alert
+            and it.id != "spoolman"]
 
 
 def _config_set_value(it: _Item, raw: str):
@@ -5758,7 +5808,7 @@ def cmd_local_intake_status() -> int:
             rows += list(status_rows._key_rows(_default_client, True))
             rows.append(status_rows.Row(status_rows.INFO,
                                         f"Reads used today: {_reads_today()} of {cfg['reads_per_day']}",
-                                        group="Label Reader"))
+                                        group="Label Reader", key="label-reader.reads-today"))
         if "local_intake" in on:
             rows += [r for r in status_rows.local_reader_rows(cfg) if not r.text.startswith("label reading:")]
     engine = ", then ".join(_ENGINE_NAMES[r] for r in order)
@@ -6181,6 +6231,8 @@ _HELP_GROUPS = [('Everyday',
    ('printer', 'List, test, map and manage printers'),
    ('klipper', 'The Klipper add-on'),
    ('recent', 'Recently added spools: show, correct, undo'),
+   ('spools', 'Spools running low'),
+   ('events', 'What happened on the Hub: show, follow'),
    ('devices', 'Paired phones, PCs and Weigh Stations'),
    ('pair', 'Pair a phone, the Slicer Sync or a Weigh Station'),
    ('weigh-station', 'Weigh Station: pair it, flash its display'),
@@ -6190,6 +6242,7 @@ _HELP_GROUPS = [('Everyday',
   [('features', 'Switch features on and off; choose the setup'),
    ('config', 'Settings menu; also config show and set'),
    ('locations', 'Storage locations: the list, add, edit, move, remove'),
+   ('alerts', 'What Spoolwarden warns you about: switches, limits, test'),
    ('label-reader', 'Label Reader: status and test'),
    ('catalog', 'Filament Catalog: status, update, roll back, add'),
    ('backup', 'Make or list backups'),
@@ -6236,6 +6289,10 @@ _COMMAND_TABLE = [('`status`', 'Checks everything and prints one row per check',
   '{recent_ask_title}'),
  ('`recent edit <record> field=value... [--item N] [--spools 41,42]`', 'Edit by hand', '{recent_edit}, {common_save_changes}'),
  ('`recent undo <record>`', 'Undo the newest revision that is not undone', 'Undo revision N'),
+ ('`spools low`', 'The opened spools at or under the running-low threshold', '{nav_overview}, {running_low_title}'),
+ ('`events [--since ID\\|TIME] [--kind PREFIX] [--follow]`',
+  "The Hub's events, newest last; `--follow` keeps printing new ones",
+  '{nav_settings} > {settings_group_alerts} > {settings_alerts_recent} (alerts only)'),
  ('`devices` (same as `devices list`)', 'Paired devices', '{nav_devices}'),
  ('`devices forget <device>`', 'Unpair a device', '{devices_unpair}'),
  ('`pair [--slicer-sync \\| --weigh-station] [--text] [--no-wait]`',
@@ -6282,6 +6339,11 @@ _COMMAND_TABLE = [('`status`', 'Checks everything and prints one row per check',
   'Make it the default overflow (a Bulk storage location that is not overflow becomes overflow as well)',
   '{storage_make_default_overflow}'),
  ('`locations sealed <name>`', 'Sealed spools go here', '{storage_sealed_here}'),
+ ('`alerts` (same as `alerts list`)', 'The alert switches and thresholds', '{nav_settings} > {settings_group_alerts}'),
+ ('`alerts set <type> on\\|off`', 'Switch one alert type', "The type's switch"),
+ ('`alerts set running-low <grams>`', 'Running low under', '{settings_alerts_running_low}'),
+ ('`alerts set storage-warning <percent>`', 'Storage warning at', '{settings_alerts_storage_warn}'),
+ ('`alerts test`', 'Send a test alert', '{settings_alerts_test}'),
  ('`label-reader status`', 'Label Reader engines and their health', '{nav_settings} > {settings_group_label_reader}'),
  ('`label-reader test <photo>... [--engine cloud\\|local]`', 'Read label photos without adding anything', '{settings_reader_test}'),
  ('`catalog status`', 'Filament Catalog version and last check', '{nav_settings} > {settings_group_catalog}'),
@@ -6463,7 +6525,8 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
             output.out("Stopped.")
             return output.INTERRUPTED
     with output.children_to_stderr():       # --json, --quiet: what a child prints on standard output goes to standard error
-        return output.run_json(run) if output.json_mode() else run()
+        follow = args[:1] == ["events"] and "--follow" in args       # `events --follow --json`: a line per event
+        return output.run_json(run) if output.json_mode() and not follow else run()
 
 
 def _add_locations(sub) -> None:
@@ -6728,6 +6791,7 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     cfs.add_argument("key", help="the setting's key, e.g. server_name")
     cfs.add_argument("value", help="its new value")
     _add_locations(sub)
+    alerts_cli.add_parsers(sub)
     sub.add_parser("certificate", help="make the Hub's certificate if missing; print its fingerprint")
     sub.add_parser("cert", help="the old spelling of certificate")
     _add_recent(sub, "recent", "Recently added: the last spool additions, their photos and revisions", alias=False)
@@ -6931,8 +6995,15 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
         refused = _json_refusal(args)
         if refused is not None:
             return refused
-    with output.muted() if _reports_results(args) else contextlib.nullcontext():
-        return _dispatch(args, client_factory=client_factory, manager_factory=manager_factory, sm_factory=sm_factory)
+    before = event_sink.sink()
+    if _is_root() or _no_systemd():          # as root the command line writes the Hub's events itself (R80 E1)
+        event_sink.set_sink(event_sink.StoreSink())
+    try:
+        with output.muted() if _reports_results(args) else contextlib.nullcontext():
+            return _dispatch(args, client_factory=client_factory, manager_factory=manager_factory,
+                             sm_factory=sm_factory)
+    finally:
+        event_sink.set_sink(before)
 
 
 def _old_spelling(args) -> None:
@@ -6959,7 +7030,7 @@ def _sub_of(a) -> str | None:
     """The word after the command: `backup create` is `create`."""
     for name in ("station_cmd", "recent_cmd", "devices_cmd", "printer_cmd", "library_cmd", "presets_cmd", "features_cmd",
                  "web_cmd", "li_cmd", "lr_cmd", "tag_reader_cmd", "backup_cmd", "remote_cmd", "klipper_cmd",
-                 "config_cmd", "spoolman_cmd", "loc_cmd"):
+                 "config_cmd", "spoolman_cmd", "loc_cmd", "alerts_cmd", "spools_cmd"):
         if hasattr(a, name):
             return getattr(a, name)
     return None
@@ -7052,6 +7123,12 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
         return cmd_config_set(args.key, args.value) if args.config_cmd == "set" else cmd_config(sm_factory)
     if args.cmd == "locations":
         return locations_cli.run(args, sm_factory or _default_spoolman)
+    if args.cmd == "alerts":
+        return alerts_cli.run_alerts(args)
+    if args.cmd == "events":
+        return alerts_cli.run_events(args)
+    if args.cmd == "spools":
+        return alerts_cli.run_spools(args, sm_factory or _default_spoolman)
     if args.cmd == "recent":
         return _dispatch_recent(args)
     if args.cmd == "certificate":

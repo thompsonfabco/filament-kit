@@ -50,3 +50,17 @@ def test_bind_skips_a_port_another_address_listens_on(monkeypatch):
             assert sock.getsockname()[1] != taken
     finally:
         foreign.close()
+
+
+def test_processes_started_together_do_not_walk_the_same_ports():
+    """Separate pytest processes (no xdist) are all worker 0: one starting every walk at the range's first port made
+    one process's fake server answer at another's dead address (flaky test_read_spoolman_down_503_refunds_cap)."""
+    import subprocess
+    import sys
+    from pathlib import Path
+    code = "from fakes import serving; print(serving._next[0] % serving.range_layout(serving._ephemeral_low())[1])"
+    tests = str(Path(__file__).resolve().parent)
+    procs = [subprocess.Popen([sys.executable, "-c", code], cwd=tests, stdout=subprocess.PIPE, text=True)
+             for _ in range(4)]
+    starts = [int(p.communicate(timeout=60)[0]) for p in procs]
+    assert len(set(starts)) > 1, starts

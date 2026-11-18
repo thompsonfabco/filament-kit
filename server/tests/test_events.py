@@ -132,7 +132,7 @@ def test_cursor_limit_and_kinds_filters(store):
     assert [e["id"] for e in store.read(since=page["next"], limit=2)["events"]] == [3, 4]
     assert [e["id"] for e in store.read(kinds=["print."])["events"]] == [1, 2, 4]
     assert [e["id"] for e in store.read(kinds="spool.low,print.finished")["events"]] == [3, 4]
-    assert store.read(since=9)["next"] == 9
+    assert store.read(since=9) == {"events": [], "next": 4, "oldest": 1}    # the store's highest id, not an echo of since
 
 
 def test_unknown_kind_and_bad_values_are_refused(store):
