@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from typing import Callable
 from urllib.parse import urlparse
 
+from . import hubport
+
 
 class ModuleError(Exception):
     """The module/station settings are inconsistent."""
@@ -206,6 +208,8 @@ def validate(cfg: dict) -> None:
                 if dep not in on:
                     why = f" ({MODULES[n].needs_text})" if n == "orders" else ""
                     raise ModuleError(f"{n} needs {dep}{why}")
+    if "remote" in on and hubport.remote_conflict(cfg):       # R82 s1 point 6: refused before anything is changed
+        raise ModuleError(f"{hubport.TEXT_REMOTE_REFUSAL_SHORT}; fix: {hubport.TEXT_REMOTE_FIX}")
     if needs_spoolman_url(on, cfg):
         raise ModuleError(
             "server without the spoolman module needs spoolman_url "

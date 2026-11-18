@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from . import config, modules, pairing, remote, secret_input
+from . import config, hubport, modules, pairing, remote, secret_input
 from .station import voice
 from .modules import MODULES, ModuleError
 
@@ -185,7 +185,8 @@ def station_dropin(cfg: dict, addresses: list[str]) -> str:
         env += [f"STATION_SERVER={server}", f"STATION_SERVER_PORT={int(cfg.get('port', 8710))}"]
     env_line = "Environment=" + " ".join(_env_assign(e) for e in env)
     ip_allow = " ".join(["localhost", *_uniq([*addresses, *paired_server_ips()])])
-    return f"[Service]\n{env_line}\nIPAddressAllow={ip_allow}\n"
+    # a port below 1024 (a new station on 443): the unit's empty capability sets get exactly CAP_NET_BIND_SERVICE
+    return f"[Service]\n{env_line}\nIPAddressAllow={ip_allow}\n{hubport.capability_lines(st['port'])}"
 
 
 def _resolve_all(cfg: dict, resolve: Callable[[str], list[str]]) -> list[str]:
@@ -567,6 +568,28 @@ def _server_setup(ex: _Exec, arg: str) -> None:
         ex.cmd(["chmod", "640", str(key_pem)])
 
     port = int(config.load()["port"])
+    write_hub_dropin(ex, port)
+    write_avahi(ex, port)
+
+
+def write_hub_dropin(ex: _Exec, port: int) -> None:
+    """The Hub unit's capability drop-in (hubport.dropin_text): written for a port below 1024, removed for any other,
+    so a Hub on 8710 runs with the empty capability sets of its unit file. Takes effect at the next daemon-reload."""
+    text = hubport.dropin_text(port)
+    if text is None:
+        f = _under(ex.root, hubport.HUB_DROPIN)
+        if f.exists():
+            f.unlink()
+            try:
+                f.parent.rmdir()
+            except OSError:
+                pass
+        return
+    ex.write(hubport.HUB_DROPIN, text.encode("utf-8"), 0o644, "")
+
+
+def write_avahi(ex: _Exec, port: int) -> None:
+    """The network advert with the Hub's real port, then avahi reloaded (restarted when it will not reload)."""
     text = (ex.resources / "avahi" / "filament-kit.service").read_text(encoding="utf-8")
     ex.write(AVAHI_FILE, text.replace("<port>8710</port>", f"<port>{port}</port>").encode("utf-8"), 0o644)
     ex.cmd(["systemctl", "enable", "--now", "avahi-daemon"])
