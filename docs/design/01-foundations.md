@@ -291,13 +291,13 @@ Hub page sections, in this order, in two groups:
 
 | Group | Sections |
 |---|---|
-| Everyday | **Overview** · **Printers** · **Recently added** · **Devices** · **Slicer presets** |
+| Everyday | **Overview** · **Printers** · **Spools** · **Recently added** · **Devices** · **Slicer presets** |
 | System | **Features** · **Settings** · **Flash a device** · **Updates** · **Logs** |
 
 - Console, wide screens: icon rail, the two groups separated by a hairline; the active section has the soft accent
   ground, bold label and a 3 px mark at the rail's edge, and `aria-current="page"`.
 - Phones: bottom bar with **Overview, Printers, Recent, Settings, More**. "More" opens a sheet listing the other
-  six with their icons and one-line live summaries. Every section is reachable in at most two taps.
+  seven (Spools among them) with their icons and one-line live summaries. Every section is reachable in at most two taps.
 - A section that is switched off in Features stays in the navigation, dimmed, and opens a page that says so with a
   button to Features. Sections never vanish (people look for them).
 - The address reflects the place: `#printers`, `#printers/<id>`, `#recent/<id>`, `#settings/backups`. Back and

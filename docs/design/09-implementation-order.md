@@ -10,7 +10,7 @@ Contents: 1 Rules of the road · 2 How a step is written · 3 Stage 0: groundwor
 the Hub page · 5 Stage 2: Hub page sections · 6 Stage 3: the web app · 7 Stage 4: the app · 8 Stage 5: the command
 line · 9 Stage 6: Themes · 10 Stage 7: wording · 11 Hub API additions · 12 Dependencies and the first ten steps ·
 13 Open points · 14 Coverage · 15 Stage 8: Share corrections · 16 Stage 9: Storage locations · 17 Stage 10: Events
-and alerts · 18 Stage 11: Address and first run
+and alerts · 18 Stage 11: Address and first run · 19 Stage 12: Every function in every version
 
 ---
 
@@ -235,7 +235,8 @@ Hub page · L · Depends on: S1.2 · Beside: S1.8
 - **Files today:** `setup_static/setup.js` (heading and intro 293-294, sticky block and tab nav 64-82, re-render on
   `hashchange` 290); `setup_static/setup.css` (`.sticky`, `.tabs`); `setup_page.py` (`<title>`).
 - **Change:** top bar, navigation rail, phone bottom bar and More sheet, page header and page frame (02 2.1 to 2.6;
-  03 3.1, 3.2, 3.8): ten sections in the two groups of F8 with their new names; Flash a device shows its empty state
+  03 3.1, 3.2, 3.8): ten sections in the two groups of F8 with their new names (Spools, the eleventh, comes with EV5);
+  Flash a device shows its empty state
   until S2.16; addresses of 03 1.2 with Back and Forward; title "<Page title> · <Hub name>". More-sheet summaries use
   the fallback of 02 12 until S2.2. The setup-code card stays as the first card of the content until S1.5. The page
   links `strings.js` and the shell's texts come from the catalogue (N35).
@@ -1268,7 +1269,7 @@ all four · S · Depends on: S5.9, S7.4 to S7.7 · Beside: none
 
 Every item of the merged list of what the design needs from the Hub, with the step that adds it and the first step
 that uses it. Items marked "feature idea" belong to an idea of `10-feature-ideas.md` that this order does not build;
-they come with that idea.
+they come with that idea, except the ideas Stage 12 builds (B1 to B5 and B8).
 
 | # | Need | Added in | First used by |
 |---|---|---|---|
@@ -1307,9 +1308,9 @@ they come with that idea.
 | N33 | Getting-started steps with a state and a hidden flag | Feature idea A1 | none in this order |
 | N34 | Short spool link `/s/<id>` | Feature ideas A2, C6 | none in this order |
 | N35 | String catalogue as static files; `{key, params}` on Hub messages | S0.10 serves the generated `strings.js`; the JSON file and `{key, params}`: feature ideas A3, E3 | S1.3 (the first texts read from the catalogue; web app: S3.3; app: S4.3) |
-| N36 | Klipper scan relayed for the web app | Feature idea B3 | none in this order |
-| N37 | Read-only Hub summary for paired devices | Feature idea B4 | none in this order |
-| N38 | Add a Filament Catalog entry from the web app | Feature idea B8 | none in this order |
+| N36 | Klipper scan relayed for the web app | Feature idea B3; a web token may call `POST /api/printers/scan` (EV1) | EV6b |
+| N37 | Read-only Hub summary for paired devices | Feature idea B4; `GET /api/hub` (EV1) | EV6a, EV7a |
+| N38 | Add a Filament Catalog entry from the web app | Feature idea B8; `POST /api/library/local/form`, the list and remove (EV1) | EV4d, EV6a, EV7b |
 | N39 | `/LICENSE` and `/THIRD-PARTY.md` served as text | Feature idea B9 | none in this order |
 | N40 | Running-low thresholds and list | Feature idea C1 | none in this order |
 | N41 | Undo tokens for spool changes and slot loads | Feature idea C2 | none in this order |
@@ -1384,6 +1385,12 @@ Stage 11  AF1 > AF2      AF7, AF8 from the start      AF1 + AF2 + EA3 merged > A
           AF1 + AF5 + EA6 merged > AF6      AF1 to AF8 > AF9
           (AF5 opens files that EA3 opens and AF6 files that EA6 opens, so each starts after that step is merged;
           AF1, AF7 and AF8 open no file of Stage 10)
+
+Stage 12  EV0 to EV9 from the start, against the contracts of the stage      EV7a > EV7b      EV1 to EV9 > EV10
+          registry files: AF5 > EV1 (api.py)      AF5 > EV2 (cli.py, status.py, the string catalogue)
+          AF6 > EV5 (setup_page.py, setup_overview.js)      EA6 > EV5 (setup.js)      AF6 > EV4d (setup_settings.js)
+          files held by earlier steps: AF2 > EV3      AF3 > EV4b      EA7 + EA4 > EV6a, EV6b      EA8 > EV7a      AF8 > EV8
+          (every step but EV7b and EV10 can start at once; the other steps send EV2 their string keys before it files)
 ```
 
 Stages 3 and 4 do not wait for Stages 1 and 2: once Stage 0 is done they run beside them, each needing only the Hub
@@ -1425,7 +1432,8 @@ Things the design parts leave open. Each needs a decision before the step named;
 5. **Where the shared files are served, and the component script's name.** N29 asks for one place for both pages but
    names no path; 08 13 names `components.css` but not the shared component script. Needed by S0.10 and S0.11.
 6. **Settled: the fake data for the tests.** `mockups/CONTENT-SPEC.md` is one example Hub, "Workshop hub", with
-   data for all ten sections of foundations 8, and an Empty Hub variant for the empty states. S1.11 serves it.
+   data for every section of foundations 8 (Spools once EV4a builds it), and an Empty Hub variant for the empty
+   states. S1.11 serves it.
 7. **The poll interval of a running slot mapping (N32).** Optional; until set, the interfaces poll as today. Needed
    only if S2.4, S3.11 or S4.11 change the interval.
 8. **The headless browser for AUT-5.** 07 15 names a headless browser but not which; it runs only in tests, and its
@@ -1461,24 +1469,26 @@ Every screen-level section of 03, 04 and 05 and every command group of 06, with 
 | 2.4 Standard states; 2.5 A section whose feature is switched off | S1.10 |
 | 2.6 Dialogs used everywhere | S1.6 |
 | 2.7 Refreshing data | S1.7, S2.3 |
-| 3.1 Top bar; 3.2 Navigation; 3.8 Page frame | S1.3 |
+| 3.1 Top bar; 3.2 Navigation; 3.8 Page frame | S1.3; the Spools entry and the page menu EV5 |
 | 3.3 Lock chip | S1.5 |
 | 3.4 Appearance control | S1.2 |
 | 3.5 Job indicator and job strip | S1.8, S1.9 |
 | 3.6 The Hub is restarting; 3.7 The Hub is not answering | S1.9 |
-| 4 Overview | S2.1, S2.2 |
+| 4 Overview | S2.1, S2.2; the Devices tile and Checks row EV2, EV5 |
 | 5 Printers (5.1 to 5.5, 5.7 to 5.9) | S2.3, S2.4 (dialogs S1.6) |
+| 5.10 The live view | EV4b |
 | 5.6 Add a printer; 5.4 Find Klipper printers and Klipper add-on | S2.5 |
 | 6 Recently added | S2.6, S2.7 |
-| 7 Devices | S2.8, S2.9 |
+| 7 Devices | S2.8, S2.9; 7.9 and 7.10 EV3, EV4c |
 | 8 Slicer presets | S2.10 |
 | 9 Features | S2.11, S2.12 |
-| 10 Settings | S2.17, S2.18, S2.19; 10.2 Theme S6.2, Theme for new devices S6.1, S6.10 |
+| 10 Settings | S2.17, S2.18, S2.19; 10.2 Theme S6.2, Theme for new devices S6.1, S6.10; 10.9 the form and list EV4d |
 | 11 Flash a device | S2.15, S2.16 |
 | 12 Updates | S2.13 |
 | 13 Logs | S2.14 |
 | 14 Where today's controls went | the steps above, section by section |
 | 15 Needs from the Hub | section 11 |
+| 16 Spools | EV4a, EV5 |
 
 ### 14.2 `04-web-app.md`
 
@@ -1489,11 +1499,11 @@ Every screen-level section of 03, 04 and 05 and every command group of 06, with 
 | 3.1 to 3.6 Patterns used on every screen | S3.2, S3.6 |
 | 3.7 Sheets and dialogs | S3.5 |
 | 4 Add spools | S3.7, S3.8 |
-| 5 Spools | S3.9, S3.10 |
-| 6 Printers | S3.11 |
+| 5 Spools | S3.9, S3.10; 5.6 EV6a |
+| 6 Printers | S3.11; 6.5 Clear slot and 6.9 the guided add EV6b |
 | 7 Recently added | S3.12 |
-| 8 Slicer presets | S3.13 |
-| 9 More and Settings | S3.3; theme S6.2 |
+| 8 Slicer presets | S3.13; your own entries EV6a |
+| 9 More and Settings | S3.3; theme S6.2; 9.1 and 9.3 EV6a |
 | 10 Home screen, offline and "Cannot reach the Hub" | S3.6, S3.14, S3.15, S3.17 |
 | 11 The refusal page and the sign-in page | S3.16 |
 | 12 Dialogs that replace the browser's own | S3.5 |
@@ -1509,14 +1519,14 @@ Every screen-level section of 03, 04 and 05 and every command group of 06, with 
 | 2 App shell | S4.2 |
 | 3 Shared parts and states | S4.4 |
 | 4 Pairing | S4.5 |
-| 5 Home | S4.6 |
+| 5 Home | S4.6; the Getting started line EV7a |
 | 6 Add spools | S4.7 |
-| 7 Spools and the spool screen | S3.9, S4.8 |
-| 8 Add a line to the Filament Catalog | S4.9 |
-| 9 Printers | S4.10, S4.11 |
+| 7 Spools and the spool screen | S3.9, S4.8; the Spools menu EV7b |
+| 8 Add a line to the Filament Catalog | S4.9; the form and list EV7b |
+| 9 Printers | S4.10, S4.11; 9.5 Clear slot and waiting, 9.12 EV7b |
 | 10 Recently added | S4.12 |
 | 11 Slicer presets | S4.13, S4.14 |
-| 12 Settings | S4.15; 12.2 theme S6.3 |
+| 12 Settings | S4.15; 12.2 theme S6.3; 12.3 and 12.8 EV7a |
 | 13 App updates | S4.15 |
 | 14 Accessibility | S4.4 (AUT-8), and the check of every screen step |
 | 15 Strings and wording | S0.8, S4.3 |
@@ -1528,24 +1538,25 @@ Every screen-level section of 03, 04 and 05 and every command group of 06, with 
 | Section or command group | Steps |
 |---|---|
 | 2 The command name | S5.9; the rest of the visible rename S7.4 to S7.8 |
-| 3 The command tree | S5.8 (help), S5.9 |
+| 3 The command tree | S5.8 (help), S5.9; EV2 |
 | 4 Old and new spellings | S5.5 to S5.8 |
 | 5 Naming a printer, device or record | S5.5, S5.6 |
 | 6 Output conventions | S5.1, S5.3 |
 | 7 Confirmations | S5.2 |
 | 8 Interactive screens | S5.4 |
 | 9.1 `status` | S2.1, S5.1 |
-| 9.2 `printer` and `klipper` | S5.5 |
+| 9.2 `printer` and `klipper` | S5.5; `load`, `unload`, `clear`, `usage`, `--watch` EV2 |
 | 9.3 `recent` | S5.6 |
-| 9.4 `devices` and `pair` | S2.8, S5.6 |
+| 9.4 `devices` and `pair` | S2.8, S5.6; `show`, `set` and the new columns EV2 |
 | 9.5 `presets` | S5.7 |
 | 9.6 `features` | S2.11, S5.7 |
 | 9.7 `weigh-station` and `tag-reader` | S5.7 |
 | 9.8 `config show`, `config set`, `config theme` | S5.8; `config theme` S6.10 |
 | 9.9 `label-reader` | S2.18, S5.8 |
 | 9.10 `backup` and `restore` | S5.2, S5.8 |
-| 9.11 `catalog` | S5.8 |
+| 9.11 `catalog` | S5.8; `add --ask`, `local` EV2 |
 | 9.12 `web`, `remote`, `setup-code`, `certificate`, `spoolman` | S5.8 |
+| 9.21 `spools` and `spool` | EV2 |
 | 9.13 `update` and `uninstall` | S5.2, S5.8 |
 | 9.14 `logs` | S5.8 |
 | 10 What the command line cannot do (`add`, `spool`, `printer live`) | S5.5, S5.8 |
@@ -1555,9 +1566,10 @@ Every screen-level section of 03, 04 and 05 and every command group of 06, with 
 
 ### 14.5 What this order does not build
 
-The parity gaps that the parts keep on purpose stay open after the last step: the live printer view, spools and
-Add spools on the Hub page (feature ideas B1, B2, B7); a Hub summary in the web app and the app (B4); Find Klipper
-printers and adding a Filament Catalog entry in the web app (B3, B8); licences outside the app (B9). The other ideas
+The parity gaps that the parts keep on purpose stay open after the last step: Add spools on the Hub page (feature idea
+B7); licences outside the app (B9). Stage 12 builds the live printer view and the Spools section on the Hub page (B1,
+B2), the Hub summary in the web app and the app (B4), Find Klipper printers in the web app (B3), the catalog form in
+every interface (B8) and the spool and slot commands (B5). The other ideas
 of `10-feature-ideas.md` are not scheduled here either.
 
 ---
@@ -2422,3 +2434,276 @@ Each has a fallback.
 the satellites' own web pages, their version prompt and a regular check-in (only the stored `version` is added here); the
 guided printer and the Getting started line in the web app and the Android app; loading a spool from the Hub page;
 anything on the Tag Reader firmware.
+
+---
+
+## 19. Stage 12: Every function in every version
+
+Every function that one interface has, the others have where they can: the Hub page gets the Spools section and the live
+printer view, every interface gets Clear slot and the waiting state, the Filament Catalog has one form everywhere, the
+apps show the Hub at a glance, the web app and the app add a printer in the guided order, Spoolman and the Hub page
+link to each other, Devices shows kinds, versions and out-of-date devices with the Weigh Station's own page, and the
+command line gets the spool, slot, device and catalog commands. The parts that specify it are 01 section 8, 02 2.6 and
+7.3 to 7.5, 03 3.2, 3.8, 4.2, 5, 7, 10.9 to 10.11, 15 and 16, 04 2, 5, 6, 8, 9, 12 and 14, 05 2, 5, 7 to 9, 12 and 16,
+and 06 3, 6.8, 7, 8.3, 9.2, 9.4, 9.11, 9.21 and 13. In this stage a "kit route" is a route under `/api/` for paired
+devices (`api.py`), a "page route" is a route of the Hub page under `/setup/api/`, and a "twin" is the web app's route
+under `/intake/api/` that passes a kit route on.
+
+### The rules of the stage
+
+- **All steps start at once**, each against the contracts below and in 03 section 15, 04 section 14, 05 section 16 and
+  06 section 13. A registry file waits for the merge of the step named for it, and nothing else waits.
+- **The page has its own routes.** The Hub page's live view, Spools section, catalog form and Devices call the same
+  printer, inventory and catalog code as the kit routes, in the Hub's process. They do not call the web app's routes:
+  the page's lock must apply, and the web app may be switched off.
+- **Clear slot is one rule in four interfaces.** The Hub forgets which spool is in the slot. In this order: a spool
+  waiting for the slot is no longer waiting; a spool recorded in the slot goes back where it was before it was loaded
+  (exactly as Unload moves it); on a Klipper printer the slot's setting on the printer is cleared when the printer is
+  online and can do it; on a Bambu Lab printer what the printer shows for the slot is left as it is. Afterwards the slot
+  has no spool, and filament used from it is logged with no spool and taken off none. Unload keeps its meaning, "I took
+  this spool out", and now also ends a waiting assignment; it is offered only when a spool is recorded, and Clear slot is
+  offered on every slot.
+- **One function builds a catalog entry.** The Hub builds an owner's own entry from the form's values; the page, the
+  apps and the command line send values and never an entry's text. The Catalog token field leaves the Hub page and the
+  `config` menu; a stored token keeps working and is not deleted by an update, and `spoolwarden catalog token` stays.
+- **Every client sends its kind and version.** The Hub keeps the newest value with the pairing; a device that sends
+  nothing shows "Version not known" and is never called out of date.
+- **Texts.** Only EV2 opens the string catalogue. Every other step sends EV2 its keys and English texts before it files;
+  until EV2 is merged a step shows its own English text through the catalogue's fallback and adds no key itself.
+- **No file is opened by two EV steps.** A step that finds it needs another step's file stops and says so.
+
+### The contracts
+
+All JSON. Times are ISO 8601 with offset. A field marked `?` may be absent or null. Errors keep each route family's
+existing shape.
+
+**Kit routes (new or changed).**
+
+| Route | Body / query | Answer |
+|---|---|---|
+| `POST /api/printers/{id}/slots/{label}/clear` | `{dry_run: true}` (default true) | `{slot: <label>, spool: <spool view>?, moved_back: <location>?, waiting_ended: bool, printer_cleared: bool, dry_run: bool}` |
+| `POST /api/printers/{id}/slots/{label}/unload` (changed) | as today | as today plus `waiting_ended: bool` |
+| `POST /api/printers/{id}/slots/{label}/load` (unchanged) | | already answers `pending: true` for a waiting load; clients must read it |
+| `GET /api/hub` | - | the object below |
+| `GET /api/library/local` | - | `{entries: [{id, brand, name, material, added}]}` |
+| `POST /api/library/local/form` | `{brand, name, material, nozzle_min?, nozzle_max?, bed_min?, bed_max?, density?, max_volumetric_speed?, bambu_parent?, notes?}` | 201 `{entry: {id, brand, name, material, added}}`; 400 `{error: "invalid_entry", problems: [{field, text}]}` |
+| `DELETE /api/library/local/{id}` | - | `{removed: true}`; 404 when unknown |
+| `POST /api/library/local` (unchanged) | an entry's text | kept for the command line's file form |
+| `GET /api/spools` (changed) | adds `filter=sealed\|opened\|loaded\|low` (one value; absent = all not empty) | each spool also carries `view` (the spool view); the answer adds `spoolman_url` |
+| every kit route | header `X-Spoolwarden-Client: <kind>/<version>` | recorded with the pairing; never required |
+
+`GET /api/hub`: `{name, version, newest: {version, checked_at}?, update_available: bool, checks: [{group, state: "ok" |
+"look" | "note" | "off", text, fix?}], getting_started: {done, total, hidden, finished}, features: [{id, name, on}],
+catalog: {version?, checked_at?}, backup: {last_at?, nightly: bool}, reader: {engine, key_set: bool}, devices: [{name,
+kind, version?, last_seen?, out_of_date: bool, this: bool}], records_kept: <number>, spoolman_url: <string>?,
+hub_page: <string>?}`. `getting_started` is the counts of 03 4.2. `hub_page` and `spoolman_url` are built from the host
+the caller used and are absent where the thing cannot be reached.
+
+The spool view is `inventory.spool_view` as it is, `{id, location, remaining_g, net_g, tare_g, tag, state: "sealed" |
+"opened" | "empty", filament_id, vendor, name, material, color_hex, lot}`, plus two new fields: `loaded: {printer_id,
+printer, slot}?` and `low: bool`. What a web token may call gains exactly: `POST /api/printers/{id}/slots/{label}/clear`,
+`POST /api/printers/scan`, `GET /api/hub`, `GET /api/library/local`, `POST /api/library/local/form` and
+`DELETE /api/library/local/{id}`.
+
+**Client headers.** Every client of ours sends `X-Spoolwarden-Client: <kind>/<version>` on every call, with the kind
+`android`, `slicer-sync`, `weigh-station` or `web`. A Weigh Station also gives its version on its hello call. A Tag
+Reader sends `X-Reader-Build: <number>` with its token; the Hub keeps the build and a last-seen time for each reader.
+
+**Page routes.** Under `/setup/api/`: the rows of 03 section 15 for the Spools section, the live view, the catalog form,
+Devices and the station's page passed through. Their answers are the kit routes' answers; the lock of each is in 03
+5.10, 7.10, 10.9 and 16.
+
+**Twins** (under `/intake/api/`; EV6a and EV6b): `GET hub` (the kit object), `GET library/local`, `POST library/local`
+(the form), `POST library/local/{id}/remove`, `POST printers/scan` and `POST printers/{id}/slots/{label}/clear`. Each
+passes the kit route on unchanged, with the guards the neighbouring twins have.
+
+**The Weigh Station's own routes** (over its HTTPS listener; EV3):
+
+| Route | Answer |
+|---|---|
+| `GET /` | its page (HTML; its own script and stylesheet under `/static/`) |
+| `GET /state` (changed) | as today plus `version` (the station software) and `settings_changed: bool` |
+| `GET /settings` | `{settings: [{id, label, kind, value, choices?, min?, max?}]}` with the ids `beep`, `speech`, `voice`, `volume`, `panel_swap`, and one `lamp.<step>` per step of the intake flow (value: one of the panel's lamps, or `off`) |
+| `POST /settings` | body `{<id>: <value>}`, with the header that carries the proof of 03 7.10; answers the new list; `{reset: true}` removes the station's own values |
+
+The station's 5-minute check-in is `GET /api/station/hello` with `fp`, `port` and `version`: nothing new.
+
+**The command line** (EV2): `spoolwarden spools [<words>] [--sealed|--opened|--loaded|--low]`; `spoolwarden spool show
+<n>`; `spoolwarden spool weigh <n> <grams with the spool>`; `spoolwarden spool move <n> <location|auto>`; `spoolwarden
+spool empty <n>`; `spoolwarden printer show <name> --watch`; `spoolwarden printer load <name> <slot> <spool n>`;
+`spoolwarden printer unload <name> <slot>`; `spoolwarden printer clear <name> <slot>`; `spoolwarden printer usage <name>
+[--days n]`; `spoolwarden catalog add --ask`; `spoolwarden catalog local`; `spoolwarden catalog local remove <id>`;
+`spoolwarden devices show <device>`; `spoolwarden devices set <device> <setting> <value>`. Every changing command
+previews, asks, and takes `-y`; every one has `--json` with the object of its route.
+
+### Which files the stage shares with the stages before it
+
+Each registry file below is opened by exactly one EV step, and that step starts only after the step that has the file
+open is merged. A step whose only wait is a registry file builds everything else first and adds its registry lines last.
+
+| Registry file | Opened by | Opened before by | Merge first |
+|---|---|---|---|
+| `api.py` | EV1 | EA3, then AF5 | AF5 |
+| `cli.py`, `status.py`, the string catalogue and its copies | EV2 | EA3, then AF5 | AF5 |
+| `setup_page.py`, `setup_static/setup_overview.js` | EV5 | EA6, then AF6 | AF6 |
+| `setup_static/setup_settings.js` | EV4d | EA6, then AF6 | AF6 |
+| `setup_static/setup.js` | EV5 | EA6 | EA6 |
+
+### EV0 Design text
+Design + docs · Depends on: none · Beside: every other EV step
+- **Files today:** `docs/design/*.md`.
+- **Change:** the design text of this stage: 01 (eleven sections), 02, 03 (5, 7, 10.9, the Spools section 16, 15), 04, 05,
+  06 and 09 (this stage).
+- **Keep:** every other part.
+- **Other interfaces:** every EV step reads it.
+- **Check:** the design's own tests.
+
+### EV1 Hub: the kit side
+Server builder · Depends on: none · Beside: every other EV step except for its registry file
+- **Files today:** `bridge/loading.py`, `bridge/pending.py`, `bridge/klipper/loads.py`, `inventory.py`, `library.py`,
+  `profiles_api.py`, `pairing.py`, `reader_tokens.py`, `web/reader.py`, new `hub_view.py`, tests. Registry file: `api.py`,
+  after AF5 is merged.
+- **Change:** Clear slot and the changed Unload, `GET /api/hub`, the catalog form, list and remove, the spool view's two
+  fields and `filter`, kind and version per device, the reader's build and last seen, what a web token may call, the camera
+  source handed to the page.
+- **Other interfaces:** every other EV step builds against these routes with stubs.
+- **Check:** prove first (items 1 and 2 of the list below). Then the route and inventory tests.
+
+### EV2 Hub: the command line, the Devices check and the texts
+Server builder · Depends on: none · Beside: every other EV step except for its registry files
+- **Files today:** new `spools_cli.py`, `klipper_cli.py`, tests. Registry files: `cli.py`, `status.py` and the string
+  catalogue, after AF5 is merged.
+- **Change:** the command line above, the Devices Checks row ("<n> devices are out of date."), and ALL catalogue texts of
+  this stage.
+- **Other interfaces:** every other EV step names its keys to this one before it files.
+- **Check:** the command tests; the catalogue and wording tests (08 test 7).
+
+### EV3 Hub: the Weigh Station's page
+Server builder · Depends on: none · Beside: every other EV step
+- **Starts after:** AF2 is merged, for the station files.
+- **Files today:** `station/http.py`, `station/state.py`, `station/flow.py`, `station/panel.py`, `station/server_api.py`,
+  new `station/page.py`, new `station/settings.py`, new `station/static/*`, `station_client.py`, tests.
+- **Change:** the station's page, its settings file, the lamp mapping, the 5-minute check-in, `version` in `/state`, and
+  the Hub's pass-through client.
+- **Other interfaces:** EV4c reads the pass-through client.
+- **Check:** prove first (items 3 and 4 of the list below).
+
+### EV4a Hub page: the Spools section
+Bug-bash 1 · Depends on: none · Beside: every other EV step
+- **Files today:** new `setup_console/spools_tab.py`, new `setup_static/setup_spools.js`, new
+  `setup_static/setup_spools.css`.
+- **Change:** 03 section 16.
+- **Other interfaces:** EV5 mounts it.
+
+### EV4b Hub page: the live printer view
+Bug-bash 1 · Depends on: none · Beside: every other EV step
+- **Starts after:** AF3 is merged, for `setup_printers.js`.
+- **Files today:** new `setup_console/printer_live_tab.py`, new `setup_static/setup_printer_live.js` and `.css`,
+  `setup_static/setup_printers.js`, `setup_static/setup_printers.css`.
+- **Change:** 03 5.10: the live view, the slot actions, waiting in the slot strip.
+- **Other interfaces:** EV5 mounts it.
+
+### EV4c Hub page: Devices
+Bug-bash 1 · Depends on: none · Beside: every other EV step
+- **Files today:** `setup_static/setup_devices.js`, new `setup_console/device_tab.py`, `setup_console/station_tab.py`,
+  `setup_console/webapp_tab.py` (the Open button's address).
+- **Change:** 03 7.2, 7.4, 7.9 and 7.10: kind, version, out of date, Open, the device detail and the pass-through.
+- **Other interfaces:** reads EV3's pass-through client; EV5 mounts the pass-through path.
+- **Check:** prove first (item 4 of the list below).
+
+### EV4d Hub page: the catalog form
+Bug-bash 1 · Depends on: none · Beside: every other EV step except for its registry file
+- **Files today:** `setup_console/library_tab.py`, `setup_helper.py` (the token operations leave the page). Registry file:
+  `setup_static/setup_settings.js`, after AF6 is merged.
+- **Change:** 03 10.9 to 10.11: the form, the list, no token field.
+
+### EV5 Hub page: the registry
+Bug-bash 1 · Depends on: none · The last of the Hub page steps
+- **Files today:** registry files only: `setup_page.py`, `setup_static/setup.js`, `setup_static/setup_overview.js`;
+  `setup_page.py` and `setup_overview.js` after AF6 is merged, `setup.js` after EA6.
+- **Change:** the Spools section in the navigation, the header's "Open the web app", the routes and scripts of EV4a to
+  EV4d mounted, the Devices tile and the pass-through path.
+
+### EV6a Web app: the Hub screen, links and the catalog form
+Klipper builder · Depends on: none · Beside: every other EV step
+- **Starts after:** EA7 and EA4 are merged: they have these files open in Stage 10.
+- **Files today:** `web/static/app.js`, `web/static/app.css`, `web/intake_app.py`.
+- **Change:** the Hub screen and the Getting started line in More, Open Spoolman, "Hub page" in the top bar, the catalog
+  form and list under Slicer presets; their twins.
+
+### EV6b Web app: guided add and Clear slot
+Klipper builder · Depends on: none · Beside: every other EV step
+- **Starts after:** EA7 and EA4 are merged.
+- **Files today:** `web/static/printers.js`, `web/printers_app.py`.
+- **Change:** the guided add, the search for Klipper printers, Clear slot and the waiting state; their twins.
+
+### EV7a Android: the client and the Hub screen
+App builder · Depends on: none · Beside: every other EV step
+- **Starts after:** EA8 is merged: it has `Api.kt`, `Models.kt` and `MainActivity.kt` open in Stage 10.
+- **Files today:** `net/Api.kt`, `net/Models.kt`, new `ui/hub/*`, `MainActivity.kt`, `nav/Destinations.kt`,
+  `ui/settings/HubSettings.kt`, `ui/home/HomeScreen.kt`.
+- **Change:** the client header, every new call and model of this stage, the Hub screen, the Getting started line and
+  the entry points. Android has no shared registry with the server; `Api.kt`, `Models.kt` and `MainActivity.kt` are this
+  step's alone, and it files the calls and models first as a row of their own so that EV7b stacks on it.
+
+### EV7b Android: guided add, Clear slot, waiting and the catalog form
+App builder · Depends on: EV7a's row of calls and models · Beside: every other EV step
+- **Files today:** `ui/printers/PrintersScreen.kt`, `PrintersViewModel.kt`, `PrinterScreen.kt`, `PrinterViewModel.kt`,
+  `ui/spool/LoadScreens.kt`, `LoadViewModel.kt`, `ui/search/SearchScreen.kt`, `ui/profile/AddProfileScreen.kt`,
+  `AddProfileViewModel.kt`.
+- **Change:** the guided add, Clear slot, waiting on the Load screen and the swatches, Open Spoolman, the catalog form
+  and list.
+- **Check:** prove first (item 5 of the list below).
+
+### EV8 Slicer Sync: the client header
+Klipper builder · Depends on: AF8 merged · Beside: every other EV step
+- **Files today:** `pc-sync/fksync/client.py`.
+- **Change:** Slicer Sync sends `X-Spoolwarden-Client: slicer-sync/<version>`.
+
+### EV9 Tag Reader firmware: the build
+To be assigned · Depends on: none · Beside: every other EV step
+- **Files today:** `reader/src/main.cpp`, `reader/firmware/VERSION` and what a firmware change needs.
+- **Change:** the firmware sends its build as `X-Reader-Build`.
+- **Check:** prove first (item 6 of the list below).
+
+### EV10 Documents
+Design + docs · Depends on: EV1 to EV9 merged
+- **Files today:** `docs/*.md`, `README.md`, `release-notes/next.md`.
+- **Change:** the user documents and the release notes.
+- **Keep:** the wording of the other sections.
+
+**Order.** EV0 to EV9 now. EV10 last, after the batch. Registry files, one after the other, per file: `api.py`: EA3 >
+AF5 > EV1. `cli.py`, `status.py` and the string catalogue: EA3 > AF5 > EV2. `setup_page.py` and `setup_overview.js`: EA6 >
+AF6 > EV5. `setup_settings.js`: EA6 > AF6 > EV4d. `setup.js`: EA6 > EV5.
+
+**How far the map is checked.** It is built from four reads of the code, not from opening every file. Not looked at:
+the CSS files the web app and Hub page steps need beyond those named; `PrinterScreen.kt` and `AddViewModel.kt` in full;
+`station/PANEL.md` and how many lamps and steps the panel has; the firmware's build and release steps; whether the Android
+Spools list has a menu today.
+
+**Later work, so that no file is opened twice for the same reason.** A later stage's undo, activity log and CSV open
+the Spools section's files again for those functions, and a later stage translates these screens once.
+
+### To prove first, in the step that meets it
+
+Each has a fallback.
+
+1. **EV1: a Bambu Lab slot's setting can be cleared on the printer.** If a recorded printer answer shows a command that
+   resets a slot's filament setting without moving anything, Clear slot sends it and `printer_cleared` is true. Otherwise
+   it stays false and the text adds "The printer still shows the old filament for this slot until a spool is loaded."
+2. **EV1: an entry built from Brand, Name and Material alone passes the catalog's check and gives a usable preset.** The
+   check wants `fields` (`library.py:83-88`); the Hub fills them from the catalog's values for that material. If no
+   sensible values exist for a material ("Other"), the form asks nozzle and bed temperatures for it.
+3. **EV3: a proof for setting changes.** Assumed: the station and the Hub can both derive a secret from the station's
+   pairing without sending the token itself. If the Hub keeps nothing it can derive from, the station's pairing gains a
+   second secret at its next hello, sent over the pinned channel.
+4. **EV4c with EV3: passing the station's page through the Hub** works with relative addresses only (the station's page
+   uses no absolute paths) and with the page's lock on the Hub's side.
+5. **EV7b: the dashed ring** is drawable with the app's swatch component; else the waiting slot's swatch gets a small
+   clock mark.
+6. **EV9: a reader in the field takes the new firmware** only when its owner holds the knob; until then its build is "not
+   known" and nothing breaks.
+
+**Out of scope:** adding spools on the Hub page; quick find and colour-name search (the Spoolman link is the answer); the
+Hub updating a satellite by itself; pages for the Tag Reader and the printer-side tag service (they serve nothing a browser
+can use; the reader has no web server); undo, the activity log, CSV and labels; a camera view on the command line.

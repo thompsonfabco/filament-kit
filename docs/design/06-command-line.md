@@ -77,9 +77,10 @@ Everyday
   printer          List, test, map and manage printers
   klipper          The Klipper add-on
   recent           Recently added spools: show, correct, undo
-  spools           Spools running low
+  spools           Find spools; spools running low
+  spool            One spool: show, weigh, move, empty
   events           What happened on the Hub: show, follow
-  devices          Paired phones, PCs and Weigh Stations
+  devices          Paired devices: kind, version, show, set
   pair             Pair a phone, the Slicer Sync or a Weigh Station
   weigh-station    Weigh Station: pair it, flash its display
   tag-reader       Tag Readers: tokens, flash one over USB
@@ -91,7 +92,7 @@ System
   locations        Storage locations: the list, add, edit, move, remove
   alerts           What Spoolwarden warns you about: switches, limits, test
   label-reader     Label Reader: status, test, corrections to share
-  catalog          Filament Catalog: status, update, roll back, add
+  catalog          Filament Catalog: status, update, roll back, add, your own entries
   backup           Make or list backups
   restore          Restore this Hub from a backup
   web              Access from outside the home, and Claude's connector
@@ -117,7 +118,7 @@ parts. The last column names the place on the Hub page that does the same thing,
 |---|---|---|
 | `status` | Checks everything and prints one row per check (9.1) | Overview |
 | `printer list` | All printers, set up and found (9.2) | Printers |
-| `printer show <printer>` | One printer: details and slots | Printers, expanded row |
+| `printer show <printer> [--watch]` | One printer: details and slots; `--watch` shows state, job, progress and temperatures too, redrawn every 2 s (9.2) | Printers, expanded row, live view |
 | `printer test <printer>` | Test connection | Test connection |
 | `printer add [--klipper] [options]` | Add a printer; asks for what is missing | Add a printer |
 | `printer use <printer>` | Add a Klipper printer that a scan found | Use this printer |
@@ -134,7 +135,11 @@ parts. The last column names the place on the Hub page that does the same thing,
 | `printer reports <printer>` | List saved reports | Saved reports |
 | `printer forget-certificate <printer>` | Forget certificate (Bambu) | Forget certificate |
 | `printer forget <printer>` | Forget printer | Forget printer |
-| `printer live <printer>` | Prints where the live view is (section 10) | Open the live printer view |
+| `printer live <printer>` | Prints where the camera is (section 10) | Show camera |
+| `printer load <printer> <slot> <spool>` | Load a spool into a slot (asks) | Load |
+| `printer unload <printer> <slot>` | Unload the spool of a slot (asks) | Unload |
+| `printer clear <printer> <slot>` | Clear slot: the Hub forgets the spool recorded there (asks) | Clear slot |
+| `printer usage <printer> [--days N]` | Filament used by the printer, newest first | Filament used |
 | `printer menu` | The Printers screen (8.4) | Printers |
 | `klipper add-on` | Prints the commands that install the Klipper add-on | Klipper add-on |
 | `recent` (same as `recent history`) | Recently added records (9.3) | Recently added |
@@ -143,8 +148,15 @@ parts. The last column names the place on the Hub page that does the same thing,
 | `recent edit <record> field=value... [--item N] [--spools 41,42]` | Edit by hand | Edit by hand, Save changes |
 | `recent undo <record>` | Undo the newest revision that is not undone | Undo revision N |
 | `spools low` | The opened spools at or under the running-low threshold (9.18) | Overview, Running low |
+| `spools [<words>] [--sealed \| --opened \| --loaded \| --low]` | Find spools; the last line is `Spoolman: <address>` (9.21) | Spools |
+| `spool show <n>` | One spool: facts, place, tag, last use (9.21) | Spools, one spool |
+| `spool weigh <n> <grams>` | Record the weight with the spool (previews, asks) | Update weight |
+| `spool move <n> <location \| auto>` | Move a spool (previews, asks) | Move |
+| `spool empty <n>` | Mark a spool empty (asks) | Mark empty |
 | `events [--since ID\|TIME] [--kind PREFIX] [--follow]` | The Hub's events, newest last; `--follow` keeps printing new ones (9.16) | Settings > Alerts > Recent alerts (alerts only) |
-| `devices` (same as `devices list`) | Paired devices (9.4) | Devices |
+| `devices` (same as `devices list`) | Paired devices with kind, version and the out-of-date sentence (9.4) | Devices |
+| `devices show <device>` | One device's detail; for a Weigh Station its status and settings | Devices, Open |
+| `devices set <device> <setting> <value>` | Change a Weigh Station setting through the Hub (previews, asks) | Devices, the Weigh Station's page |
 | `devices forget <device>` | Unpair a device | Revoke |
 | `pair [--slicer-sync \| --weigh-station] [--text] [--no-wait]` | Pairing code, QR and fingerprint | Pair a phone / Link for the Slicer Sync / Link for the Weigh Station |
 | `weigh-station pair [--local]` | Run on the Weigh Station: pair it with the Hub | Pair the Weigh Station on this machine |
@@ -192,9 +204,12 @@ parts. The last column names the place on the Hub page that does the same thing,
 | `catalog status` | Filament Catalog version and last check | Settings > Filament Catalog |
 | `catalog update [--scheduled]` | Update now | Update now |
 | `catalog rollback` | Go back to the version before | Go back to the version before |
-| `catalog add <file \| ->` | Add your own entry | Add entry |
+| `catalog add <file \| ->` | Add your own entry from an entry file | (none: the Hub page takes the form) |
+| `catalog add --ask` | Add your own entry: asks Brand, Name, Material and the optional values | Add (Settings > Filament Catalog) |
+| `catalog local` | Your own entries | See custom entries |
+| `catalog local remove <id>` | Remove one of your own entries (asks) | Remove |
 | `catalog adopt <folder>` | Take over a catalog folder from an older install | (none) |
-| `catalog token [--remove]` | Set, replace or remove the catalog token | Catalog token |
+| `catalog token [--remove]` | Set, replace or remove the catalog token; the one place to do it | (none: the Hub page has no token field) |
 | `backup create [--out DIR]` | Back up now | Back up now |
 | `backup list` | Backups on this Hub | Show the backups |
 | `backup keep <days>` | Keep nightly backups for N days | Keep nightly backups for N days |
@@ -212,7 +227,7 @@ parts. The last column names the place on the Hub page that does the same thing,
 | `uninstall [--purge]` | Remove Spoolwarden (asks) | Updates, footer line |
 | `logs [<service>] [--lines 50\|100\|200]` | The end of a service's log | Logs |
 | `add` | Prints where spools are added (section 10) | (none) |
-| `spool` | Prints where spools are opened, tagged and moved (section 10) | (none) |
+| `spool` | Prints the four spool commands and where tags are linked and spools are added (section 10) | (none) |
 | `help [<command> \| aliases \| --markdown]` | Help; `--markdown` prints the command table for the user guide | (none) |
 
 `--version` prints `Spoolwarden 0.5.2`. `spoolwarden help --markdown` is the source of the user guide's command
@@ -539,18 +554,29 @@ Any step that can take longer than 2 seconds shows a progress line once 2 second
 | Command | JSON shape |
 |---|---|
 | `status`, `web status`, `label-reader status` | `{"rows": [{"group", "state", "text", "fix", "action"}], "summary": {...}}`, the rows of `GET /setup/api/overview` plus `group` (section 13); `status` adds `"storage": ` the answer of `GET api/storage-use`, `"running_low": <number of spools>` and `"getting_started": ` the answer of `GET start` (`{show, hidden, finished, restore_offer, done, total, steps: [{id, state, line, target}]}`, 9.1) |
-| `printer list`, `printer show` | the printer objects of `GET /setup/api/state` (`printers.list`): `serial, name, model, ip, configured, state, pinned, family` and, for Klipper, `host, port, api_key, lane_data` |
+| `printer list`, `printer show` | the printer objects of `GET /setup/api/state` (`printers.list`): `serial, name, model, ip, configured, state, pinned, family` and, for Klipper, `host, port, api_key, lane_data`; `printer show --watch` prints `{summary, status}` of `GET api/printers/<id>`, one object per line each time it redraws |
 | `printer test` | `{reachable, state, text}`, the reply of `printers/<serial>/test` |
 | `printer map` | the map view of `GET /api/printers/<serial>/map` at its end |
 | `printer reports` | `{reports: [{name, size, at}], never}`, the reply of `printers/<serial>/reports` |
 | `recent` | `GET /setup/api/intake/history`: `{keep, photo_bytes, ai, count, records: [...]}` |
 | `recent show` | `GET /setup/api/intake/history/<id>` |
-| `devices` | `state.devices`: `[{id, name, paired, last_seen, built_in}]` |
+| `devices` | the answer of `GET /setup/api/devices`: `{devices: [{id, name, kind: "phone", "pc", "station", "web", "reader" or "builtin", version?, newest?, out_of_date, advice?, paired?, last_seen?, reachable?, built_in, page}]}` |
+| `devices show` | the answer of `GET /setup/api/device/<id>`: `{device, status?, settings?: [{id, label, kind: "switch", "choice", "number" or "text", value, choices?, min?, max?}]}` |
+| `devices set` (needs `--yes`) | `{settings: [...]}`, the new list |
 | `tag-reader list` | `state.readers.list`: `[{id, name, created}]` |
 | `presets status` | `GET /setup/api/presets` |
 | `features list` | `state.modules` plus `{"setup": "<setup>"}` |
 | `config show`, `config theme` | the `values` of `GET /setup/api/settings/general`, plus `theme` |
 | `locations` | the answer of `GET api/storage`: `{locations: [{id, name, type: "bulk" or "containers", limit or null, count or null, used, free or null, prefix or null, containers: [{name, number, taken}] or null, fill: "none", "any" or "materials", materials: [], overflow, default_overflow, sealed, position}], order_by_material: [{material, locations: [names]}], everything_else: [names]}` |
+| `spools` | the answer of `GET api/spools`: `{spools: [{id, location, remaining_g, net_g, tare_g, tag, state: "sealed", "opened" or "empty", filament_id, vendor, name, material, color_hex, lot, loaded: {printer_id, printer, slot}?, low, view}], spoolman_url?}` |
+| `spool show` | `{spool, last_use: {at, printer, grams}?}` |
+| `spool weigh`, `spool move`, `spool empty` (need `--yes`) | `{spool, before, dry}`, the spool view after and before the change |
+| `printer clear` (needs `--yes`) | the answer of `POST api/printers/<id>/slots/<slot>/clear`: `{slot, spool?, moved_back?, waiting_ended, printer_cleared, dry_run}` |
+| `printer load`, `printer unload` (need `--yes`) | the answers of the routes `.../slots/<slot>/load` and `.../unload`; `unload` adds `waiting_ended`, and a load for a printer that has not shown it yet says `pending: true` |
+| `printer usage` | the answer of `GET api/printers/<id>/usage` |
+| `catalog local` | `{entries: [{id, brand, name, material, added}]}` |
+| `catalog add --ask` (needs `--yes`) | `{entry: {id, brand, name, material, added}}` |
+| `catalog local remove` (needs `--yes`) | `{removed: true}` |
 | `spools low` | the answer of `GET api/spools/low`: `{threshold_g, spools: [{id, filament, material, color, remaining_g, location, in_stock, last_one}]}` |
 | `events` | the answer of `GET api/events`: `{events: [{id, at, kind, severity, subject: {type, id, name}, actor: {type, id, name}, data: {}, condition: {key, state} or null, alert, title, text, action: {place, id}}], next, oldest, gap, test, conditions: [...]}`; with `--follow`, one event object per line (9.16) |
 | `alerts` | the answer of `GET api/alerts`: `{types: [{key, title, on}], last_spool_only, running_low_g, storage_warn_percent, storage_bad_percent}` |
@@ -628,6 +654,14 @@ Every question, word for word (names are examples):
 | `printer api-key --clear` | `Clear the Moonraker API key of Garage Voron? Spoolwarden then connects without a key. If Moonraker asks for one, the printer's test says so until a key is set.` | `Cleared the API key of Garage Voron.` |
 | `locations remove` | `Remove Rack 2? 3 spools are recorded there. They keep that location until you move them; it is no longer offered for new spools.` (`No spools are recorded there.` when there are none) | `Removed Rack 2.` |
 | `devices forget` | `Unpair Shop phone? It can no longer reach the Hub until it is paired again.` | `Unpaired Shop phone.` |
+| `devices set` | the preview, for example `Volume would change from 70 to 40.`, then `Apply?` | `Saved: volume 40.` |
+| `printer load` | the plan lines (`Load Polymaker PolyTerra PLA Charcoal Black into A4`, `Preset: …`, `Nozzle: 0.4 mm`, `Spool 211 now in A4 goes back to Shelf B.`), then `Load it?` | `Loaded into A4.`, `Sent to A4. The printer accepted it but hasn't shown the change yet.` or `Waiting for the spool to load in A4.` |
+| `printer unload` | `Unload from A3? Unload eSUN ABS+ White from A3? It goes back to Shelf B. Only the inventory changes; the printer's slot setting stays as it is.` (on a Klipper printer the last sentence is `The slot's setting on the printer is cleared.`) | `Unloaded eSUN ABS+ White from A3. Moved back: spool 211 to Shelf B.` |
+| `printer clear` | `Clear slot A3? The Hub forgets the spool recorded here. eSUN ABS+ White (211) goes back to Shelf B.` (the second sentence only when a spool is recorded) | `Cleared slot A3. Spool 211 is back on Shelf B.` (without a spool `Cleared slot A3.`; also `No spool is waiting for A3 any more.` when a waiting assignment ended, and, when the Hub says the printer was not cleared, `The printer still shows the old filament for this slot until a spool is loaded.`) |
+| `spool weigh` | `Remaining changes from 620 g to 482 g.`, then `Apply?` | `Weight updated: 482 g left.` |
+| `spool move` | `Spool 214 would move to Shelf B.`, then `Apply?` | `Moved to Shelf B.` |
+| `spool empty` | `Mark spool 214 empty? Polymaker PolyTerra PLA Charcoal Black will be marked as used up.` | `Marked empty.` |
+| `catalog local remove` | `Remove Polymaker PolyTerra PLA from your own entries? Slicer presets are rebuilt.` | `Removed Polymaker PolyTerra PLA.` |
 | `tag-reader revoke` | `Revoke the token tr3? A Tag Reader using it is refused from now on. Set it up again with sudo spoolwarden tag-reader flash to give it a new token.` | `Revoked the token tr3.` |
 | `catalog rollback` | `Go back to the previous Filament Catalog? The version before the last update comes back. Your own entries are kept.` | `Back to version 2026.11.1.` |
 | `catalog token --remove` | `Remove the Catalog token? The Filament Catalog can then download only from public sources.` | `Removed the Catalog token.` |
@@ -737,7 +771,7 @@ Settings · Workshop hub
    6  Backups and restore    Nightly backups kept 14 days
    7  Network and addresses  Public address not set
    8  Web passphrase         not set
-   9  Filament Catalog       Catalog token not set
+   9  Filament Catalog       Version 2026.11.2
   10  Weigh Station voice    Piper (natural)
 
   These open their own screens; changes there apply at once:
@@ -843,7 +877,6 @@ section 2. "Key" is the setting's key for `config set` (9.8).
 | Network and addresses | Names for this page | `setup.hosts` | text, separated by spaces |
 | Network and addresses | Allow printer changes from the public address | `web.printer_changes` | on / off |
 | Web passphrase | New passphrase | (secret) | secret, asked twice (`New passphrase again`) |
-| Filament Catalog | Catalog token | (secret) | secret; `x` removes it (asks) |
 | Weigh Station voice | Voice | `station.tts` | choice: Piper (natural; a 60-80 MB download) · espeak-ng (robotic; no download) |
 
 The Alerts group is kept in the Hub's alert rules, not in the settings, so `config set` does not change it either
@@ -874,8 +907,9 @@ while it cannot be changed its row gives the reason and cannot be opened:
 `the reader does not answer, so this cannot be changed now`.
 Each group's screen ends with the actions that are commands elsewhere, so they are one step away: Backups and
 restore ends with `Back up now: sudo spoolwarden backup create` and `Restore: sudo spoolwarden restore <zip>`;
-Filament Catalog with
-`Update now: sudo spoolwarden catalog update`; Network and addresses with
+Filament Catalog (which has no item to change: it shows the version and the last check) with
+`Update now: sudo spoolwarden catalog update`, `Add your own entry: sudo spoolwarden catalog add --ask`, `Your own
+entries: spoolwarden catalog local` and `Catalog token: sudo spoolwarden catalog token`; Network and addresses with
 `Firewall rules: spoolwarden remote firewall`.
 
 **Prompts in the menu.**
@@ -900,14 +934,12 @@ Filament Catalog with
   `Error: the two passphrases do not match. Type them again.`
 - **Switched-off features.** A group whose feature is off stays in the list, dim, with `off: switch it on in
   Features (12)`. Opening it prints `Weigh Station is off on this Hub. Switch it on in Features (12) first.` and
-  stays on the main list. This applies to Weigh Station voice (feature Weigh Station). Two groups keep one
-  item open while their feature is off, as on the Hub page:
+  stays on the main list. This applies to Weigh Station voice (feature Weigh Station) and to Filament Catalog (feature
+  Filament Catalog). One group keeps one item open while its feature is off, as on the Hub page:
   - **Label Reader** counts as on while either Label Reader: Cloud (Claude) or Label Reader: On this Hub is on.
     With both off, its row reads `off: only Records kept`; opening it prints
     `The Label Reader is switched off. Spools are then added by hand. Switch it on in Features (12).` and shows
     only Records kept.
-  - **Filament Catalog** with its feature off: opening it prints
-    `The Filament Catalog is switched off. Switch it on in Features (12).` and shows only Catalog token.
 
 **Saving.**
 
@@ -1067,7 +1099,8 @@ Nothing is sent unless you choose to. [y/N]
 | `weigh-station flash-display` | one confirmation per blank board found (section 7) | Stops and restarts the Weigh Station service around the write, saying so |
 | `tag-reader flash` | `Wi-Fi network the Tag Reader joins: ` · `Its Wi-Fi password: ` (secret) · `The password again: ` (secret) · `Buzzer: h for high, l for low [h]: ` | `--ssid` and `--buzzer high\|low` skip their prompts; `--password -` reads the password from standard input. The other options of today's `reader setup` keep their names and meaning (9.7). |
 | `web passphrase` | `New passphrase, at least 12 characters: ` · `New passphrase again: ` (both secret) | Mismatch: `Error: the two passphrases do not match.` |
-| `catalog token` | `Catalog token (GitHub token): ` (secret) | |
+| `catalog token` | `Catalog token (GitHub token): ` (secret) | The one place to set or remove the token: the Hub page and the `config` menu have no token field. A stored token keeps working and an update never deletes it |
+| `catalog add --ask` | `Brand: ` · `Name: ` · `Material (number, or Other): ` (the numbered list of the materials the catalog knows, with Other last; Other asks `Type the material: `) · `More values (optional)? [y/N]` and, after yes, `Nozzle temperature from (°C): ` · `to (°C): ` · `Bed temperature from (°C): ` · `to (°C): ` · `Density (g/cm³): ` · `Maximum volumetric speed (mm³/s): ` · `Bambu Studio parent: ` · `Notes: ` | The Hub page's form, field for field and in its order; an empty answer to a required field asks again, to an optional one skips it. The command sends the values and the Hub builds the entry |
 | `restore`, `uninstall --purge` | the typed word (section 7) | |
 
 Secrets are never accepted as plain arguments (they would be visible to other users of the machine). A script
@@ -1157,6 +1190,7 @@ Filament Catalog
 | Weigh Station | `Answering at <url>`, `Tag reader seen`, `Scale seen`, `Paired with <address>` / `… not seen`, `Not paired` | per row: check the cable; `sudo spoolwarden pair --weigh-station` |
 | Devices | note `Paired devices: N` | (none) |
 | Devices | needs a look `The Weigh Station <name> is not using HTTPS. Update it.` (a Weigh Station that sent the Hub no fingerprint, which the Hub still calls over plain HTTP) | `sudo spoolwarden update`, run on the Weigh Station's machine |
+| Devices | needs a look `<n> devices are out of date.` (`1 device is out of date.`) | `spoolwarden devices` |
 | Devices | needs a look `The tag source <address> is not using HTTPS.` (a printer-side tag service that answers only on plain HTTP) | (none) |
 | Devices | needs a look `The certificate of the tag source <address> has changed.` | `Save the tag source again to trust the new certificate.` |
 | Printers | one row per printer with its state word (section 6.1); one needs-a-look row per printer problem | `sudo spoolwarden printer report "<name>"`, or the fix for that state |
@@ -1232,9 +1266,15 @@ A4    empty
 ```
 
 A Klipper printer shows `API key  set` and `Lane data  auto` in place of Certificate, and its tool slots (`T0`,
-`T1`). A printer with a problem shows it under the fields, with its Fix:
+`T1`). A slot a spool is waiting for (a Bambu Lab printer that has not shown the load yet) shows
+`waiting for the spool to load in A2` in the LEFT column. A printer with a problem shows it under the fields, with its Fix:
 `▲ needs a look  The last slot mapping stopped twice. A report would help.` A printer offline shows
 `No slot data while offline.` in place of the slot table.
+
+**`printer show <printer> --watch`** prints the same, preceded by the printer's state line (state, job, progress, layer,
+time left) and its temperatures, and redraws every 2 seconds until Ctrl-C (exit code 130). Not at a terminal it stops
+with exit code 2: `Error: --watch needs a terminal.` and `Fix: use spoolwarden printer show --json for one reading.`
+With `--json` it prints one `{summary, status}` object per line each time.
 
 **Other printer commands.** Result lines use the Hub page's words.
 
@@ -1252,6 +1292,10 @@ A Klipper printer shows `API key  set` and `Lane data  auto` in place of Certifi
 | `printer scan` | `Found on 192.0.2.0/24: 192.0.2.57:7125 (add it: sudo spoolwarden printer use mainsailos)` / `No Moonraker found on 192.0.2.0/24.` | One line per printer found; ones already added say `(added as Garage Voron)` |
 | `printer report` | `Collected a report: <file>.` then the Hub's sentence on what a report never holds | |
 | `printer reports` | table `MADE`, `SIZE`, `NAME` (long column) and the folder they are in / `No report kept for this printer yet.` | |
+| `printer load` | The plan, then the question and the result of section 7 | `printer load workshop A4 214` loads spool 214. A load that waits for the printer ends with `Waiting for the spool to load in A4.` Needs the Hub running |
+| `printer unload` | section 7 | Offered only when a spool is recorded in the slot: otherwise `Error: no spool is recorded in A3.` and `Fix: spoolwarden printer clear workshop A3` |
+| `printer clear` | section 7 | Always possible. It means "the Hub forgets which spool is in this slot": a spool waiting for the slot is no longer waiting, the recorded spool goes back where it was before it was loaded, and on a Klipper printer the slot's setting is cleared when the printer is online and can do it; on a Bambu Lab printer what the printer shows is left as it is |
+| `printer usage` | Table `WHEN`, `SLOT`, `JOB`, `GRAMS` and the note of an entry (`undone`, `logged only`), newest first; `Nothing used in the last 7 days.` | `--days N` (default 7) |
 | `printer forget-certificate`, `printer forget`, `printer dismiss` | section 7 | |
 
 **`printer add`** asks the questions of the Hub page's guided drawer (`03-hub-page.md` 5.6), in its order: the found
@@ -1432,14 +1476,53 @@ Keys the command accepts today keep working. An unknown key stops with exit code
 
 ```
 $ spoolwarden devices
-NAME        PAIRED            LAST SEEN         ID
-Shop phone  2026-10-02 18:11  2026-11-12 14:05  d7
-Studio PC   2026-10-03 09:40  2026-11-12 07:30  d8
-Hub page    built in: this Hub's own pairing    d1
+NAME         KIND            VERSION   PAIRED            LAST SEEN         ID
+Shop phone   Phone           0.5.2     2026-10-02 18:11  2026-11-12 14:05  d7
+Studio PC    Slicer Sync PC  0.7.0     2026-10-03 09:40  2026-11-12 07:30  d8
+Bench scale  Weigh Station   0.5.0     2026-10-04 10:02  2026-11-12 14:03  d9
+Bench tags   Tag Reader      build 41  made 2026-11-01   2026-11-12 14:01  rd-3
+Hub page     Built in        0.7.0     built in: this Hub's own pairing    d1
+▲ Bench scale is out of date (0.5.0; the Hub is 0.7.0). On that machine: sudo spoolwarden update
 ```
 
+- `KIND` is Phone, Slicer Sync PC, Weigh Station, Web app, Tag Reader or Built in. `VERSION` is `Version not known` for a
+  device that sends none, which is never called out of date. Each out-of-date device adds one line under the table with
+  the sentence of the Hub page (`03-hub-page.md` 7.9): Weigh Station `Out of date (0.5.0; the Hub is 0.7.0). On that
+  machine: sudo spoolwarden update`, Slicer Sync PC `Out of date (<version>). Install the current Slicer Sync on that
+  PC.`, phone `Out of date. The app offers the update when it is opened.`, Tag Reader `Out of date. Hold the knob for 4
+  seconds to update.` `LAST SEEN` of a Weigh Station says that it is running (it calls the Hub every 5 minutes).
 - Built-in pairings cannot be forgotten: `Error: Hub page is built in: it is this Hub's own pairing.`
 - Empty: `Nothing paired yet.` then `Pair a phone: sudo spoolwarden pair`.
+
+**`devices show <device>`** prints one device's detail. A Weigh Station also prints its status and settings, read through
+the Hub the way the Hub page's **Open** reads them:
+
+```
+$ spoolwarden devices show "Bench scale"
+Bench scale  Weigh Station  0.5.0  last seen 2026-11-12 14:03
+  Status     tag 04A1B2C3D4 · scale 622 g · panel 1.2 · air ok · no intake running
+  Settings
+    beep          on
+    speech        on
+    voice         piper
+    volume        70
+    panel_swap    off
+    lamp.weigh    green
+    lamp.read     yellow
+```
+
+A Tag Reader prints its name, build and last seen, and `Its settings are changed in Flash a device (spoolwarden
+tag-reader flash).` A phone, Slicer Sync PC or Web app prints kind, version, paired and last seen.
+
+**`devices set <device> <setting> <value>`** changes one setting of a Weigh Station through the same pass-through. It
+shows what would change, asks (section 7) and takes `-y`; the setting's name is the one `devices show` prints, and a
+value the setting does not take stops with exit code 2 and the values it takes in the Fix line.
+
+```
+$ sudo spoolwarden devices set "Bench scale" volume 40
+Volume would change from 70 to 40. Apply? [y/N] y
+Saved: volume 40.
+```
 
 **`pair`** prints, in the Hub page's order: the QR code (phone only), the instruction, the pairing code, the
 certificate fingerprint, the expiry; then waits for the device to pair. With `--json` it does not wait
@@ -1763,9 +1846,12 @@ Folder: <backup folder on this Hub>
 | `catalog status` | `Filament Catalog version 2026.11.2 (signed release), 3 local additions.` or `The Filament Catalog is not downloaded yet.` with `Fix: sudo spoolwarden catalog update`; `Source: <the address it downloads from>`; `Last check 2026-11-12 03:10: ok.`, `Last check 2026-11-12 03:10: failed: <why>.` or `Last check: never.`; the skipped text, if any |
 | `catalog update` | `◐ Updating the Filament Catalog…`, then the Hub's note as `Note: …` if any, then `Up to date: 2026.11.2.` or `Installed 2026.11.3 (N entries downloaded).` and the skipped text, if any. Failed: `× failed  <the Hub's text>` (exit 1). With `--scheduled` (the timer's run): `Filament Catalog updates are off.` or `Not due yet.` when it has nothing to do; when the source is a private repository that is not published yet (or the token cannot read it), `Note: <the Hub's text>. The version in use stays.` on standard error and exit 0, since the timer's run has not failed |
 | `catalog rollback` | section 7 |
-| `catalog add <file \| ->` | `Added Polymaker PolyTerra PLA. A preset build follows.` / `Error: entry not added: larger than <limit> KiB.` (the limit the Hub checks) |
+| `catalog add <file \| ->` | `Added Polymaker PolyTerra PLA. A preset build follows.` / `Error: entry not added: larger than <limit> KiB.` (the limit the Hub checks). The file form stays for an entry file |
+| `catalog add --ask` | asks the fields of 8.7, then `Added. Slicer presets are rebuilt in a minute.`; the Hub's refusals are printed per field, `Error: Material: <text>` |
+| `catalog local` | Table `ID`, `BRAND`, `NAME`, `MATERIAL`, `ADDED`; empty: `You have no entries of your own yet.` |
+| `catalog local remove <id>` | the question of section 7, then `Removed Polymaker PolyTerra PLA.` An unknown id: `Error: no entry of your own has the id 4.` |
 | `catalog adopt <folder>` | `Took over the catalog in <folder>: N local additions.` |
-| `catalog token` | prompt (8.7), then `Saved the catalog token.` |
+| `catalog token` | prompt (8.7), then `Saved the catalog token.` It is the one place to set or remove the token |
 
 ### 9.12 `web`, `remote`, `setup-code`, `certificate`, `spoolman`
 
@@ -2111,6 +2197,66 @@ already installed keeps its port (5003) on update and switches to HTTPS. The pri
 way: a new install takes 443 when it is free and allowed, otherwise 5002, asked like the others; an existing one keeps
 5002.
 
+### 9.21 `spools` and `spool`
+
+`spools` finds spools the way the Hub page's Spools section does (`03-hub-page.md` 16), from the Hub's inventory. Reading
+needs no sudo.
+
+```
+$ spoolwarden spools petg
+SPOOL  FILAMENT                   MATERIAL  LEFT    WHERE             STATE   TAG
+  212  Bambu Lab PETG HF Orange   PETG      880 g   Workshop X1 · A2  opened  tagged
+  213  Bambu Lab PETG HF Orange   PETG     1000 g   Shelf B           sealed  -
+   77  Polymaker PETG Teal        PETG      140 g   Rack 2            opened  -   ▲ running low
+Spoolman: http://192.0.2.10:7912
+```
+
+- `spools [<words>]`: every word must be found in the brand, name, material, location, spool number or tag (the Hub's
+  word match). `--sealed`, `--opened`, `--loaded` (in a printer) and `--low` (running low) narrow the list; one at a
+  time, and they work with the words. `spools low` is the command of 9.18 and keeps its own output; the word "low" alone
+  is that command, and `spools --low` is the filter. Spools that are empty are not listed.
+- The last line is `Spoolman: <address>` (the Hub's `spoolman_url`; the command never builds it). It is left out when
+  the Hub gives none.
+- Nothing matches: `No spools match.` No spools at all: `No spools yet. Add your first one from your phone.`
+- `--json`: the answer of `GET api/spools` (6.8).
+
+`spool` has four commands. Each changing one shows what would change, asks (section 7), and takes `-y`.
+
+```
+$ spoolwarden spool show 214
+Spool 214
+  Filament     Polymaker PolyTerra PLA Charcoal Black (PLA, #2B2B2E)
+  Left         620 g of 1000 g (62 %)
+  State        opened
+  Where        Workshop X1 · A1
+  Tag          04A1B2C3D4
+  Empty spool  140 g
+  Lot          F57
+  Last use     12.4 g on Workshop X1, 2026-11-12 14:05
+
+$ sudo spoolwarden spool weigh 214 622
+Remaining changes from 620 g to 482 g. Apply? [y/N] y
+Weight updated: 482 g left.
+
+$ sudo spoolwarden spool move 214 "Shelf B"
+Spool 214 would move to Shelf B. Apply? [y/N] y
+Moved to Shelf B.
+
+$ sudo spoolwarden spool empty 214
+Mark spool 214 empty? Polymaker PolyTerra PLA Charcoal Black will be marked as used up. [y/N] y
+Marked empty.
+```
+
+| Command | Does | Notes |
+|---|---|---|
+| `spool show <n>` | One spool: its facts, where it is, its tag, the last filament taken off it | `--json`: `{spool, last_use?}` |
+| `spool weigh <n> <grams with the spool>` | Records a scale reading with the spool | Grams above 0, or `Error: enter grams above 0.` |
+| `spool move <n> <location\|auto>` | Moves it; `auto` lets the Hub choose | An unknown location stops with exit code 2 and its Fix line lists the Hub's locations |
+| `spool empty <n>` | Marks it as used up | |
+
+`spool` with no word prints these four commands and the line of section 10 for what still needs a phone: a tag is linked
+by tapping it, and spools are added from photos or by hand.
+
 ## 10. What the command line cannot do
 
 Some features need a camera, NFC or a screen for photos. Where a person might look for them on the command line,
@@ -2120,9 +2266,9 @@ line and the address do not fit the width together, the address goes on the next
 
 | Feature | Command | The line it prints |
 |---|---|---|
-| Live printer view: camera, pause, resume, stop, light, load and unload a spool | `printer live <printer>` | `Camera and controls are in the web app: https://192.0.2.10/intake#printers` |
+| Live printer view: the camera, pause, resume, stop, the light | `printer live <printer>` | `The camera and the print controls are on the Hub page: https://192.0.2.10/setup#printers/<id>` |
 | Add spools, from label photos or by hand | `add` | `Add spools in the web app, app or Weigh Station: https://192.0.2.10/intake` |
-| Open a spool, link a tag, set its weight, move it, mark it empty, search spools, filament used, add a filament line | `spool` | `Spools are opened and tagged in the web app or app: https://192.0.2.10/intake` |
+| Link a tag to a spool by tapping it | `spool` | `A tag is linked by tapping it, in the web app or the app: https://192.0.2.10/intake` |
 | The photos of a Recently added record | `recent show <record>` | `Photos open on the Hub page: https://192.0.2.10/setup#recent/35` (`--photos` adds their file paths) |
 | Light / Dark / System, a device's own theme | (none) | The terminal's own colours apply (section 6.2); `config theme` sets only the Hub's theme for new devices |
 
@@ -2169,9 +2315,9 @@ this design.
 | Share corrections: switch it on or off | N | new | N | N | new (`config`, `config set`) | web app, app: remain on purpose (Hub settings are on the Hub page) |
 | Share corrections: see what is waiting, remove | new | new | new | N | new (`label-reader corrections`, `remove`) | none |
 | Share corrections: download the package, send | N | new | N | N | new (`label-reader corrections package`, `send`) | web app, app: remain on purpose (sending is done on the Hub) |
-| Open a spool: link a tag, set weight, move, mark empty | Y | N | Y | N | N (`spool` prints where) | remains: needs NFC or a camera |
-| Search spools | Y | N | N | N | N (`spool`) | remains |
-| Add a filament line | Y | N | N | N | N (`spool`) | remains |
+| Open a spool: link a tag, set weight, move, mark empty | Y | new | Y | N | P (`spool weigh`, `move`, `empty`; a tag is linked by tapping it) | remains: linking needs NFC |
+| Search spools | Y | new | Y | N | Y (`spools`) | none for the command line |
+| Add a filament line | Y | new | new | N | Y (`catalog add --ask`) | none for the command line |
 | Slicer presets: status, change parent | P | Y | Y | Y | Y | none |
 | Slicer presets: build, restore deleted, accept updates | N | Y | N | Y (accepts without asking) | Y (asks) | app, web app: remain |
 | Recently added: list, show | N | Y | Y | Y | Y | app: remains |
@@ -2181,13 +2327,13 @@ this design.
 | Add a Klipper printer | N | Y | Y | Y | Y (`printer add --klipper`) | app: remains |
 | Find Klipper printers | N | Y | P | Y | Y (`printer scan`, `use`, `dismiss`) | none for the command line |
 | Test, rename, change address, replace Access Code or API key, lane data, detect, forget certificate, forget printer | Y | Y | Y | P (rename and remove in `config`; unpin; API key) | Y (one `printer` command each) | **closed** |
-| Live printer view: camera, pause, resume, stop, light | Y | P (link) | Y | N | P: state and slots in `printer show`; `printer live` prints where | remains: needs a screen for the camera |
+| Live printer view: camera, pause, resume, stop, light | Y | new | Y | N | P: state and slots in `printer show --watch`; `printer live` prints where the camera and controls are | remains: needs a screen for the camera |
 | Map slots | Y | Y | Y | Y | Y | none |
 | Map by loading filament | Y | Y | Y | Y | Y | none |
 | Collect a printer report | Y | Y | Y | Y | Y | none |
 | Saved printer reports | unknown | Y | unknown | N | Y (`printer reports`) | **closed** |
-| Load or unload a spool in a slot | Y | N | Y | N | N (`printer live` prints where) | remains |
-| Filament used, with undo | Y | P | Y | N | N (`spool` prints where) | remains |
+| Load or unload a spool in a slot; clear a slot | Y | new | Y | N | Y (`printer load`, `unload`, `clear`) | none for the command line |
+| Filament used, with undo | Y | new | Y | N | P (`printer usage` lists it) | remains: the undo is on the Hub page, the web app and the app |
 | Features on and off | N | Y | N | Y | Y, needs shown before switching | none for the command line |
 | Choose the setup | N | Y | N | Y | Y (`features setup`) | none for the command line |
 | Backups: make, list, download | N | Y | N | Y | Y | none for the command line |
@@ -2196,10 +2342,12 @@ this design.
 | Updates: check, install, roll back | P | Y | N | Y | Y | web app: remains |
 | Anthropic API key: set, check, remove | N | Y | N | Y | Y (`config`, Label Reader) | none for the command line |
 | Web passphrase | N | Y | N | Y | Y | none for the command line |
-| Catalog token | N | Y | N | N | Y (`catalog token`, `config`) | **closed** |
+| Catalog token | N | N (no field) | N | N | Y (`catalog token` is the one place) | none |
 | Setup code: show, new; revoke all trusted computers | N | Y | N | Y | Y (new code asks) | none for the command line |
 | Trusted computers: list, rename, revoke one | N | Y | N | N | N | remains: Hub page only |
 | Weigh Station: pair, flash the display | N | Y | N | Y | Y | none for the command line |
+| Devices: kind, version, out of date | new | new | N | N | new (`devices`) | web app: remains |
+| A Weigh Station's own page: status, sounds, lamps | N | new | N | N | new (`devices show`, `devices set`) | app, web app: remain |
 | Weigh Stations asking to pair | N | Y | N | N | N | remains: Hub page only |
 | Tag Reader tokens | N | Y | N | Y | Y | none for the command line |
 | Flash a Tag Reader | N | new (Flash a device) | N | Y | Y (`tag-reader flash`) | none for the command line |
@@ -2263,3 +2411,9 @@ The command line calls the same code as the Hub page's routes (`/setup/api/...`)
    in `config`.
 9. **Getting started.** The route `GET start` (`03-hub-page.md` section 15), which `status` reads for its Getting
    started block. Until it exists `status` has no Getting started block and no `getting_started` key.
+10. **Spools, slots, devices and the catalog form.** The kit routes `GET api/spools` (with `filter`, each spool with
+    `loaded` and `low`, and `spoolman_url`), `POST api/printers/<id>/slots/<slot>/clear`, the changed `unload`,
+    `GET api/library/local`, `POST api/library/local/form` and `DELETE api/library/local/<id>`, and the page routes
+    `GET /setup/api/devices`, `GET /setup/api/device/<id>` and `POST /setup/api/device/<id>/settings`
+    (`03-hub-page.md` section 15). Until they exist, the commands that need one say `Error: this Hub does not offer
+    that yet.` with the Fix `sudo spoolwarden update`.
