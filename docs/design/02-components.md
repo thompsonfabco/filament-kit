@@ -1997,7 +1997,9 @@ group; on expanded width `ListDetailPaneScaffold` shows the group beside the lis
 **Anatomy.** A card (`03-hub-page.md` section 3.8) with a title row, rows and a foot. Title row: "Getting started" and, at the right, the count "<n> of <m> done". Each row: a status badge (7.1) with
 the state word, the step's name in weight 650, one line of result or reason in `--muted`, and one button (4.1). Foot: a
 ghost button **Hide this list**. Hidden, it is one quiet line "Getting started: <n> of <m> done" with a link **Show**.
-When every shown step is done, the card says "All set" once and is gone.
+When every shown step is done, the card says "All set" once and is gone. While no step is done, one quiet row above the
+steps offers "Moving from another computer? Restore its backup": it is not a step, has no state word and is not counted
+in "<n> of <m>".
 
 **Sizes and tokens.** Rows as the rows of a collection (6.1): padding `var(--s3) var(--s4)`, a `--hairline` between rows,
 `--fs-m`. The state word is the status badge's: "Done" is `ok` with the filled circle; "Next" is bold on the first

@@ -538,7 +538,7 @@ Any step that can take longer than 2 seconds shows a progress line once 2 second
 
 | Command | JSON shape |
 |---|---|
-| `status`, `web status`, `label-reader status` | `{"rows": [{"group", "state", "text", "fix", "action"}], "summary": {...}}`, the rows of `GET /setup/api/overview` plus `group` (section 13); `status` adds `"storage": ` the answer of `GET api/storage-use`, `"running_low": <number of spools>` and `"getting_started": ` the answer of `GET start` (`{show, hidden, finished, done, total, steps: [{id, state, line, target}]}`, 9.1) |
+| `status`, `web status`, `label-reader status` | `{"rows": [{"group", "state", "text", "fix", "action"}], "summary": {...}}`, the rows of `GET /setup/api/overview` plus `group` (section 13); `status` adds `"storage": ` the answer of `GET api/storage-use`, `"running_low": <number of spools>` and `"getting_started": ` the answer of `GET start` (`{show, hidden, finished, restore_offer, done, total, steps: [{id, state, line, target}]}`, 9.1) |
 | `printer list`, `printer show` | the printer objects of `GET /setup/api/state` (`printers.list`): `serial, name, model, ip, configured, state, pinned, family` and, for Klipper, `host, port, api_key, lane_data` |
 | `printer test` | `{reachable, state, text}`, the reply of `printers/<serial>/test` |
 | `printer map` | the map view of `GET /api/printers/<serial>/map` at its end |
@@ -1169,8 +1169,10 @@ Filament Catalog
   (`sudo spoolwarden config` for the name and the Anthropic API key, `sudo spoolwarden locations`,
   `sudo spoolwarden features`, `sudo spoolwarden printer add`, `sudo spoolwarden printer map "<printer>"`,
   `sudo spoolwarden pair`, `sudo spoolwarden web passphrase`, `sudo spoolwarden pair --slicer-sync`,
-  `spoolwarden add` for the first spool, `sudo spoolwarden backup create`, `sudo spoolwarden restore <zip>`; the
-  command for installing the Label Reader is the one of 9.6). The block is not printed when the list is hidden or
+  `spoolwarden add` for the first spool, `sudo spoolwarden backup create`; the command for installing the Label Reader is the
+  one of 9.6). While no step is done, one quiet line above the steps, "Moving from another computer? Restore its
+  backup", names `sudo spoolwarden restore <zip>`; it is not a step, has no state word and is not counted in
+  "<n> of <m>". The block is not printed when the list is hidden or
   finished, and not with `--quiet`. Hiding, showing and the Keep buttons are on the Hub page only.
 - A group whose feature is switched off prints one row: `○ off  Switched off in Features.` (no Fix; it is not a
   problem).
@@ -1182,9 +1184,9 @@ Filament Catalog
 - `status --json` carries the numbers of the Storage row: `storage` is the answer of `GET api/storage-use`
   (`{filesystems: [{path_label, total, free, percent_used, state}], items: [{key, title, bytes}]}`), and
   `running_low` the number of spools running low, and `getting_started` the object of `GET start`
-  (`{show, hidden, finished, done, total, steps: [{id, state: done, next or open, line, target}]}`; the step ids are
-  `restore`, `name`, `storage`, `features`, `reader`, `key`, `printer`, `slots`, `phone`, `passphrase`, `pc`, `spool`,
-  `backup`).
+  (`{show, hidden, finished, restore_offer, done, total, steps: [{id, state: done, next or open, line, target}]}`; the
+  step ids are `name`, `storage`, `features`, `reader`, `key`, `printer`, `slots`, `phone`, `passphrase`, `pc`, `spool`,
+  `backup`; the Restore row is not a step, `restore_offer` is true while it shows).
 
 ### 9.2 `printer` and `klipper`
 
@@ -1942,7 +1944,7 @@ ID    TIME              KIND          SUBJECT        WHAT
 ### 9.17 `alerts`
 
 `spoolwarden alerts` shows which alert types are on and the thresholds, as Settings > Alerts does. Reading needs no
-sudo; every change needs sudo, as `config set` does. `<type>` is one of the eight fixed type keys (the `key` of each entry of `GET api/alerts`,
+sudo; every change needs sudo, as `config set` does; no route lets a paired phone or the web app change them. `<type>` is one of the eight fixed type keys (the `key` of each entry of `GET api/alerts`,
 shown in the first column):
 
 | Key | Alert | Events |

@@ -1943,7 +1943,7 @@ action emits it.
 | `print.resumed` | a paused job runs again | ok | clears `print-paused` | job, run, printer_job (Klipper) | now |
 | `print.finished` | a job ends well | ok | clears `print-paused` | job, minutes, run, printer_job (Klipper) | now |
 | `print.failed` | a job ends cancelled or with an error | bad | clears `print-paused` | job, percent, reason (`cancelled`, `error`, `unknown`), error text, run, printer_job (Klipper) | now |
-| `printer.error` | a new printer error code appears (Bambu HMS, print error) | bad | - | code, text | now |
+| `printer.error` | a printer error code appears (Bambu HMS, print error); the same code on the same printer is told again only after 30 minutes, a different code or the same code on another printer at once | bad | - | code, text | now |
 | `printer.offline` / `printer.online` | the Hub loses or regains a printer | warn / ok | `printer-offline:<printer>` | - | now |
 | `usage.recorded` | filament use of a job is settled | info | - | printer, job, spool, material, grams, run, printer_job (Klipper) | now |
 | `spool.low` | an opened spool falls to or under the running-low threshold | warn | raises `spool-low:<spool>` | spool, filament, material, grams left, others in stock, batch | now |
@@ -2003,6 +2003,11 @@ action emits it.
   | Device stopped answering (description: "A Weigh Station or a printer stopped answering.") | `device.down`, `printer.offline` | off |
 
 - Every event is written whatever the switches say; the switches only decide what is shown and sent as an alert.
+- **A printer error repeats rarely.** The same error code on the same printer is told again only after 30 minutes; a
+  different code, or the same code on another printer, is told at once.
+- **Who changes them.** The alert types and thresholds are changed on the Hub page and with `spoolwarden alerts` only.
+  No route lets a paired phone or the web app change them; the web app and the Android app show them read-only with
+  the line "Change this on the Hub page."
 - Each device decides for itself whether it gets notifications (one switch on that device), and keeps the switch on
   the device, not on the Hub: the Hub page keeps "Notifications in this browser" in the browser, the Android app in
   the app, and the phone web app is on while it has a push subscription. Banners inside an open interface need no
@@ -2234,7 +2239,8 @@ and the remote reader's HTTPS in 03 section 15.
   to HTTPS on update; only new installs take 443. "The printer station" in the code is that tag service, because the
   Printer Station / Tag Reader device itself listens on nothing.
 - **Typed addresses.** The Android app's manual entry and Slicer Sync's bare host try 443 first and 8710 second and keep
-  the one that answered with the fingerprint of the pairing; a typed port is used as typed.
+  the one that answered with the fingerprint of the pairing; a typed port is used as typed. Port 443 counts only when a
+  Hub answers `api/info` there: another web server on 443 is not a Hub, and 8710 is tried.
 - **Guided Setup is the installer's first question** and its default answer is Yes; after Yes the installer asks nothing
   more. The Hub page's Getting started panel is that setup, and an updated Hub starts with it hidden.
 - **Texts.** The installer's sentences stay literals in `install/install.sh` and `apply.py`, as all its texts are. Every
@@ -2268,7 +2274,7 @@ So the map has two parts.
 **Part A: no file of Stage 10; can start now, beside it.**
 
 ### AF0 Design text
-Depends on: none · Beside: AF1, AF7, AF8
+Design + docs · Depends on: none · Beside: AF1, AF7, AF8
 - **Files today:** `docs/design/*.md`, stacked on the events and alerts text.
 - **Change:** the design of this stage: 03 (4 Overview, 5.6 the add drawer, 7.3, 9 Features, 10.5, 10.7, 10.11, 15 routes),
   06 (the installer, `port`, `status`, `printer add`), 09 (this stage), 02 (the panel), and the container-query text
@@ -2278,7 +2284,7 @@ Depends on: none · Beside: AF1, AF7, AF8
 - **Check:** the design's own tests; every `8710` that states a default is gone from the documents.
 
 ### AF1 Hub: installer and port
-Depends on: none · Beside: AF0, AF7, AF8
+Server builder · Depends on: none · Beside: AF0, AF7, AF8
 - **Files today:** new `server/filament_kit/hubport.py`, new `server/filament_kit/firstrun.py`, `install/install.sh`,
   `server/filament_kit/apply.py`, `server/filament_kit/modules.py`, `server/filament_kit/setup_code.py` (the address
   line), `install/avahi/filament-kit.service` if its template must change, `tools/e2e/e2e.py`, `tools/e2e/run.sh`, new
@@ -2294,7 +2300,7 @@ Depends on: none · Beside: AF0, AF7, AF8
   assert a default are changed to the new rule (which of them do was not read).
 
 ### AF2 Hub: HTTPS on the satellites
-Depends on: AF1's `hubport` (free-port test, drop-in)
+Server builder · Depends on: AF1's `hubport` (free-port test, drop-in)
 - **Files today:** `server/filament_kit/station/__main__.py`, `station/http.py`, `station/state.py`,
   `station/server_api.py`, `station/pair_request.py`, `server/filament_kit/station_client.py`,
   `server/filament_kit/pairing.py` (the three values kept with a station's pairing), `server/filament_kit/tagsources.py`,
@@ -2308,15 +2314,16 @@ Depends on: AF1's `hubport` (free-port test, drop-in)
 - **Check:** prove first (items 5 and 6 of the list below). Then the tests of each listener and of the pin.
 
 ### AF7 Android: a typed address without a port
-Depends on: none · Beside: AF0, AF1, AF8
+App builder · Depends on: none · Beside: AF0, AF1, AF8
 - **Files today:** `android/.../ui/pair/PairViewModel.kt`, its tests (`PairViewModelTest`, `PairScreensTest`).
-- **Change:** 05 4.5: an address typed without a port tries 443, then 8710.
+- **Change:** 05 4.5: the Port field starts empty with a hint; an address typed without a port tries 443, then 8710,
+  and 443 counts only when a Hub answers `api/info` there.
 - **Keep:** scanned links and discovery, which already carry the port.
 - **Other interfaces:** none.
 - **Check:** the two test classes; prove first (item 3 of the list below).
 
 ### AF8 Slicer Sync: a bare host
-Depends on: none · Beside: AF0, AF1, AF7
+Klipper builder · Depends on: none · Beside: AF0, AF1, AF7
 - **Files today:** `pc-sync/fksync/client.py`, `pc-sync/fksync/__main__.py`, `pc-sync/tests/test_client.py`.
 - **Change:** a bare host tries 443, then 8710, and keeps the one that answered with the fingerprint of the pairing.
 - **Keep:** a typed port, used as typed.
@@ -2326,7 +2333,7 @@ Depends on: none · Beside: AF0, AF1, AF7
 **Part B: opens a file that a Stage 10 step also opens; starts after that step is merged.**
 
 ### AF5 Hub: command line, Checks rows, hello values and the texts
-Depends on: AF1, AF2; EA3 merged (it has `api.py`, `cli.py`, `status.py` and the catalogue)
+Server builder · Depends on: AF1, AF2; EA3 merged (it has `api.py`, `cli.py`, `status.py` and the catalogue)
 - **Files today:** `server/filament_kit/cli.py`, `server/filament_kit/klipper_cli.py`, `server/filament_kit/status.py`,
   `server/filament_kit/api.py` (only `station_hello`), `strings/en.json` and its generated copies, tests.
 - **Change:** `spoolwarden port`, the Getting started block and `getting_started` in `status`, `printer add` in the guided
@@ -2337,7 +2344,7 @@ Depends on: AF1, AF2; EA3 merged (it has `api.py`, `cli.py`, `status.py` and the
 - **Check:** the command tests; the route tests; the catalogue and wording tests (08 test 7).
 
 ### AF3 Hub page: the guided add drawer
-Depends on: AF5 (texts) · Beside: AF4
+Bug-bash 1 · Depends on: AF5 (texts) · Beside: AF4
 - **Files today:** `setup_static/setup_printers.js`, `setup_static/setup_printers_add.css`,
   `setup_console/printers_tab.py`, `server/tests/test_hub_printers.py`.
 - **Change:** 03 5.6: the guided add drawer and the Klipper test before saving.
@@ -2346,7 +2353,7 @@ Depends on: AF5 (texts) · Beside: AF4
 - **Check:** prove first (item 4 of the list below). Then the drawer's browser tests and AUT-5 on it.
 
 ### AF4 Hub page: the Label Reader lead-in
-Depends on: AF5 (texts) · Beside: AF3
+Bug-bash 1 · Depends on: AF5 (texts) · Beside: AF3
 - **Files today:** `setup_static/setup_features.js`, `setup_static/setup_features.css`.
 - **Change:** 03 9.4 and 9.5: the line in the preview drawer, the arrival in Settings, the row's "Not installed yet".
 - **Keep:** the other features' rows and drawers.
@@ -2354,7 +2361,7 @@ Depends on: AF5 (texts) · Beside: AF3
 - **Check:** the feature's browser tests; a failed job changes nothing.
 
 ### AF6 Hub page: Getting started, the Hub port, the arrival state
-Depends on: AF1, AF5; EA6 merged (it has `setup_page.py`, `setup_overview.js`, `setup_settings.js`)
+Bug-bash 1 · Depends on: AF1, AF5; EA6 merged (it has `setup_page.py`, `setup_overview.js`, `setup_settings.js`)
 - **Files today:** new `setup_static/setup_start.js`, new `setup_static/setup_start.css`, new
   `setup_console/start_tab.py`, `server/filament_kit/setup_page.py`, `setup_static/setup_overview.js`,
   `setup_static/setup_settings.js` and its CSS, `server/filament_kit/setup_helper.py` (the port change as a root job),
@@ -2367,7 +2374,7 @@ Depends on: AF1, AF5; EA6 merged (it has `setup_page.py`, `setup_overview.js`, `
   systemd.
 
 ### AF9 Documents
-Depends on: AF1 to AF8 merged; after EA9 if that is open then
+Design + docs · Depends on: AF1 to AF8 merged; after EA9 if that is open then
 - **Files today:** `docs/*.md`, `README.md`, `release-notes/next.md`.
 - **Change:** the install guide (the first question, the port, the address without a port), the user guide, the app
   documents' pairing parts, the release notes.

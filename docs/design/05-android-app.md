@@ -476,7 +476,7 @@ stay visible over a `--scrim` band.
 |---|---|---|
 | Heading | "Enter the Hub's address" | `Text` `--fs-l` `--fw-title` |
 | Address | Label "IP address or name", placeholder "192.0.2.10 or hub.local", one line, `KeyboardType.Uri`, no autocorrect | `OutlinedTextField` |
-| Port | Label "Port", empty, `KeyboardType.Number`, `port-field` wide. Left empty, Connect tries port 443 first and 8710 second and keeps the one that answered with the fingerprint of the pairing; a typed port is used as typed | `OutlinedTextField` |
+| Port | Label "Port", starts empty with a hint that an empty port means 443, then 8710, `KeyboardType.Number`, `port-field` wide. Left empty, Connect tries port 443 first and 8710 second and keeps the one that answered with the fingerprint of the pairing; port 443 counts only when a Hub answers `api/info` there (another web server on 443 is not a Hub), otherwise 8710 is tried; a typed port is used as typed | `OutlinedTextField` |
 | Connect | "Connect"; "Connecting…" with a spinner while busy; fields disabled while busy | `Button` |
 | Errors | Under the field they concern: "Enter the Hub's address." (address empty); "The port must be a number from 1 to 65535." (port). Connection failures under the button (4.9). | supporting text, notice line |
 
@@ -1712,8 +1712,8 @@ Field "Tag ID" (`--mono`) and button "Simulate a tag tap": behaves as a real tap
 ### 12.7 Alerts (`settings/alerts`)
 
 The row sits after Hub connection in 12.1 (its number only keeps the numbers of 12.2 to 12.6 as they are). The alert
-types and thresholds are edited on the Hub page or the command line, like every setting; this screen is about this
-phone.
+types and thresholds are changed on the Hub page and with `spoolwarden alerts` only; this screen shows them read-only
+with the line "Change this on the Hub page." and is otherwise about this phone.
 
 | Element | Text / behaviour | Material 3 |
 |---|---|---|
