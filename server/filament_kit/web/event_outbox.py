@@ -30,7 +30,7 @@ from .slots import SlotError
 log = logging.getLogger(__name__)
 
 PATH = "/api/events/web"
-MAX_ITEMS = 1000            # items kept; over it the oldest are dropped
+MAX_ITEMS = 500             # items kept (R80 E1); over it the oldest are dropped
 MAX_AGE = 7 * 86400         # seconds an item is kept while the Hub does not take it
 MAX_REJECTED = 100          # items kept in the rejected file
 BATCH = 100                 # items per call (the Hub takes 500)

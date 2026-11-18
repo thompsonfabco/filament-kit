@@ -329,3 +329,14 @@ def test_a_phone_request_does_not_wait_for_a_hub_that_is_down_and_the_change_is_
     assert len(eo.Outbox(path)) == 1                                # kept for the next start
     hub.down = False
     assert eo.Sender(eo.Outbox(path), hub).flush() is True and [e["kind"] for e in hub.stored] == ["spool.moved"]
+
+
+def test_the_501st_item_drops_the_oldest_with_a_log_line(tmp_path, caplog):
+    assert eo.MAX_ITEMS == 500                                     # R80 E1
+    box = eo.Outbox(tmp_path / "o.xml")
+    with caplog.at_level(logging.WARNING):
+        for i in range(501):
+            box.add("spool.moved", {"type": "spool", "id": "7"}, None, {"after_location": f"B{i}"}, AT)
+    got = box.pending(1000)
+    assert len(got) == 500 and got[0]["data"]["after_location"] == "B1" and got[-1]["data"]["after_location"] == "B500"
+    assert sum("more than 500 events wait" in r.message for r in caplog.records) == 1
