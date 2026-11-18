@@ -1030,16 +1030,17 @@ used.
 ### 7.9 Undo the last action
 
 After an action that changes a spool or a slot (Update weight 7.3, Move 7.4, Mark empty 7.5, Load 7.6, Link a tag 7.8,
-and Unload and Clear slot 9.5) the app shows a `Snackbar` that says what happened and carries "Undo" for 10 seconds, with
-the sentences of the Hub page (`03-hub-page.md` section 2.9): for Unload "Unloaded Bambu Lab PETG HF Orange (212) from
-A2 of Workshop X1." and for Clear slot "Cleared slot A2 of Workshop X1." The rule is the Hub's: an event is undone once,
-within 7 days, and only while nothing changed since. "Undo" reads the newest event of that spool or slot (`GET
-api/events` with `subject` and `limit=1`) and, when its `undo.possible` is true, sends `POST api/events/{id}/undo`; the
-snackbar then says "Put back." or the refusal "This changed again since, so it cannot be undone." (any other refusal as
-the Hub sends it), and after a load or an unload it adds "The printer still shows what it was set to." The screen's
-result line is replaced by the answer and the screen reads from the Hub again. There is no "Undo" when the event cannot
-be undone. The snackbar's time is as 3.1 says. Nothing else has an undo: removing a printer, a key, a pairing or a
-location still asks first.
+and Unload and Clear slot 9.5) the app shows a `Snackbar` that says what happened and carries "Undo" for 10 seconds,
+with the sentences of the Hub page (`03-hub-page.md` section 2.9): for Unload "Unloaded Bambu Lab PETG HF Orange (212)
+from A2 of Workshop X1." and for Clear slot "Cleared slot A2 of Workshop X1." The rule is the Hub's: an event is undone
+once, within 7 days, and only while nothing changed since. The answer of the change carries `event_id`, the id of the
+event the change made (absent on a dry run), and "Undo" sends `POST api/events/{id}/undo` with it; where an answer has
+none, "Undo" reads the newest event of that spool or slot (`GET api/events` with `subject` and `limit=1`) and goes on
+only when its `undo.possible` is true. The snackbar then says "Put back." or the refusal "This changed again since, so
+it cannot be undone." (any other refusal as the Hub sends it), and after a load or an unload it adds "The printer still
+shows what it was set to." The screen's result line is replaced by the answer and the screen reads from the Hub again.
+There is no "Undo" when the event cannot be undone. The snackbar's time is as 3.1 says. Nothing else has an undo:
+removing a printer, a key, a pairing or a location still asks first.
 
 ---
 
@@ -1990,6 +1991,7 @@ The design above works with the Hub as it is. These additions to the Hub's paire
 | `GET api/spools/low`: `{threshold_g, spools: [{id, filament, material, color, remaining_g, location, in_stock, last_one}]}`, least filament first | 5 the running low line; 7.1 the Running low chip | No line and no chip. |
 | A per-item structure in the dry-run answer of `POST api/intake/add` (what is created, what is reused, where each spool goes). | 6.5 rows | The app shows the Hub's lines one per row. |
 | `GET api/hub`: `{name, version, newest: {version, checked_at}?, update_available, checks: [{group, state: "ok", "look", "note" or "off", text, fix?}], getting_started: {done, total, hidden, finished}, features: [{id, name, on}], catalog: {version?, checked_at?}, backup: {last_at?, nightly}, reader: {engine, key_set}, devices: [{name, kind, version?, last_seen?, out_of_date, this}], records_kept, spoolman_url?, hub_page?}`; `hub_page` and `spoolman_url` are built from the host the phone used and are absent where the thing cannot be reached | 5 the Getting started line, 12.8 | No Hub screen and no Getting started line. |
+| `event_id` in the answer of each route that makes an undoable change: `PATCH api/spools/{id}`, `POST api/spools/{id}/link` and the slot `load`, `unload` and `clear` routes (absent on a dry run) | 7 Undo (the snackbar) | "Undo" reads the newest event of the spool or slot (`GET api/events` with `subject` and `limit=1`). |
 | `POST api/printers/{id}/slots/{label}/clear` with `{dry_run}` (answer `{slot, spool?, moved_back?, waiting_ended, printer_cleared, dry_run}`); the answer of `unload` gains `waiting_ended`; the load answer's `pending` is read | 9.5 Clear slot, 7.6 and 9.5 waiting | No "Clear slot" button; a waiting load shows as loaded. |
 | `POST api/library/local/form` with `{brand, name, material, nozzle_min?, nozzle_max?, bed_min?, bed_max?, density?, max_volumetric_speed?, bambu_parent?, notes?}` (201 `{entry}`; 400 `{error: "invalid_entry", problems: [{field, text}]}`), `GET api/library/local` (`{entries: [{id, brand, name, material, added}]}`), `DELETE api/library/local/{id}` (`{removed: true}`) | 8 | The form and the list are absent. |
 | `spoolman_url` in the answer of `GET api/spools` | 7.1 "Open Spoolman" | The item is absent. |

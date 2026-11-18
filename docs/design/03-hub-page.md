@@ -277,8 +277,10 @@ and carries **Undo** for 10 seconds. It is the rule behind Update weight, Move, 
   cannot be undone."; any other refusal (too old, already undone, not undoable) shows the Hub's text as sent. After a
   load or an unload the answer adds "The printer still shows what it was set to.": undoing puts the Hub's record
   back and does not change the printer's own slot setting.
-- **Finding the event.** The change's answer holds the spool, not the event, so the page reads the newest event of
-  that spool or slot (`G activity` with `subject`) and shows **Undo** only when its `undo.possible` is true.
+- **Finding the event.** The change's answer carries `event_id`, the id of the event the change made, beside what it
+  answers otherwise (absent on a dry run), and **Undo** sends `P events/<id>/undo` with it. Where an answer has none,
+  the page reads the newest event of that spool or slot (`G activity` with `subject`) and shows **Undo** only when its
+  `undo.possible` is true.
 - **Missing the toast costs nothing.** In Logs > Activity (13.4) a row that can still be undone keeps **Undo** as long
   as the Hub allows it. For a person who asked for no time limits the toast stays until it is dismissed
   (`07-accessibility.md` TIM-7).
@@ -727,7 +729,8 @@ cannot be read. Grams under 1000 read "640 g".
   | Devices | Needs a look | "<n> devices are out of date." ("1 device is out of date.") | **Open Devices** → `#devices` (the Hub does not update a satellite itself, 7.2) |
   | Devices | Needs a look | "The tag source <address> is not using HTTPS." (a printer-side tag service that answers only on plain HTTP, which the Hub still reads) | none |
   | Devices | Needs a look | "The certificate of the tag source <address> has changed." | "Save the tag source again to trust the new certificate." |
-  | Label Reader | Needs a look | "The Label Reader at <address> is not using HTTPS." (a reader on another machine, until its own side serves HTTPS) | none |
+  | Label Reader | Note | "The Label Reader at <address> is not using HTTPS. A later Label Reader version adds it." (a reader on another machine at an `http://` address, until the reader's own software can serve HTTPS) | none |
+  | Label Reader | Needs a look | "The Label Reader at <address> is not using HTTPS." (from the release that turns the rule on, for a stored `http://` address of a reader on another machine, 10.5) | "Update the Label Reader on that machine, then change its address to https:// in Settings > Label Reader." |
   | Label Reader | Needs a look | "The Label Reader is switched on but not installed." | The command that installs the reader, as a code block with Copy |
 - Row action `ensure_fields`: primary button **Make the fields** (code) → `P fields`, the page's main action while
   its check needs a look (4.3; a default button while Getting started shows a Next step); inline result "Made the fields: <made>." or, when `made` is 0, "The fields were
@@ -1285,7 +1288,7 @@ a suggestion is shown, otherwise **Edit by hand** is a default button and there 
 ## 7. Devices
 
 **Purpose.** Everything that connects to the Hub: phones and the app, Slicer Sync, the Weigh Station, Tag Readers,
-and trusted computers; what version each runs, whether it is out of date, and each device's own page. Address
+and trusted computers; what version each runs, whether it is out of date, and each device's detail. Address
 `#devices`.
 
 **Data.** `G state` (`devices`, `readers`, `station`), `G devices`, `G device/<id>`, `G webapp`, `G trust`; when
@@ -1346,7 +1349,7 @@ Header actions: primary **Pair a phone**; default **Link Slicer Sync**; overflow
 | **Link a Weigh Station** | Opens the pairing dialog for a Weigh Station on another computer | `P pair` (code) `{kind: "station"}` |
 | **Link Home Assistant** | Opens the pairing dialog for the Home Assistant integration, which may only read (the viewer role, `09-implementation-order.md` Stage 13) | `P pair` (code) `{kind: "home-assistant"}` |
 | **Pair the Weigh Station on this Hub** | Starts pairing of the Hub's own Weigh Station; job strip follows | `P pair` (code) `{kind: "station"}`, then job `station_pair` |
-| **Open** | A Weigh Station's page in a new tab, or the detail of any other device (7.10) | `G device/<id>` |
+| **Open** | The detail of the device, a Weigh Station's included (7.10) | `G device/<id>` |
 | **Unpair** | Confirm dialog | `P devices/<id>/revoke` (code) |
 
 **Pairing dialog** (dialog on desktop and tablet, bottom sheet on phone; address `#devices/pair`). Polls `G state`
@@ -1445,7 +1448,7 @@ Title "Trusted computers" with status badge "On" or "Off".
 | Built-in revoke refused (409) | Not reachable: built-in rows have no Unpair |
 | Weigh Station feature off | **Pair the Weigh Station on this Hub** is absent; the other pairings stay |
 | A device sends no version | "Version not known" in its row; it is never called out of date (7.9) |
-| The Weigh Station's page cannot be reached | **Open** opens a page of the Hub that says "The Weigh Station <name> does not answer. Check that it is on, then try again." |
+| The Weigh Station cannot be reached | The detail says "The Weigh Station <name> does not answer. Check that it is on, then try again." |
 
 **Main action:** Pair a phone.
 
@@ -1479,23 +1482,48 @@ Assistant: its version is shown and nothing more). The Overview's Devices tile a
 Devices, Needs a look: "<n> devices are out of date.", 4.2) point to Devices. The Hub does not update a satellite
 itself.
 
-### 7.10 A device's own page
+### 7.10 A device's detail
 
-**The Weigh Station's page.** A paired Weigh Station serves a small page of its own over its HTTPS listener. It shows
-the station's status (the tag, the scale, the last weight, the panel and its version, the air, the step of a running
-intake and the photo) and its settings: sounds (beep, speech, voice, volume), the panel (the yellow and red swap) and
-**which lamp lights for which step** of an intake, chosen from the panel's lamps or Off. The settings are kept on the
-station in a file of their own in its state folder and win over the values the installer wrote; **Back to the installed
-values** removes them and the installed values apply again.
+**Open** on a row opens the detail of that device in the Hub page itself (`#devices/<id>`, a side drawer on desktop, a
+full-height dialog on tablet, a bottom sheet on phone). The Hub page draws it; no page of a device is passed through the
+Hub, and nothing a device sends is ever served by the Hub as HTML, script or style.
 
-**How it is reached.** From Devices: **Open** on the station's row opens `https://<hub>/setup/device/<id>/` in a new
-tab. The Hub passes the station's page through, with its own pinned HTTPS call to the station, so the browser needs no
-second certificate warning and the station needs no sign-in of its own; the lock of this page decides. Looking needs
-nothing; saving a setting needs the page Unlocked or Trusted and asks for the code in place. The station answers only
-the Hub, and takes a setting change only with a proof the Hub can give because the station is paired.
+**The Weigh Station's detail.** It shows the station's status (the tag, the scale, the last weight, the panel and its
+version, the air, the step of a running intake and the photo) and its settings: sounds (beep, speech, voice, volume),
+the panel (the yellow and red swap) and **which lamp lights for which step** of an intake, chosen from the panel's lamps
+or Off. The settings are kept on the station in a file of their own in its state folder and win over the values the
+installer wrote; **Back to the installed values** removes them and the installed values apply again. Looking needs
+nothing; saving a setting needs the page Unlocked or Trusted and asks for the code in place. The station takes a setting
+change only with a proof the Hub can give because the station is paired.
 
-**A device that serves nothing.** **Open** shows a detail in the Hub page itself (`#devices/<id>`, a side drawer on
-desktop, a full-height dialog on tablet, a bottom sheet on phone):
+**What the Hub takes from a station is checked data.** The Hub reads the status and the settings from the station and
+shows what passes these checks:
+
+- JSON only (`application/json`), at most 256 KiB, a 5 second limit; any redirect is an error; only to the stored host
+  and port of that pairing, over the pinned certificate when the station has one (7.3).
+- Every text from a station is shown as text, never as markup.
+- A setting's `id` must match `[a-z0-9_.-]{1,40}`, its `kind` is one of `switch`, `choice`, `number`, `text`, a `label`
+  is at most 80 characters, and there are at most 60 settings. Anything else is dropped, and the detail says "Some of
+  this station's settings could not be shown."
+- The photo is taken only as `image/jpeg`, at most 4 MiB, through `G device/<id>/photo` (open). `G device/<id>` says
+  with `photo` whether there is one.
+
+**The station's own page.** The detail has **Open this station's page**: a new tab to the station's own address
+(`rel="noopener noreferrer"`), never fetched, framed or proxied by the Hub. Its hint: "Your browser asks once whether to
+trust this station's certificate." It is shown for any device whose `G device/<id>` gives an `own_page`; a Tag Reader, a
+phone and the Slicer Sync PC give none and have the Hub-drawn detail only.
+
+- The link needs the page Unlocked or Trusted. **Open this station's page** calls `P device/<id>/open`: the Hub asks the
+  station for a one-time ticket and answers `{address: "<own_page>#ticket=<ticket>"}`, which the page opens.
+- The station's page hands the ticket to the station, which answers with a session cookie of its own, on its own origin,
+  for 60 minutes; with it that browser may read the status and change the settings there. A ticket works once, within
+  60 seconds, and travels after `#`.
+- Without a ticket or a session the station's page says only: "Open this page from the Hub: Devices, this station, Open
+  this station's page."
+- The station serves its page's own files (HTML, script, stylesheet) to any address on the home network; its data
+  routes (`/state`, `/settings`, `/photo`, `/last-tag`) answer only its allow-list or a browser with a session.
+
+**Other devices.** The detail of a device that gives no `own_page` is:
 
 | Device | The detail |
 |---|---|
@@ -1503,15 +1531,16 @@ desktop, a full-height dialog on tablet, a bottom sheet on phone):
 | Phone, Slicer Sync PC, Web app, Home Assistant | Kind, version, paired, last seen |
 
 A Label Reader on another machine is not a paired device; Settings > Label Reader stays its place (10.5). The Weigh
-Station voice group of Settings (10.10) links to the station's page, and the voice is one value: the station's own file
-wins, and the group reads it through the same pass-through when the station answers.
+Station voice group of Settings (10.10) links to the station's detail, and the voice is one value: the station's own
+file wins, and the group reads it through `G device/<id>` when the station answers.
 
 | Control | Does | Endpoint |
 |---|---|---|
-| **Open** (a Weigh Station's row) | Opens the station's page in a new tab | `G /setup/device/<id>/` and what is under it (the pass-through; looking open) |
-| **Open** (any other row) | Opens the detail | `G device/<id>` |
-| A setting on the station's page | Saves it on the station | `P device/<id>/settings` (code) `{<setting id>: <value>}` |
+| **Open** (any row) | Opens the detail | `G device/<id>` (open; `{device, status?, settings?, own_page?, photo}`) |
+| The photo | Shows the station's photo | `G device/<id>/photo` (open; `image/jpeg`) |
+| A setting in the detail | Saves it on the station | `P device/<id>/settings` (code) `{<setting id>: <value>}` |
 | **Back to the installed values** | Removes the station's own values; result "The installed values apply again." | `P device/<id>/settings` (code) `{reset: true}` |
+| **Open this station's page** | Opens the station's own address in a new tab, with the ticket | `P device/<id>/open` (unlocked) → `{address}` |
 
 ---
 
@@ -1942,7 +1971,7 @@ only Records kept stays editable.
 | Anthropic API key | Key row: status badge "Set" / "Not set", masked value, default **Check**, default **Replace** (or **Set a key**), danger **Remove** (only when set). Replace reveals a secret field "New Anthropic API key", placeholder `sk-ant-…`, and a ghost **Cancel** | New key: `P key` (code) `{key}`, sent by the group's Save. Check: `P key/check` (view). Remove: confirm, `P key/remove` (code) | Cloud on (otherwise one line: "Only used by Label Reader: Cloud (Claude), which is switched off.") | Check: inline spinner "Checking the key…", then the Hub's text as OK or error; "Wait 3 seconds between checks." when too soon. After a new key is saved: "Key saved. Check it to be sure it works." |
 | Claude model | Text, `--mono`, placeholder "Default model" | `model` | Cloud on | Hint "Leave empty for the default model." Restarts the Hub. |
 | Reads per day | Number with unit "reads" | `reads_per_day` | Cloud on | Hint "Cloud reads allowed per day; reads On this Hub do not count." Restarts the Hub. Field error "Enter a whole number from 1." |
-| Address | Text, `--mono`, default `http://127.0.0.1:7915` | `local_intake.url` (unreleased) | On this Hub on | Hint "Where the reader answers: this Hub, or another computer at home." A reader on this machine (`127.0.0.1`) stays on plain `http://`, as it never leaves the machine. A reader on another machine needs an `https://` address: an `http://` address that is not `127.0.0.1` is refused at the field with "A Label Reader on another machine needs an https address." |
+| Address | Text, `--mono`, default `http://127.0.0.1:7915` | `local_intake.url` (unreleased) | On this Hub on | Hint "Where the reader answers: this Hub, or another computer at home." A reader on this machine (`127.0.0.1`) stays on plain `http://`, as it never leaves the machine. Until the reader's own software can serve HTTPS, an `http://` address of a reader on another machine is accepted and used as today, and an `https://` address is pinned at **Test**; the Checks show a Note for the `http://` one (4.2). From the release that turns the rule on (only together with a reader version that serves HTTPS; it is not a setting), saving an `http://` address that is not `127.0.0.1` is refused at the field with "A Label Reader on another machine needs an https address."; a stored one keeps working and its Checks row becomes Needs a look (4.2). |
 | **Test** | Default button beside Address | The saved address: `G settings/local-intake` (view, unreleased). An address that is typed but not saved: the Hub's test of a given address, a change-like request that passes the lock (the Hub contacts a host the person typed, so it asks for the setup code like any change; it sends no token there and follows no redirect) | On this Hub on | Inline spinner "Asking the reader…"; OK "Answers: version <v>, API <n>, tiers <list>, corrections <supported / not supported>."; warn "Answers, but degraded: <reason>."; error "No answer at <address>. Check that the reader is running and the address." Test works on what the field shows: the saved address without the lock, a changed address after unlocking in place, without saving it. Until the Hub offers the test of a given address, Test is disabled while the field holds an unsaved change, with the reason "Save the address first, then test it." A 409 (On this Hub switched off) shows "Label Reader: On this Hub is switched off. Switch it on in Features." For a reader at an `https://` address on another machine, Test also pins its certificate the first time (trust on first use) and shows the fingerprint, in groups of four in `--mono`, beside the result; from then on the Hub accepts no other certificate from that address. |
 | Tier | Segmented choice "Automatic" / "Processor (CPU)" / "Graphics card (GPU)" | `local_intake.tier` (unreleased; `auto` / `cpu` / `gpu`) | On this Hub on | Hint "Automatic uses the graphics card when the reader has one." |
 | Records kept | Number | `intake.history_keep` | Always | Hint "How many of the newest additions Recently added keeps with their photos (0 keeps none). Now <count> records, <size> of photos; a record with photos takes about 0.5 to 2 MB." Field error "Enter a whole number from 0 to 500." |
@@ -2136,9 +2165,9 @@ state "The Weigh Station is switched off on this machine." with **Go to Features
 
 No Save button.
 
-When the Weigh Station is paired, the group ends with the ghost link **Open the Weigh Station's page** (7.10), where the
-station's sounds and lamps are set too. The voice is one value: the station's own file wins, and this group reads it
-through the same pass-through when the station answers.
+When the Weigh Station is paired, the group ends with the ghost link **Open the Weigh Station's detail** (7.10), where
+the station's sounds and lamps are set too. The voice is one value: the station's own file wins, and this group reads it
+through `G device/<id>` when the station answers.
 
 ### 10.11 Dialogs
 
@@ -2669,7 +2698,7 @@ and meaning, possibly reworded; "Moved to" a new place; "Merged into" combined w
 | Request text, six-digit hint, **Pair**, **Refuse**, "Paired <name>…" | Kept | (7.3) |
 | Card "iPhone: the web app" | Renamed | "The web app on a phone" (7.4) |
 | Home address + QR, Safari warning, public address + QR, "Add to Home Screen", error | Kept | (7.4); the home address gains **Open** |
-| (none) | Added | Kind, version, "Out of date" lines, the Weigh Station's own page and the detail of a device that serves nothing (7.9, 7.10) |
+| (none) | Added | Kind, version, "Out of date" lines and the detail of a device, the Weigh Station's included (7.9, 7.10) |
 | Card "NFC readers" | Renamed | "Tag Readers" (7.5) |
 | Reader rows + **Revoke** + confirm, "No reader tokens.", store error | Kept | (7.5, 7.7) |
 | Name field + **Make a token**, token block, "Shown only this once…" note | Kept | (7.5) |
@@ -2840,13 +2869,12 @@ column says.
 | The Hub's port in the answer of `G settings/general` (`port`), and the change of it as a job (`P job` (code) with the new port) | Settings > Network and addresses, Hub port (10.7, 10.11) | The Hub port row is hidden |
 | The three values a Weigh Station tells the Hub at every start on `GET api/station/hello`: `fp` (the SHA-256 of its certificate), `port` and `version`, kept with its pairing | The Hub's calls to a Weigh Station (7.3), the Checks row "The Weigh Station <name> is not using HTTPS. Update it." (4.2) | A Weigh Station that sends none is called over plain HTTP as before, and the Checks show that row |
 | Printers announced by Bambu Lab printers, listed by the Hub's own listener for them | Add a printer, step 1 (5.6) | The found list holds Klipper printers only, with the sentence "Bambu Lab printers are added by address." |
-| A Label Reader on another machine that serves HTTPS on its port (a change in the reader's own repository) | Settings > Label Reader, Address and Test (10.5) | The Hub accepts the reader's `http://` address as before and the Checks show the row "The Label Reader at <address> is not using HTTPS." |
-| The page routes of the Spools section, under `/setup/api/`: `GET spools` (`q`, `filter`, `offset`, `limit`; answer `{spools, total, offset, has_more, spoolman_url?}`, `filter` one of `sealed`, `opened`, `loaded`, `low`, none meaning every spool that is not empty), `GET spools/{id}` (`{spool, last_use: {at, printer, grams}?}`), `POST spools/{id}` (`{gross` or `remaining` or `location` or `auto_location: true` or `empty`, `dry_run}` → `{spool, before, dry}`), `GET spools/last-tag` (`{tag: {uid, read_at, source}?}`), `POST spools/{id}/link` (`{tag, dry_run}` → `{spool, before, dry}`); a spool carries `loaded` and `low` besides the spool view; the three changes need the page unlocked | Spools (16) | The section shows the error state "Could not read the spools. <Hub's text>" with **Try again** |
-| The page routes of the live view: `GET printers/{id}/live` (`{summary, status}` as `GET api/printers/{id}` gives them, the slots with `pending`), `POST printers/{id}/command` (`{action}`: `pause`, `resume`, `stop` with `confirm: true`, `light_on`, `light_off`), `POST printers/{id}/slots/{label}/load`, `unload` and `clear` (`{spool_id?, dry_run}`; `clear` answers `{slot, spool?, moved_back?, waiting_ended, printer_cleared, dry_run}`), `GET printers/{id}/usage` (`days`), `POST usage/{entry}/undo`, `GET printers/{id}/camera.mjpeg` and `camera/{name}` (on a computer that is not trusted, with `?ticket=<ticket>` from `POST printers/{id}/camera/ticket`, which takes the setup code and answers `{ticket, expires_in: 60}`: a ticket starts one stream within 60 seconds, for that printer only); they call the same printer code as the kit routes, in the Hub's process, and not the web app's routes; the state and usage reads are open, and every other route, the camera included, needs the page unlocked | Printers, the live view (5.10) | The expansion shows the facts of 5.3 and no live view |
+| A Label Reader on another machine that serves HTTPS on its port (a change in the reader's own repository) | Settings > Label Reader, Address and Test (10.5) | The Hub accepts the reader's `http://` address as before and the Checks show the Note "The Label Reader at <address> is not using HTTPS. A later Label Reader version adds it." |
+| The page routes of the Spools section, under `/setup/api/`: `GET spools` (`q`, `filter`, `offset`, `limit`; answer `{spools, total, offset, has_more, spoolman_url?}`, `filter` one of `sealed`, `opened`, `loaded`, `low`, none meaning every spool that is not empty), `GET spools/{id}` (`{spool, last_use: {at, printer, grams}?}`), `POST spools/{id}` (`{gross` or `remaining` or `location` or `auto_location: true` or `empty`, `dry_run}` → `{spool, before, dry, event_id?}`), `GET spools/last-tag` (`{tag: {uid, read_at, source}?}`), `POST spools/{id}/link` (`{tag, dry_run}` → `{spool, before, dry, event_id?}`); a spool carries `loaded` and `low` besides the spool view; the three changes need the page unlocked; a change answers `event_id`, the id of its event, absent on a dry run (2.9) | Spools (16) | The section shows the error state "Could not read the spools. <Hub's text>" with **Try again** |
+| The page routes of the live view: `GET printers/{id}/live` (`{summary, status}` as `GET api/printers/{id}` gives them, the slots with `pending`), `POST printers/{id}/command` (`{action}`: `pause`, `resume`, `stop` with `confirm: true`, `light_on`, `light_off`), `POST printers/{id}/slots/{label}/load`, `unload` and `clear` (`{spool_id?, dry_run}`; `clear` answers `{slot, spool?, moved_back?, waiting_ended, printer_cleared, dry_run}`; each of the three also answers `event_id`, absent on a dry run), `GET printers/{id}/usage` (`days`), `POST usage/{entry}/undo`, `GET printers/{id}/camera.mjpeg` and `camera/{name}` (on a computer that is not trusted, with `?ticket=<ticket>` from `POST printers/{id}/camera/ticket`, which takes the setup code and answers `{ticket, expires_in: 60}`: a ticket starts one stream within 60 seconds, for that printer only); they call the same printer code as the kit routes, in the Hub's process, and not the web app's routes; the state and usage reads are open, and every other route, the camera included, needs the page unlocked | Printers, the live view (5.10) | The expansion shows the facts of 5.3 and no live view |
 | The Hub page's part of the catalog form: `GET library/local` (`{entries: [{id, brand, name, material, added}]}`), `POST library/local` (the form's values; 400 `{error: "invalid_entry", problems: [{field, text}]}`) and `POST library/local/{id}/remove` (`{removed: true}`); the Hub builds the entry from the values with one function | Settings > Filament Catalog (10.9) | The group shows its state and the update buttons only |
-| Devices: `GET devices` (`{devices: [{id, name, kind, version?, newest?, out_of_date, advice?, paired?, last_seen?, reachable?, built_in, page}]}`, `kind` one of `phone`, `pc`, `station`, `web`, `reader`, `builtin`; the Tag Readers are rows of it), `GET device/{id}` (`{device, status?, settings?: [{id, label, kind, value, choices?, min?, max?}]}`) and `POST device/{id}/settings` (code); the Hub keeps each client's `X-Spoolwarden-Client: <kind>/<version>` and each reader's `X-Reader-Build` with its pairing, and a Weigh Station's hello gives its version every 5 minutes; `GET state` keeps its `devices` and `readers` fields | Devices (7.2, 7.9) | The list is the one of `G state`, without Kind, Version and out-of-date lines |
-| The station's own page passed through: `/setup/device/{id}/` and what is under it, over the Hub's own pinned HTTPS call to the station (relative addresses only), with this page's lock deciding: looking open, saving a setting unlocked | Devices, **Open** (7.10) | **Open** on a Weigh Station shows the detail of 7.10 only |
-| `GET api/events` takes `activity=1` (only the kinds of the Activity list), `subject=<type>:<id>` (for example `spool:212`) and `actor=<type>` or `actor=<type>:<id>`; each served event gains `undo: {possible: bool, until?, why_not?: "changed_since" or "too_old" or "already_undone" or "not_undoable"}`, `undone: bool` and `undo_of?: <id>`; `POST api/events/{id}/undo` answers 200 `{undone: true, event: <the new event>, note?: <text>}`, 409 `{error: <one of the why_not values>, text}` or 404; a web token may call it | Activity (13.4), Undo (2.9), a spool's last ten events (16.3) | No Activity choice, no Undo button, no last ten events |
+| Devices: `GET devices` (`{devices: [{id, name, kind, version?, newest?, out_of_date, advice?, paired?, last_seen?, reachable?, built_in, page}]}`, `kind` one of `phone`, `pc`, `station`, `web`, `reader`, `builtin`; the Tag Readers are rows of it), `GET device/{id}` (`{device, status?, settings?: [{id, label, kind, value, choices?, min?, max?}], own_page: <address as text>?, photo: bool}`), `GET device/{id}/photo` (open; `image/jpeg`), `POST device/{id}/settings` (code) and `POST device/{id}/open` (unlocked; the Hub asks the station for a one-time ticket and answers `{address: "<own_page>#ticket=<ticket>"}`); what the Hub takes from a station is checked (JSON only, at most 256 KiB, 5 seconds, no redirect, only to the stored host and port over the pinned certificate; a setting's `id` matches `[a-z0-9_.-]{1,40}`, its `kind` is `switch`, `choice`, `number` or `text`, a `label` is at most 80 characters, at most 60 settings; the photo is `image/jpeg`, at most 4 MiB; 7.10); the Hub keeps each client's `X-Spoolwarden-Client: <kind>/<version>` and each reader's `X-Reader-Build` with its pairing, and a Weigh Station's hello gives its version every 5 minutes; `GET state` keeps its `devices` and `readers` fields | Devices (7.2, 7.9, 7.10) | The list is the one of `G state`, without Kind, Version and out-of-date lines |
+| `GET api/events` takes `activity=1` (only the kinds of the Activity list), `subject=<type>:<id>` (for example `spool:212`) and `actor=<type>` or `actor=<type>:<id>`; each served event gains `undo: {possible: bool, until?, why_not?: "changed_since" or "too_old" or "already_undone" or "not_undoable"}`, `undone: bool` and `undo_of?: <id>`; `POST api/events/{id}/undo` answers 200 `{undone: true, event: <the new event>, note?: <text>}`, 409 `{error: <one of the why_not values>, text}` or 404; a web token may call it; the routes that make an undoable change (`PATCH api/spools/{id}`, `POST api/spools/{id}/link`, the slot `load`, `unload` and `clear` routes) answer with `event_id` beside what they answer today, absent on a dry run | Activity (13.4), Undo (2.9), a spool's last ten events (16.3) | No Activity choice, no Undo button, no last ten events |
 | The page routes of history and data, under `/setup/api/`: `GET activity` (`subject`, `actor`, `kinds`, `since`, `limit` → `{events, next, oldest}`, the events as the kit route serves them; open), `POST events/{id}/undo` (as the kit route; code), `GET health` (`days`; open), `GET analytics` (`months`, `printer`; open), `GET export/{set}.csv` (as the kit route; code, because a file leaves the Hub), `POST import/spools` and `POST import/locations` (as the kit routes; code), `POST report` (starts the job; code) and `POST report/download` (the newest report, `text/plain`; code) | Activity, Undo, the Checks' history (4.2), Analytics (17), CSV (2.10), the Hub report (13.5) | Each of these places is left out |
 | `GET api/health` (`days` 7 or 30) answering `{from, to, since?, checks: [{key, group, text, now: "ok" or "look" or "bad", spans: [{from, to, state: "look" or "bad"}]}], changes: [{at, key, text, from, to}]}`, built from the conditions the event store already records (`since` is when that history starts) | The strips and the history table of the Checks (4.2) | The strips are left out and the Checks show as they did |
 | `GET api/analytics` (`months` 1 to 13, `printer?`) answering `{months: [{month: "2026-11", grams, prints, unfinished_prints, unfinished_grams, logged_only_grams, no_weight_prints, by_printer: [{id, name, grams, prints}], by_material: [{material, grams}], top_material?}], insights: [{key: "total" or "favourite_material" or "busiest_printer" or "unfinished" or "biggest_print" or "spools_finished", text}], notes: [<text>]}`; each new filament-used entry also stores `material`, `vendor`, `name`, `color_hex`, `printer_name` and `outcome` (`finished`, `failed`, `cancelled`, `unknown`), and `GET api/printers/{id}/usage` takes `by=month` | Analytics (17), the Overview line (4.2) | The Analytics section shows the error state "Could not read the usage. <Hub's text>" with **Try again**; no Filament line |

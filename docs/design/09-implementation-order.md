@@ -2260,13 +2260,13 @@ itself (Stage 13); e-mail, chat or other outside notification services; quiet ho
 
 ## 18. Stage 11: Address and first run
 
-A new Hub answers on port 443, so its address has no port; the Weigh Station, the printer-side tag service and a Label
-Reader on another machine serve HTTPS only; the installer's first question lets the Hub page take over the rest of the
-setup (Guided Setup), and that page leads the owner through what is left (Getting started, the guided printer add, the
-Label Reader lead-in). The parts that specify it are 03 4.2, 5.6, 7.3, 9.4, 10.5, 10.7, 10.11 and 15, 06 3.1, 3.2, 9.1,
-9.2, 9.6, 9.19 and 9.20, 02 6.5, and the typed address of 04 1 and 05 4.5. The contract the interface steps build against
-is the rows "`GET start`", "The Hub's port", the three values of the station's hello call, the found Bambu Lab printers
-and the remote reader's HTTPS in 03 section 15.
+A new Hub answers on port 443, so its address has no port; the Weigh Station and the printer-side tag service serve
+HTTPS only, and so does a Label Reader on another machine once its own software can; the installer's first question lets
+the Hub page take over the rest of the setup (Guided Setup), and that page leads the owner through what is left (Getting
+started, the guided printer add, the Label Reader lead-in). The parts that specify it are 03 4.2, 5.6, 7.3, 9.4, 10.5,
+10.7, 10.11 and 15, 06 3.1, 3.2, 9.1, 9.2, 9.6, 9.19 and 9.20, 02 6.5, and the typed address of 04 1 and 05 4.5. The
+contract the interface steps build against is the rows "`GET start`", "The Hub's port", the three values of the
+station's hello call, the found Bambu Lab printers and the remote reader's HTTPS in 03 section 15.
 
 ### The rules of the stage
 
@@ -2284,11 +2284,18 @@ and the remote reader's HTTPS in 03 section 15.
 - **HTTPS on the satellites.** A listener of ours that another machine can reach serves HTTPS only; a listener on
   `127.0.0.1` stays as it is. The Weigh Station makes its own certificate with the Hub's existing `pairing.make_cert`.
   At every start it tells the Hub `fp`, `port` and `version` on `GET /api/station/hello`, over the connection it already
-  has; the Hub then calls it over HTTPS at that port, accepts only that certificate and does not fall back to plain HTTP.
-  A station that has not been updated sends no fingerprint and is called over plain HTTP as before; the Checks show it.
-  The printer-side tag service is pinned the first time the Hub reads its address (trust on first use). Spoolman is not
-  ours: its page stays `http://<host>:7912`. Nothing listens on port 80, so a bare name typed without `https://` shows
-  nothing.
+  has; the Hub then calls it over HTTPS at that port, accepts only that certificate and does not fall back to plain
+  HTTP. A station that has not been updated sends no fingerprint and is called over plain HTTP as before; the Checks
+  show it. The printer-side tag service is pinned the first time the Hub reads its address (trust on first use). A Label
+  Reader on another machine is the exception until its own software can serve HTTPS: an `http://` address of it is
+  accepted and used as today, an `https://` address is pinned at Test, and the Checks show one Note row, "The Label
+  Reader at <address> is not using HTTPS. A later Label Reader version adds it.", with no Fix line. From the release
+  that turns the rule on (only together with a reader version that serves HTTPS; it is not a setting), saving an
+  `http://` address that is not 127.0.0.1 is refused with "A Label Reader on another machine needs an https address."; a
+  stored one keeps working and its row becomes Needs a look: "The Label Reader at <address> is not using HTTPS." with
+  the Fix "Update the Label Reader on that machine, then change its address to https:// in Settings > Label Reader."
+  Spoolman is not ours: its page stays `http://<host>:7912`. Nothing listens on port 80, so a bare name typed without
+  `https://` shows nothing.
 - **Existing satellites keep their ports** (5003 for the Weigh Station, 5002 for the printer-side tag service) and switch
   to HTTPS on update; only new installs take 443. "The printer station" in the code is that tag service, because the
   Printer Station / Tag Reader device itself listens on nothing.
@@ -2359,10 +2366,11 @@ Server builder · Depends on: AF1's `hubport` (free-port test, drop-in)
   `station/server_api.py`, `station/pair_request.py`, `server/filament_kit/station_client.py`,
   `server/filament_kit/pairing.py` (the three values kept with a station's pairing), `server/filament_kit/tagsources.py`,
   `server/filament_kit/local_reader.py`, `printer-pack/lasttag/*`, new tests.
-- **Change:** the station's certificate and HTTPS listener, the three values on its hello call, the Hub's pinned calls to a
-  station, the tag service's HTTPS and its pin on first use, the remote reader's https rule and its pin at Test (03 10.5).
-  The reader's own side (a certificate at the remote install, HTTPS on port 7915) is a request to the reader's repository;
-  until it ships, the Hub accepts the reader's `http://` address as before and shows the Checks row.
+- **Change:** the station's certificate and HTTPS listener, the three values on its hello call, the Hub's pinned calls
+  to a station, the tag service's HTTPS and its pin on first use, the pin of a remote reader's `https://` address at
+  Test and its Checks rows (03 10.5). The reader's own side (a certificate at the remote install, HTTPS on port 7915) is
+  a request to the reader's repository; until it ships, the Hub accepts the reader's `http://` address as before and
+  shows the Note row. The refusal of such an address comes with the release that has a reader version that serves HTTPS.
 - **Keep:** the allow-list of caller addresses; `http://127.0.0.1:5003` for a station on the Hub's own machine.
 - **Other interfaces:** AF5 words the rows this step makes possible.
 - **Check:** prove first (items 5 and 6 of the list below). Then the tests of each listener and of the pin.
@@ -2470,7 +2478,8 @@ Each has a fallback.
    Fallback: the tag service stays on plain HTTP on that host and the Checks row says so; the owner is told in the release
    notes.
 6. **AF2: the remote Label Reader's HTTPS** needs its own repository's change first. Until then the Hub accepts its
-   `http://` address as today and shows the row "The Label Reader at <address> is not using HTTPS."
+   `http://` address as today and shows the Note "The Label Reader at <address> is not using HTTPS. A later Label Reader
+   version adds it."
 
 **Out of scope:** a listener on port 80; Spoolman over HTTPS; a real (publicly trusted) certificate for the home address;
 the satellites' own web pages, their version prompt and a regular check-in (only the stored `version` is added here); the
@@ -2483,13 +2492,13 @@ anything on the Tag Reader firmware.
 
 Every function that one interface has, the others have where they can: the Hub page gets the Spools section and the live
 printer view, every interface gets Clear slot and the waiting state, the Filament Catalog has one form everywhere, the
-apps show the Hub at a glance, the web app and the app add a printer in the guided order, Spoolman and the Hub page
-link to each other, Devices shows kinds, versions and out-of-date devices with the Weigh Station's own page, and the
-command line gets the spool, slot, device and catalog commands. The parts that specify it are 01 section 8, 02 2.6 and
-7.3 to 7.5, 03 3.2, 3.8, 4.2, 5, 7, 10.9 to 10.11, 15 and 16, 04 2, 5, 6, 8, 9, 12 and 14, 05 2, 5, 7 to 9, 12 and 16,
-and 06 3, 6.8, 7, 8.3, 9.2, 9.4, 9.11, 9.21 and 13. In this stage a "kit route" is a route under `/api/` for paired
-devices (`api.py`), a "page route" is a route of the Hub page under `/setup/api/`, and a "twin" is the web app's route
-under `/intake/api/` that passes a kit route on.
+apps show the Hub at a glance, the web app and the app add a printer in the guided order, Spoolman and the Hub page link
+to each other, Devices shows kinds, versions and out-of-date devices with the Weigh Station's detail and a link to its
+own page, and the command line gets the spool, slot, device and catalog commands. The parts that specify it are 01
+section 8, 02 2.6 and 7.3 to 7.5, 03 3.2, 3.8, 4.2, 5, 7, 10.9 to 10.11, 15 and 16, 04 2, 5, 6, 8, 9, 12 and 14, 05 2,
+5, 7 to 9, 12 and 16, and 06 3, 6.8, 7, 8.3, 9.2, 9.4, 9.11, 9.21 and 13. In this stage a "kit route" is a route under
+`/api/` for paired devices (`api.py`), a "page route" is a route of the Hub page under `/setup/api/`, and a "twin" is
+the web app's route under `/intake/api/` that passes a kit route on.
 
 ### The rules of the stage
 
@@ -2498,6 +2507,16 @@ under `/intake/api/` that passes a kit route on.
 - **The page has its own routes.** The Hub page's live view, Spools section, catalog form and Devices call the same
   printer, inventory and catalog code as the kit routes, in the Hub's process. They do not call the web app's routes:
   the page's lock must apply, and the web app may be switched off.
+- **No page of a device is passed through the Hub.** The Hub page draws a device's detail itself, in Devices at
+  `#devices/<id>`, from `GET device/{id}` and `POST device/{id}/settings`; nothing a device sends is served by the Hub
+  as HTML, script or style. What the Hub takes from a station is checked data: JSON only (`application/json`), at most
+  256 KiB, a 5 second limit, any redirect an error, only to the stored host and port of that pairing, over the pinned
+  certificate when the station has one; every text from a station is shown as text, never as markup; a setting's `id`
+  must match `[a-z0-9_.-]{1,40}`, its `kind` is one of `switch`, `choice`, `number`, `text`, a `label` is at most 80
+  characters, at most 60 settings, and anything else is dropped with the line "Some of this station's settings could not
+  be shown."; the photo is taken only as `image/jpeg`, at most 4 MiB. The detail's link **Open this station's page**
+  opens the station's own address in a new tab, never fetched, framed or proxied by the Hub, with a one-time ticket
+  after `#` that the station's page trades for a session cookie of its own (03 7.10).
 - **Clear slot is one rule in four interfaces.** The Hub forgets which spool is in the slot. In this order: a spool
   waiting for the slot is no longer waiting; a spool recorded in the slot goes back where it was before it was loaded
   (exactly as Unload moves it); on a Klipper printer the slot's setting on the printer is cleared when the printer is
@@ -2558,10 +2577,14 @@ entry. The web unit sends a reader's values when its build changes and otherwise
 the Hub does not answer it keeps only the newest value per reader in memory.
 
 **Page routes.** Under `/setup/api/`: the rows of 03 section 15 for the Spools section, the live view, the catalog form,
-Devices and the station's page passed through. Their answers are the kit routes' answers; the lock of each is in 03
-5.10, 7.10, 10.9 and 16. The live view's camera has one more: `POST printers/{id}/camera/ticket` with the setup code,
-answering `{ticket, expires_in: 60}`; on a computer that is not trusted the stream's address takes `?ticket=<ticket>`,
-and a ticket starts one stream within 60 seconds, for that printer only; the stream runs until it is closed.
+Devices. Their answers are the kit routes' answers; the lock of each is in 03 5.10, 7.10, 10.9 and 16. The routes of a
+device's detail: `GET device/{id}` (open) answers `{device, status?, settings?, own_page: <address as text>?, photo:
+bool}`; `GET device/{id}/photo` (open) answers `image/jpeg`; `POST device/{id}/settings` needs the page unlocked; `POST
+device/{id}/open` needs the page unlocked, makes the Hub ask the station for a one-time ticket and answers `{address:
+"<own_page>#ticket=<ticket>"}`. The live view's camera has one more: `POST printers/{id}/camera/ticket` with the setup
+code, answering `{ticket, expires_in: 60}`; on a computer that is not trusted the stream's address takes
+`?ticket=<ticket>`, and a ticket starts one stream within 60 seconds, for that printer only; the stream runs until it is
+closed.
 
 **Twins** (under `/intake/api/`; EV6a and EV6b): `GET hub` (the kit object), `GET library/local`, `POST library/local`
 (the form), `POST library/local/{id}/remove`, `POST printers/scan` and `POST printers/{id}/slots/{label}/clear`. Each
@@ -2571,10 +2594,15 @@ passes the kit route on unchanged, with the guards the neighbouring twins have.
 
 | Route | Answer |
 |---|---|
-| `GET /` | its page (HTML; its own script and stylesheet under `/static/`) |
+| `GET /` | its page (HTML; its own script and stylesheet under `/static/`), served to any address on the home network; without a ticket or a session it says only "Open this page from the Hub: Devices, this station, Open this station's page." |
 | `GET /state` (changed) | as today plus `version` (the station software) and `settings_changed: bool` |
 | `GET /settings` | `{settings: [{id, label, kind, value, choices?, min?, max?}]}` with the ids `beep`, `speech`, `voice`, `volume`, `panel_swap`, and one `lamp.<step>` per step of the intake flow (value: one of the panel's lamps, or `off`) |
-| `POST /settings` | body `{<id>: <value>}`, with the header that carries the proof of 03 7.10; answers the new list; `{reset: true}` removes the station's own values |
+| `POST /settings` | body `{<id>: <value>}`, with the header that carries the proof of 03 7.10 or with a session; answers the new list; `{reset: true}` removes the station's own values |
+| `POST /ticket` | the Hub's proof; answers `{ticket, expires_in: 60}`: a ticket works once, within 60 seconds |
+| `POST /session` | body `{ticket}`; sets the station's session cookie, on its own origin, for 60 minutes; answers `{ok: true}` |
+
+The station's data routes (`/state`, `/settings`, `/photo`, `/last-tag`) answer only its allow-list or a browser with a
+session; its page's own files (HTML, script, stylesheet) are served to any address on the home network.
 
 The station's 5-minute check-in is `GET /api/station/hello` with `fp`, `port` and `version`: nothing new.
 
@@ -2633,10 +2661,11 @@ Server builder · Depends on: none · Beside: every other EV step
 - **Starts after:** AF2 is merged, for the station files.
 - **Files today:** `station/http.py`, `station/state.py`, `station/flow.py`, `station/panel.py`, `station/server_api.py`,
   new `station/page.py`, new `station/settings.py`, new `station/static/*`, `station_client.py`, tests.
-- **Change:** the station's page, its settings file, the lamp mapping, the 5-minute check-in, `version` in `/state`, and
-  the Hub's pass-through client.
-- **Other interfaces:** EV4c reads the pass-through client.
-- **Check:** prove first (items 2 and 3 of the list below).
+- **Change:** the station's page, its settings file, the lamp mapping, the 5-minute check-in, `version` in `/state`,
+  `POST /ticket` and `POST /session`, who its page files and data routes answer, and the Hub's client for the station's
+  checked data.
+- **Other interfaces:** EV4c reads the Hub's client.
+- **Check:** prove first (item 2 of the list below).
 
 ### EV4a Hub page: the Spools section
 Bug-bash 1 · Depends on: none · Beside: every other EV step
@@ -2657,9 +2686,10 @@ Bug-bash 1 · Depends on: none · Beside: every other EV step
 Bug-bash 1 · Depends on: none · Beside: every other EV step
 - **Files today:** `setup_static/setup_devices.js`, new `setup_console/device_tab.py`, `setup_console/station_tab.py`,
   `setup_console/webapp_tab.py` (the Open button's address).
-- **Change:** 03 7.2, 7.4, 7.9 and 7.10: kind, version, out of date, Open, the device detail and the pass-through.
-- **Other interfaces:** reads EV3's pass-through client; EV5 mounts the pass-through path.
-- **Check:** prove first (item 3 of the list below).
+- **Change:** 03 7.2, 7.4, 7.9 and 7.10: kind, version, out of date, Open, the device detail drawn by the Hub with its
+  checks, its photo, and the link to the station's own page with its ticket.
+- **Other interfaces:** reads EV3's client; EV5 mounts the routes of the detail.
+- **Check:** the detail's tests: what a station sends that fails the checks is dropped or shown as text.
 
 ### EV4d Hub page: the catalog form
 Bug-bash 1 · Depends on: none · Beside: every other EV step except for its registry file
@@ -2672,7 +2702,7 @@ Bug-bash 1 · Depends on: none · The last of the Hub page steps
 - **Files today:** registry files only: `setup_page.py`, `setup_static/setup.js`, `setup_static/setup_overview.js`;
   `setup_page.py` and `setup_overview.js` after AF6 is merged, `setup.js` after EA6.
 - **Change:** the Spools section in the navigation, the header's "Open the web app", the routes and scripts of EV4a to
-  EV4d mounted, the Devices tile and the pass-through path.
+  EV4d mounted, the Devices tile and the routes of the device detail.
 
 ### EV6a Web app: the Hub screen, links and the catalog form
 Klipper builder · Depends on: none · Beside: every other EV step
@@ -2703,7 +2733,7 @@ App builder · Depends on: EV7a's row of calls and models · Beside: every other
   `AddProfileViewModel.kt`.
 - **Change:** the guided add, Clear slot, waiting on the Load screen and the swatches of the printers list, Open
   Spoolman, the catalog form and list.
-- **Check:** prove first (item 4 of the list below).
+- **Check:** prove first (item 3 of the list below).
 
 ### EV8 Slicer Sync: the client header
 Klipper builder · Depends on: AF8 merged · Beside: every other EV step
@@ -2714,7 +2744,7 @@ Klipper builder · Depends on: AF8 merged · Beside: every other EV step
 To be assigned · Depends on: none · Beside: every other EV step
 - **Files today:** `reader/src/main.cpp`, `reader/firmware/VERSION` and what a firmware change needs.
 - **Change:** the firmware sends its build as `X-Reader-Build`.
-- **Check:** prove first (item 5 of the list below).
+- **Check:** prove first (item 4 of the list below).
 
 ### EV10 Documents
 Design + docs · Depends on: EV1 to EV9 merged
@@ -2744,12 +2774,10 @@ Each has a fallback.
 2. **EV3: a proof for setting changes.** Assumed: the station and the Hub can both derive a secret from the station's
    pairing without sending the token itself. If the Hub keeps nothing it can derive from, the station's pairing gains a
    second secret at its next hello, sent over the pinned channel.
-3. **EV4c with EV3: passing the station's page through the Hub** works with relative addresses only (the station's page
-   uses no absolute paths) and with the page's lock on the Hub's side.
-4. **EV7b: the dashed ring** is drawable with the app's swatch component; else the waiting slot's swatch gets a small
+3. **EV7b: the dashed ring** is drawable with the app's swatch component; else the waiting slot's swatch gets a small
    clock mark.
-5. **EV9: a reader in the field takes the new firmware** only when its owner holds the knob; until then its build is "not
-   known" and nothing breaks.
+4. **EV9: a reader in the field takes the new firmware** only when its owner holds the knob; until then its build is
+   "not known" and nothing breaks.
 
 **Out of scope:** adding spools on the Hub page; quick find and colour-name search (the Spoolman link is the answer); the
 Hub updating a satellite by itself; pages for the Tag Reader and the printer-side tag service (they serve nothing a browser
@@ -2854,10 +2882,14 @@ condition`, served with `title`, `text` and `action`, kept 400 days in month fil
 All JSON. A field marked `?` may be absent. Times are ISO 8601 with offset.
 
 **Events (changed; owner HD1).** `GET /api/events` gains the query values `activity=1` (only the kinds of the Activity
-list), `subject=<type>:<id>` (for example `spool:212`) and `actor=<type>` or `actor=<type>:<id>`. Each served event gains
-`undo: {possible: bool, until?: <time>, why_not?: "changed_since" | "too_old" | "already_undone" | "not_undoable"}`,
-`undone: bool` and `undo_of?: <id>`. `POST /api/events/{id}/undo` answers 200 `{undone: true, event: <the new event>,
-note?: <text>}`, 409 `{error: <one of the why_not values>, text}` or 404. A web token may call it.
+list), `subject=<type>:<id>` (for example `spool:212`) and `actor=<type>` or `actor=<type>:<id>`. Each served event
+gains `undo: {possible: bool, until?: <time>, why_not?: "changed_since" | "too_old" | "already_undone" |
+"not_undoable"}`, `undone: bool` and `undo_of?: <id>`. `POST /api/events/{id}/undo` answers 200 `{undone: true, event:
+<the new event>, note?: <text>}`, 409 `{error: <one of the why_not values>, text}` or 404. A web token may call it. The
+routes that make an undoable change (`PATCH /api/spools/{id}`, `POST /api/spools/{id}/link`, the slot `load`, `unload`
+and `clear` routes, and their page routes and web twins) answer with `event_id: <id>` beside what they answer today,
+absent on a dry run. A client uses it for the toast's Undo; where an answer has none, it asks the subject's newest
+event.
 
 **New kit routes.**
 
@@ -2923,7 +2955,8 @@ Server builder · Depends on: none · Beside: every other HD step except for its
   `bridge/registry.py`, `pairing.py`, `library.py`, `intake_history.py`, new `undo.py`, new `health.py`, tests. Registry
   file: `api.py`, after EV1 is merged.
 - **Change:** events for every action, with who did it and complete before-values; the undo rule and route; the activity
-  filters of `GET /api/events`; `GET /api/health`; the viewer role; the mounts of HD3's and HD5's routes.
+  filters of `GET /api/events`; `event_id` in the answers of the routes that make an undoable change; `GET /api/health`;
+  the viewer role; the mounts of HD3's and HD5's routes.
 - **Other interfaces:** every other HD step builds against these routes with stubs.
 - **Check:** prove first (item 3 of the list below). Then the route and event tests.
 

@@ -166,7 +166,7 @@ parts. The last column names the place on the Hub page that does the same thing,
 | `usage [--by month] [--printer <name>]` | Filament used this month in sentences, or by month (9.24) | Analytics |
 | `devices` (same as `devices list`) | Paired devices with kind, version and the out-of-date sentence (9.4) | Devices |
 | `devices show <device>` | One device's detail; for a Weigh Station its status and settings | Devices, Open |
-| `devices set <device> <setting> <value>` | Change a Weigh Station setting through the Hub (previews, asks) | Devices, the Weigh Station's page |
+| `devices set <device> <setting> <value>` | Change a Weigh Station setting through the Hub (previews, asks) | Devices, the Weigh Station's detail |
 | `devices forget <device>` | Unpair a device | Revoke |
 | `pair [--slicer-sync \| --weigh-station \| --home-assistant] [--text] [--no-wait]` | Pairing code, QR and fingerprint | Pair a phone / Link for the Slicer Sync / Link for the Weigh Station / Link Home Assistant |
 | `weigh-station pair [--local]` | Run on the Weigh Station: pair it with the Hub | Pair the Weigh Station on this machine |
@@ -575,7 +575,7 @@ Any step that can take longer than 2 seconds shows a progress line once 2 second
 | `recent` | `GET /setup/api/intake/history`: `{keep, photo_bytes, ai, count, records: [...]}` |
 | `recent show` | `GET /setup/api/intake/history/<id>` |
 | `devices` | the answer of `GET /setup/api/devices`: `{devices: [{id, name, kind: "phone", "pc", "station", "web", "reader", "home-assistant" or "builtin", version?, newest?, out_of_date, advice?, paired?, last_seen?, reachable?, built_in, page}]}` |
-| `devices show` | the answer of `GET /setup/api/device/<id>`: `{device, status?, settings?: [{id, label, kind: "switch", "choice", "number" or "text", value, choices?, min?, max?}]}` |
+| `devices show` | the answer of `GET /setup/api/device/<id>`: `{device, status?, settings?: [{id, label, kind: "switch", "choice", "number" or "text", value, choices?, min?, max?}], own_page?, photo}` |
 | `devices set` (needs `--yes`) | `{settings: [...]}`, the new list |
 | `tag-reader list` | `state.readers.list`: `[{id, name, created}]` |
 | `presets status` | `GET /setup/api/presets` |
@@ -1213,7 +1213,8 @@ Filament Catalog
 | Label Reader | note `Reads used today: N of M` (needs a look when N = M: `No reads left today (M of M)`) | `raise Reads per day in sudo spoolwarden config, or wait until tomorrow` |
 | Label Reader | `On this Hub: answering at <url> (tier: <tier>)` / `On this Hub: not answering at <url>` (only when installed) | `sudo spoolwarden label-reader status` |
 | Label Reader | needs a look `The Label Reader is switched on but not installed.` (only while Label Reader: On this Hub is on and the reader is not installed; no row otherwise) | the command that installs the reader, the one `Next:` names after switching it on (9.6) |
-| Label Reader | needs a look `The Label Reader at <address> is not using HTTPS.` (a reader on another machine whose side does not serve HTTPS yet) | (none) |
+| Label Reader | note `The Label Reader at <address> is not using HTTPS. A later Label Reader version adds it.` (a reader on another machine at an `http://` address, until the reader's own software can serve HTTPS) | (none) |
+| Label Reader | needs a look `The Label Reader at <address> is not using HTTPS.` (from the release that turns the rule on, a stored `http://` address of a reader on another machine) | `Update the Label Reader on that machine, then change its address to https:// in Settings > Label Reader.` |
 | Label Reader | note `Share corrections: on, 12 waiting` (only while it is on, or while corrections still wait: `Share corrections: off, 12 still waiting`) | `spoolwarden label-reader corrections` |
 | Weigh Station | `Answering at <url>`, `Tag reader seen`, `Scale seen`, `Paired with <address>` / `… not seen`, `Not paired` | per row: check the cable; `sudo spoolwarden pair --weigh-station` |
 | Devices | note `Paired devices: N` | (none) |
@@ -1556,9 +1557,9 @@ Bench scale  Weigh Station  0.5.0  last seen 2026-11-12 14:03
 A Tag Reader prints its name, build and last seen, and `Its settings are changed in Flash a device (spoolwarden
 tag-reader flash).` A phone, Slicer Sync PC, Web app or Home Assistant prints kind, version, paired and last seen.
 
-**`devices set <device> <setting> <value>`** changes one setting of a Weigh Station through the same pass-through. It
-shows what would change, asks (section 7) and takes `-y`; the setting's name is the one `devices show` prints, and a
-value the setting does not take stops with exit code 2 and the values it takes in the Fix line.
+**`devices set <device> <setting> <value>`** changes one setting of a Weigh Station through the Hub, as the detail on
+the Hub page does. It shows what would change, asks (section 7) and takes `-y`; the setting's name is the one `devices
+show` prints, and a value the setting does not take stops with exit code 2 and the values it takes in the Fix line.
 
 ```
 $ sudo spoolwarden devices set "Bench scale" volume 40
@@ -2525,7 +2526,7 @@ this design.
 | Trusted computers: list, rename, revoke one | N | Y | N | N | N | remains: Hub page only |
 | Weigh Station: pair, flash the display | N | Y | N | Y | Y | none for the command line |
 | Devices: kind, version, out of date | new | new | N | N | new (`devices`) | web app: remains |
-| A Weigh Station's own page: status, sounds, lamps | N | new | N | N | new (`devices show`, `devices set`) | app, web app: remain |
+| A Weigh Station's detail: status, sounds, lamps | N | new | N | N | new (`devices show`, `devices set`) | app, web app: remain |
 | Weigh Stations asking to pair | N | Y | N | N | N | remains: Hub page only |
 | Tag Reader tokens | N | Y | N | Y | Y | none for the command line |
 | Flash a Tag Reader | N | new (Flash a device) | N | Y | Y (`tag-reader flash`) | none for the command line |
@@ -2604,8 +2605,9 @@ The command line calls the same code as the Hub page's routes (`/setup/api/...`)
     `GET /setup/api/devices`, `GET /setup/api/device/<id>` and `POST /setup/api/device/<id>/settings`
     (`03-hub-page.md` section 15). Until they exist, the commands that need one say `Error: this Hub does not offer
     that yet.` with the Fix `sudo spoolwarden update`.
-11. **History and data.** The kit routes `GET api/events` with `activity`, `subject` and `actor` and its `undo`, `undone` and
-    `undo_of` fields, `POST api/events/<id>/undo`, `GET api/health`, `GET api/analytics`, `GET api/export/<set>.csv`,
-    `POST api/import/spools` and `POST api/import/locations`, the backup password and the encrypted backups, the
-    Hub report, and the pairing kind `home-assistant` (`03-hub-page.md` section 15). Until they exist the commands that
-    need one say `Error: this Hub does not offer that yet.` with the Fix `sudo spoolwarden update`.
+11. **History and data.** The kit routes `GET api/events` with `activity`, `subject` and `actor` and its `undo`,
+    `undone` and `undo_of` fields, `event_id` in the answers of the routes that make an undoable change, `POST
+    api/events/<id>/undo`, `GET api/health`, `GET api/analytics`, `GET api/export/<set>.csv`, `POST api/import/spools`
+    and `POST api/import/locations`, the backup password and the encrypted backups, the Hub report, and the pairing kind
+    `home-assistant` (`03-hub-page.md` section 15). Until they exist the commands that need one say `Error: this Hub
+    does not offer that yet.` with the Fix `sudo spoolwarden update`.
