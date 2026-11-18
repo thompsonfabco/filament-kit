@@ -166,8 +166,10 @@ def call_station(url: str, method: str, path: str, body: bytes | None = None, ca
     conn = (http.client.HTTPSConnection if secure else http.client.HTTPConnection)(u.hostname, u.port, timeout=STATION_TIMEOUT)
     deadline = time.monotonic() + STATION_TIMEOUT
 
+    held: list = [None]         # the socket, kept: getresponse() lets conn.sock go for an answer that ends by closing
+
     def cut():
-        sock = conn.sock
+        sock = held[0] or conn.sock
         if sock is not None:
             try:
                 sock.shutdown(socket.SHUT_RDWR)
@@ -181,13 +183,14 @@ def call_station(url: str, method: str, path: str, body: bytes | None = None, ca
     headers = {"Accept": "*/*", **_proof_headers(), **({"Content-Type": "application/json"} if body is not None else {})}
     try:
         conn.request(method, u.path.rstrip("/") + "/" + path, body=body, headers=headers)
+        held[0] = conn.sock
         resp = conn.getresponse()
         status, kind = resp.status, resp.getheader("Content-Type", "") or ""
         if 300 <= status < 400:
             raise StationError(502, "the Weigh Station answered with a redirect")
         data = bytearray()
         while True:
-            chunk = resp.read(8192)
+            chunk = resp.read1(8192)             # what has arrived, not a wait for 8192 bytes or the end
             if not chunk:
                 break
             data += chunk

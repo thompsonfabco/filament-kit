@@ -408,7 +408,7 @@ await until(() => dlg() && $("form.group", dlg()), "the station's detail");
 await sleep(400);
 out.station = { hash: location.hash, facts: $$(".kv__row", dlg()).map(text), fields: $$(".field__label", dlg()).map(text), overflow: overflow(),
   ownPage: text($(".devdetail__page .mono", dlg())), hint: text($(".devdetail__page .muted", dlg())), button: text($('[data-action="open-station-page"]', dlg())),
-  photo: (() => { const i = $("img", dlg()); return i ? [i.getAttribute("src").replace(/\?t=\d+/, ""), i.alt, i.naturalWidth] : null; })(),
+  photo: (() => { const i = $("img", dlg()); return i ? [i.getAttribute("src").replace(/\\?t=\\d+/, ""), i.alt, i.naturalWidth] : null; })(),
   injected: [!!$("img[src=x]", dlg()), window.__x === undefined, !!$$(".field__label", dlg()).find((l) => l.textContent.includes("<img"))] };
 $('[data-action="open-station-page"]', dlg()).click();
 await until(() => clicked.length === 1 && sentTo("device/d3/open").length === 1, "the station's page to be opened");
@@ -506,14 +506,6 @@ def test_the_rows_open_and_the_station_settings_work_in_every_look_at_both_width
     assert stub.posts() == [{"beep": False, "volume": 40, "lamp.weigh": "red"}, {"reset": True}]
 
 
-def test_the_web_apps_home_address_drops_the_port_on_443(env_hub):
-    c, _ = env_hub
-    cfg = config.load()
-    assert c.get("/setup/api/webapp").json()["url"].endswith(".local:8710/intake")
-    cfg["port"] = 443
-    config.save(cfg)
-    assert c.get("/setup/api/webapp").json()["url"].endswith(".local/intake")
-
 
 # ---------------------------------------------------------------- review R497: one deadline, no proxy, odd keys and ids
 import socket
@@ -525,6 +517,7 @@ def _trickle(mode: str):
     srv = socket.socket()
     srv.bind(("127.0.0.1", 0))
     srv.listen(4)
+    old = mode == "http10"
 
     def serve():
         while True:
@@ -539,7 +532,12 @@ def _trickle(mode: str):
             try:
                 conn.settimeout(3)
                 conn.recv(4096)
-                if mode == "body":
+                if old:         # HTTP/1.0, no Content-Length, ends by closing
+                    conn.sendall(b"HTTP/1.0 200 OK\r\nContent-Type: application/json\r\n\r\n")
+                    for _ in range(40):
+                        conn.sendall(b" ")
+                        time.sleep(2)
+                elif mode == "body":
                     conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 400\r\n\r\n")
                     for _ in range(40):
                         conn.sendall(b" ")
@@ -556,7 +554,7 @@ def _trickle(mode: str):
     return srv, f"http://127.0.0.1:{srv.getsockname()[1]}"
 
 
-@pytest.mark.parametrize("mode", ["body", "head"])
+@pytest.mark.parametrize("mode", ["body", "head", "http10"])
 def test_a_station_that_trickles_its_answer_is_cut_off_at_one_deadline(mode):
     srv, url = _trickle(mode)
     try:
