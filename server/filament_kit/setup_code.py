@@ -328,6 +328,12 @@ def lockout_file() -> Path:
 
 
 def page_url(cfg: dict) -> str:
-    """The setup page's address as the installer prints it: https://<host>.local:<port>/setup."""
-    from . import pairing
-    return f"https://{pairing.short_hostname()}.local:{int(cfg.get('port', 8710))}/setup"
+    """The setup page's address as the installer prints it: https://<host>.local/setup on port 443, else
+    https://<host>.local:<port>/setup."""
+    return base_url(cfg) + "setup"
+
+
+def base_url(cfg: dict) -> str:
+    """The Hub's own address, with no path: https://<host>.local/ on port 443, else https://<host>.local:<port>/."""
+    from . import hubport, pairing
+    return f"https://{pairing.short_hostname()}.local{hubport.url_port(cfg.get('port', 8710))}/"

@@ -2,8 +2,10 @@
 # filament-kit installer for Ubuntu 24.04 or newer.
 # Run as root: sudo ./install.sh [--mode MODE | --modules a,b,c [--set KEY=VALUE]...] [--server NAME-OR-IP]
 #                                [--restore BACKUP.zip]   (--restore: this machine takes the backup's modules and data)
-# MODE: server (default), station, all-in-one. A first install at a terminal asks for the mode
-# (and offers custom). --server gives a station the kit server's address without a terminal;
+# MODE: server (default), station, all-in-one. A first install at a terminal asks first whether to finish in the
+# browser (Guided Setup: the usual choices, no other question), else for the mode (and offers custom). A first install
+# of the Hub takes port 443 when it is free; when it is not (or Remote access, which uses 443, is chosen) the terminal
+# is asked, and without one the Hub takes 8710 (or the next free port). --server gives a station the kit server's address without a terminal;
 # station mode needs it (or a terminal to ask at). Safe to run again: an existing install is upgraded and keeps its data,
 # settings, modules, key and certificate; without --mode an upgrade asks nothing and changes no module.
 # This script installs the program; `spoolwarden modules apply` (run at the end) sets up the
@@ -39,6 +41,11 @@ CUSTOM=""
 SETS=""
 SERVER_ADDR=""
 RESTORE=""
+GUIDED=0                   # 1: the first question was answered Yes
+GUIDED_DEFAULT=y           # open point 5: the answer Enter gives (y or n)
+ASKED=""                   # the first-run marks this run earns by asking (firstrun.py): features
+HUB_PORT=""                # a first install's port, written to the config; empty: the code's 8710 stays
+STATION_PORT=""            # a new station install's port
 while [ $# -gt 0 ]; do
     case "$1" in
         --mode) [ $# -ge 2 ] || usage; MODE="$2"; shift 2 ;;
@@ -267,7 +274,22 @@ fi
 # First install at a terminal: ask. --mode: set it, on any install. Upgrade without --mode: no
 # questions, the modules stay as they are (a config without modules is the server mode).
 AI_INTAKE=""
+# The first question (R82 section 3): finish in the browser. Yes: the Hub with the usual choices and nothing more asked.
+# An explicit flag (--mode, --modules, --set, --server, --restore) already says what to install: the flags win, nothing is asked.
+if [ -z "$MODE" ] && [ -z "$CUSTOM" ] && [ -z "$SETS" ] && [ -z "$SERVER_ADDR" ] && [ "$FIRST_INSTALL" -eq 1 ] && [ -t 0 ]; then
+    if [ "$GUIDED_DEFAULT" = y ]; then guided_hint="[Y/n]"; else guided_hint="[y/N]"; fi
+    echo "  y: the Hub is installed with the usual choices; its page takes you through the rest."
+    echo "  n: answer the questions here. Also the way to install only a Weigh Station."
+    guided=""
+    read -r -p "Finish setting up in your browser (Guided Setup)? $guided_hint " guided || true
+    case "${guided:-$GUIDED_DEFAULT}" in
+        [yY]*) GUIDED=1; MODE=server ;;
+        [nN]*) ;;
+        *) die "unknown choice '$guided'; run the install command again: $AGAIN" ;;
+    esac
+fi
 if [ -z "$MODE" ] && [ "$FIRST_INSTALL" -eq 1 ] && [ -t 0 ]; then
+    ASKED="features"
     say "Install mode"
     echo "  server      kit server with Spoolman, printers, presets and backup (AI label reading and library on request)"
     echo "  station     only the USB scale and NFC reader, for a kit server on another machine"
@@ -358,10 +380,58 @@ fi
 if [ -z "$MODE" ] && [ "$FIRST_INSTALL" -eq 1 ]; then
     MODE=server  # non-interactive first install
 fi
+# ---------- the port (R82 section 1 point 3): first install only; an update never moves a Hub ----------
+# python prints "<kind> <port>": kind free (443 and no question), taken, unsure (the test could not tell: ask) or remote
+# (Remote access's nginx owns 443). A python that fails leaves the port unwritten: the code's 8710.
+pick_port() {          # $1 name ("Hub", "Weigh Station"), $2 kind, $3 offered port; prints the port to use
+    local who="$1" kind="$2" offered="$3" typed out
+    if [ -t 0 ] && [ "$GUIDED" -ne 1 ]; then
+        if [ "$kind" = unsure ]; then
+            echo "Port 443 could not be checked on this machine." >&2
+        else
+            echo "Port 443 is already in use on this machine.$([ "$kind" = remote ] && echo ' Remote access uses it for the public address.')" >&2
+        fi
+        while :; do
+            typed=""
+            read -r -p "Port for the $who [$offered]: " typed || true
+            if [ -z "$typed" ]; then echo "$offered"; return; fi
+            if out=$("$VENV/bin/python" -I -m filament_kit.hubport check "$typed" 2>&1); then echo "$out"; return; fi
+            echo "$out" >&2
+        done
+    fi
+    if [ "$kind" = taken ]; then
+        echo "Port 443 is in use on this machine, so the $who uses port $offered." >&2
+    elif [ "$kind" = remote ]; then
+        echo "Remote access uses port 443, so the $who uses port $offered." >&2
+    else
+        echo "Port 443 could not be checked on this machine, so the $who uses port $offered." >&2
+    fi
+    echo "$offered"
+}
+HUB_HERE=0; STATION_HERE=0; REMOTE_CHOSEN=0
+case "$MODE" in server | all-in-one) HUB_HERE=1 ;; esac
+case "$MODE" in station | all-in-one) STATION_HERE=1 ;; esac
+case "$MODE:$CUSTOM," in custom:*,server,*) HUB_HERE=1 ;; esac
+case "$MODE:$CUSTOM," in custom:*,station,*) STATION_HERE=1 ;; esac
+case "$MODE:$CUSTOM," in custom:*,remote,*) REMOTE_CHOSEN=1 ;; esac
+if [ "$FIRST_INSTALL" -eq 1 ] && [ "$HUB_HERE" -eq 1 ]; then
+    offer=$("$VENV/bin/python" -I -m filament_kit.hubport offer "$([ "$REMOTE_CHOSEN" -eq 1 ] && echo remote || echo plain)" 2>/dev/null) || offer=""
+    if [ -n "$offer" ]; then
+        if [ "${offer%% *}" = free ]; then HUB_PORT="${offer##* }"; else HUB_PORT=$(pick_port Hub "${offer%% *}" "${offer##* }"); fi
+    fi
+fi
+if [ "$FIRST_INSTALL" -eq 1 ] && [ "$STATION_HERE" -eq 1 ]; then
+    offer=$("$VENV/bin/python" -I -m filament_kit.hubport station-offer "$([ "$HUB_HERE" -eq 1 ] && echo hub || echo alone)" 2>/dev/null) || offer=""
+    case "${offer%% *}" in
+        "") ;;
+        free | beside) STATION_PORT="${offer##* }" ;;
+        *) STATION_PORT=$(pick_port "Weigh Station" "${offer%% *}" "${offer##* }") ;;
+    esac
+fi
 if [ -n "$MODE" ]; then
     # Only the modules and the station link change; on a first install there is no
     # server_name yet, so `modules apply` asks the first-run questions.
-    FK_MODE="$MODE" FK_MODULES="$CUSTOM" FK_AI="$AI_INTAKE" FK_SETS="$SETS" FK_SERVER="$SERVER_ADDR" FK_NO_SYSTEMD=1 "$VENV/bin/python" -I -c '
+    FK_MODE="$MODE" FK_MODULES="$CUSTOM" FK_AI="$AI_INTAKE" FK_SETS="$SETS" FK_SERVER="$SERVER_ADDR" FK_HUB_PORT="$HUB_PORT" FK_STATION_PORT="$STATION_PORT" FK_NO_SYSTEMD=1 "$VENV/bin/python" -I -c '
 import json, os, sys
 from filament_kit import config, modules
 f = config.paths().etc / "config.json"
@@ -397,6 +467,10 @@ else:
         cfg["modules"]["ai_intake"] = True  # the first install question
 if os.environ["FK_SERVER"]:
     cfg.setdefault("station", {})["allow"] = [os.environ["FK_SERVER"]]
+if os.environ.get("FK_HUB_PORT"):
+    cfg["port"] = int(os.environ["FK_HUB_PORT"])      # a first install only: the file then holds the port
+if os.environ.get("FK_STATION_PORT"):
+    cfg.setdefault("station", {})["port"] = int(os.environ["FK_STATION_PORT"])
 try:
     modules.validate(cfg)
 except modules.ModuleError as e:
@@ -407,6 +481,13 @@ print("Install mode: " + mode)
     chown root:filament-kit "$ETC/config.json"
     chmod 640 "$ETC/config.json"
 fi
+# the first-run file (R82 section 4): the Getting started panel shows on a new Hub, with the steps asked here marked
+if [ "$FIRST_INSTALL" -eq 1 ] && [ "$HUB_HERE" -eq 1 ]; then
+    # shellcheck disable=SC2086
+    "$VENV/bin/python" -I -m filament_kit.firstrun new $ASKED || echo "note: the Getting started list could not be prepared"
+fi
+# Guided Setup: modules apply asks nothing and ends with the address and the setup code
+if [ "$GUIDED" -eq 1 ]; then export FK_GUIDED=1; fi
 
 # ---------- 5. the modules ----------
 # (with the station on, `modules apply` also installs Piper, the [station-tts] extra, and its voice)

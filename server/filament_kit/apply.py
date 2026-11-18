@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from . import config, modules, pairing, remote, secret_input
+from . import config, firstrun, hubport, modules, pairing, remote, secret_input
 from .station import voice
 from .modules import MODULES, ModuleError
 
@@ -185,7 +185,8 @@ def station_dropin(cfg: dict, addresses: list[str]) -> str:
         env += [f"STATION_SERVER={server}", f"STATION_SERVER_PORT={int(cfg.get('port', 8710))}"]
     env_line = "Environment=" + " ".join(_env_assign(e) for e in env)
     ip_allow = " ".join(["localhost", *_uniq([*addresses, *paired_server_ips()])])
-    return f"[Service]\n{env_line}\nIPAddressAllow={ip_allow}\n"
+    # a port below 1024 (a new station on 443): the unit's empty capability sets get exactly CAP_NET_BIND_SERVICE
+    return f"[Service]\n{env_line}\nIPAddressAllow={ip_allow}\n{hubport.capability_lines(st['port'])}"
 
 
 def _resolve_all(cfg: dict, resolve: Callable[[str], list[str]]) -> list[str]:
@@ -376,6 +377,12 @@ def _tty() -> bool:
         return False
 
 
+def _guided() -> bool:
+    """Guided Setup was chosen at the installer's first question (R82 section 3): nothing else is asked, and the
+    install ends with the address and the setup code. install.sh sets FK_GUIDED=1 for this one run."""
+    return os.environ.get("FK_GUIDED") == "1"
+
+
 def _can_ask() -> bool:
     """Can a question be asked: a terminal, and not `--json`, which never asks (06 6.8)."""
     from . import output  # output does not import apply; imported here as cli's imports of apply are
@@ -518,8 +525,8 @@ def _server_setup(ex: _Exec, arg: str) -> None:
     """install.sh steps 5-6 (Ruling F): first-run questions, key, certificate, avahi file."""
     from . import cli  # cli imports apply; import here, not at module load
     etc = config.paths().etc
-    if "server_name" not in _raw_config() and not _can_ask():
-        # nobody to ask: keep the default, so a later apply at a keyboard asks no first-run questions
+    if "server_name" not in _raw_config() and (not _can_ask() or _guided()):
+        # nobody to ask (or Guided Setup: the page asks): keep the default, so a later apply at a keyboard asks no first-run questions
         cfg = config.load()
         cfg["server_name"] = socket.gethostname()
         config.save(cfg)
@@ -531,7 +538,10 @@ def _server_setup(ex: _Exec, arg: str) -> None:
         name = _ask(f"Display name shown in the phone app (any text) [{default_name}]: ").strip()
         cfg = config.load()
         cfg["server_name"] = name or default_name
-        if _ask("Use the default storage locations? [Y/n]: ").strip()[:1] in ("n", "N"):
+        firstrun.mark("name")           # the Getting started list: asked here, so it is done
+        storage_answer = _ask("Use the default storage locations? [Y/n]: ").strip()[:1]
+        firstrun.mark("storage")
+        if storage_answer in ("n", "N"):
             with output.shown():        # the context of the screen below
                 print("Make your changes, then q to go back.")
             cli._storage_menu(cfg)
@@ -539,7 +549,7 @@ def _server_setup(ex: _Exec, arg: str) -> None:
 
     key_file = etc / cli.KEY_FILE
     # Asked whenever it is missing and someone is at the keyboard (also on upgrade).
-    if arg == "key" and (not key_file.exists() or key_file.stat().st_size == 0) and _can_ask():
+    if arg == "key" and (not key_file.exists() or key_file.stat().st_size == 0)             and _can_ask() and not _guided():
         key = secret_input.ask("Anthropic API key (shown as *, Enter to skip): ").strip()
         if key:
             cli.write_key(key)
@@ -567,6 +577,28 @@ def _server_setup(ex: _Exec, arg: str) -> None:
         ex.cmd(["chmod", "640", str(key_pem)])
 
     port = int(config.load()["port"])
+    write_hub_dropin(ex, port)
+    write_avahi(ex, port)
+
+
+def write_hub_dropin(ex: _Exec, port: int) -> None:
+    """The Hub unit's capability drop-in (hubport.dropin_text): written for a port below 1024, removed for any other,
+    so a Hub on 8710 runs with the empty capability sets of its unit file. Takes effect at the next daemon-reload."""
+    text = hubport.dropin_text(port)
+    if text is None:
+        f = _under(ex.root, hubport.HUB_DROPIN)
+        if f.exists():
+            f.unlink()
+            try:
+                f.parent.rmdir()
+            except OSError:
+                pass
+        return
+    ex.write(hubport.HUB_DROPIN, text.encode("utf-8"), 0o644, "")
+
+
+def write_avahi(ex: _Exec, port: int) -> None:
+    """The network advert with the Hub's real port, then avahi reloaded (restarted when it will not reload)."""
     text = (ex.resources / "avahi" / "filament-kit.service").read_text(encoding="utf-8")
     ex.write(AVAHI_FILE, text.replace("<port>8710</port>", f"<port>{port}</port>").encode("utf-8"), 0o644)
     ex.cmd(["systemctl", "enable", "--now", "avahi-daemon"])
@@ -1015,7 +1047,7 @@ def app_url(cfg: dict) -> str:
     else the mDNS name."""
     ips = pairing.local_ips()
     host = ips[0] if ips else f"{pairing.short_hostname()}.local"
-    return f"https://{host}:{int(cfg.get('port', 8710))}/app.apk"
+    return f"https://{host}{hubport.url_port(cfg.get('port', 8710))}/app.apk"
 
 
 def _show_app(cfg: dict, tty: bool) -> bool:
@@ -1070,7 +1102,7 @@ def finish(cfg: dict, *, run: Callable[[list[str]], None] = run_checked, pairing
         print("\n==> Status")
         if not ex.ok([WRAPPER, "status"]):
             print("Some checks failed; follow the 'fix:' lines above.")
-        if pairing:
+        if pairing and not _guided():       # Guided Setup: the page has the app and the pairing
             tty = _can_ask()
             if not _show_app(cfg, tty):
                 print("\nPairing skipped: pair a phone later with: sudo spoolwarden pair")
@@ -1087,17 +1119,20 @@ def finish(cfg: dict, *, run: Callable[[list[str]], None] = run_checked, pairing
             print("\n==> The intake station's button flow")
             print("\n".join(lines))
     parts = ["Done."]
-    if "spoolman" in on:
+    guided = _guided() and "server" in on
+    if "spoolman" in on and not guided:
         parts.append(f"Spoolman: http://{host}.local:7912")
-    if "server" in on:
+    if "server" in on and not guided:
         parts.append("Pair another phone: sudo spoolwarden pair")
     if "station" in on:
         st = config._merge(config.DEFAULTS["station"], cfg.get("station") or {})
         parts.append(f"Station: http://{host}.local:{int(st['port'])}/state")
     print("\n" + "   ".join(parts))
+    if "server" in on and pairing and guided:
+        _setup_line(cfg)                    # Guided Setup ends with the address, then the firewall line
     if not ex.dry:
         _firewall_note(cfg, set(on))
-    if "server" in on and pairing:
+    if "server" in on and pairing and not guided:
         _setup_line(cfg)
 
 
@@ -1115,7 +1150,7 @@ def _firewall_note(cfg: dict, on: set) -> None:
         return
     ports = []
     if "server" in on:
-        ports += [f"{int(cfg.get('port', 8710))}/tcp", "5353/udp"]
+        ports += hubport.firewall_ports(cfg)
     if "spoolman" in on:
         ports.append("7912/tcp")
     if "remote" in on:        # nginx's; the web unit listens on 127.0.0.1 only
@@ -1131,9 +1166,12 @@ def _firewall_note(cfg: dict, on: set) -> None:
 def _setup_line(cfg: dict) -> None:
     """The setup page's address, with its code only at a terminal: an install log must not carry the code."""
     from . import setup_code
-    url = setup_code.page_url(cfg)
+    guided = _guided()
+    url = setup_code.base_url(cfg) if guided else setup_code.page_url(cfg)
     code = setup_code.read() if _can_ask() else None
     if code:
         print(f"\nOpen {url}  (setup code: {setup_code.shown(code)})")
+        if guided:
+            print("Guided Setup starts there.")
     else:
         print(f"\nSetup page: {url}  (its setup code, at a terminal: sudo spoolwarden setup-code)")
