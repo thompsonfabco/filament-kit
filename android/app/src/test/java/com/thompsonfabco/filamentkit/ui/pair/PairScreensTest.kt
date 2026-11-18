@@ -86,12 +86,20 @@ class PairScreensTest {
         rule.onNodeWithText(text(R.string.common_connect)).assertIsEnabled()
     }
 
-    @Test fun theAddressFormSubmitsWhatWasTypedWithThePrefilledPort() {
+    @Test fun aFreshAddressFormHasABlankPortAndSubmitsItBlank() {
         val sent = mutableListOf<Pair<String, String>>()
         show { PairAddressScreen(PairUi(step = Step.Address), { h, p -> sent += h to p }, {}) }
+        rule.onNodeWithText(text(R.string.pair_address_port_hint)).assertExists()
         rule.onNodeWithText(text(R.string.pair_address_label)).performTextInput("hub.example")
         rule.onNodeWithText(text(R.string.common_connect)).performClick()
-        assertEquals(listOf("hub.example" to "8710"), sent)
+        assertEquals(listOf("hub.example" to ""), sent)
+    }
+
+    @Test fun theAddressFormSubmitsATypedPortOrOneCarriedInTheState() {
+        val sent = mutableListOf<Pair<String, String>>()
+        show { PairAddressScreen(PairUi(step = Step.Address, host = "hub.example", port = 8443, portText = "8443"), { h, p -> sent += h to p }, {}) }
+        rule.onNodeWithText(text(R.string.common_connect)).performClick()
+        assertEquals(listOf("hub.example" to "8443"), sent)
     }
 
     @Test fun theFingerprintIsShownFourGroupsToALine() {

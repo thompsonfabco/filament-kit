@@ -88,6 +88,7 @@ window.SW_TEXT = Object.freeze({
   "pair_address_label": "IP address or name",
   "pair_address_placeholder": "192.0.2.10 or hub.local",
   "pair_address_port_label": "Port",
+  "pair_address_port_hint": "Leave empty to try 443, then 8710.",
   "common_connect": "Connect",
   "pair_address_error_empty": "Enter the Hub's address.",
   "pair_address_error_port": "The port must be a number from 1 to 65535.",

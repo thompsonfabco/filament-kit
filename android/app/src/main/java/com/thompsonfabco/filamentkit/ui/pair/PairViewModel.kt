@@ -46,6 +46,8 @@ data class PairUi(
     val step: Step = Step.Choose,
     val host: String = "",
     val port: Int = DEFAULT_PORT,
+    /** What the address screen's Port field starts with: blank on a fresh entry, a typed or probed port otherwise. */
+    val portText: String = "",
     /** Lowercase hex, no spaces; show it with [groupFingerprint]. */
     val fingerprint: String? = null,
     val busy: Boolean = false,
@@ -88,10 +90,10 @@ class PairViewModel(
     private var fromList = false
 
     /** Open the manual flow, optionally prefilled. */
-    fun startManual(host: String = "", port: Int = DEFAULT_PORT) {
+    fun startManual(host: String = "", port: Int? = null) {
         confirmed = false
         fromList = false
-        _state.value = PairUi(step = Step.Address, host = host, port = port)
+        _state.value = PairUi(step = Step.Address, host = host, port = port ?: DEFAULT_PORT, portText = port?.toString().orEmpty())
     }
 
     /** A Hub found on the network: straight to its fingerprint check; if that fails, the first screen says why. */
@@ -267,7 +269,7 @@ class PairViewModel(
         confirmed = false
         val toAddress = s.mismatch == null && !fromList && (s.step == Step.Confirm || s.step == Step.Code)
         fromList = false
-        _state.value = if (toAddress) PairUi(step = Step.Address, host = s.host, port = s.port) else PairUi()
+        _state.value = if (toAddress) PairUi(step = Step.Address, host = s.host, port = s.port, portText = s.port.toString()) else PairUi()
     }
 
     /** Another screen hit a changed server certificate: show both fingerprints until the user chooses "Pair again". */
