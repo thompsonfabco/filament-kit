@@ -290,3 +290,36 @@ def test_the_group_reads_in_all_four_looks(hub, tmp_path, width):
         assert [b[0] for b in v["btn"]] == (["Change the backup password", "Remove the backup password"] if v["state"] == "set" else ["Set a backup password"]), tag
         assert all(n <= 2 for n in v["titles"]) and v["badge"] == [True], (tag, "the list row is squeezed", v)
         assert v["oldWarning"] is (v["state"] == "plain"), tag
+
+
+EDGE = r"""
+const view = [];
+await until(() => pane() && paneText().startsWith("No backup"), "the pane");
+const box = $(".backup-password");
+for (const look of ["console", "palette"]) {
+  document.documentElement.setAttribute("data-look", look);
+  for (const w of [330, 360]) {
+    box.style.width = w + "px"; box.style.maxWidth = "none";           // the group's own width, either side of the 344 px edge
+    await sleep(200);
+    const ban = $(".banner", box), icon = $(".icon", ban), t = $(".banner__text", ban);
+    const cs = getComputedStyle(t), lh = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.4;
+    view.push({ look, w, box: Math.round(box.getBoundingClientRect().width), above: icon.getBoundingClientRect().bottom <= t.getBoundingClientRect().top + 1,
+      beside: t.getBoundingClientRect().left >= icon.getBoundingClientRect().right - 1 && Math.abs(t.getBoundingClientRect().top - icon.getBoundingClientRect().top) < 8,
+      full: Math.round(t.getBoundingClientRect().width), banner: Math.round(ban.getBoundingClientRect().width), lines: Math.round(t.getBoundingClientRect().height / lh) });
+  }
+}
+out.view = view;
+"""
+
+
+def test_the_warning_sentence_changes_place_at_the_344_px_edge(hub, tmp_path):
+    page = _drive_backups(hub, tmp_path, EDGE, width=1280)
+    assert len(page["view"]) == 4
+    for v in page["view"]:
+        tag = (v["look"], v["w"])
+        assert v["box"] == v["w"], (tag, v)
+        assert v["lines"] <= 3, (tag, "the sentence is squeezed", v)
+        if v["w"] < 344:      # under the edge: icon above, the sentence has the banner's full width inside its padding
+            assert v["above"] and not v["beside"] and v["full"] >= v["banner"] - 2 * 12 - 1, (tag, v)
+        else:                 # over it: icon and sentence share a row
+            assert v["beside"] and not v["above"] and v["full"] < v["banner"] - 20 - 12 - 2 * 12 + 1, (tag, v)
