@@ -31,6 +31,7 @@ log = logging.getLogger("filament_kit.watch")
 PAUSE_SETTLE = 2.0          # seconds to wait for the stage or the sensor that says why a print paused
 POLL = 5.0                  # seconds between looks at whether each printer answers
 OFFLINE_GRACE = 30.0        # seconds a printer must stay offline before printer.offline (a reconnect is not news)
+ERROR_REPEAT = 1800.0       # seconds before the same printer error code of the same printer is told again (R475 LOW 2)
 BAMBU_ONLINE = ("connected", "needs_developer_mode")
 KLIPPER_ONLINE = ("connected", "unknown_model")
 ACTIVE = ("RUNNING", "PAUSE")
@@ -51,7 +52,8 @@ class _Printer:
         self.started_at: float | None = None
         self.pending = False                 # a pause is waiting for its reason
         self.timer: threading.Timer | None = None
-        self.errors: set[str] = set()        # printer error codes already told
+        self.errors: set[str] = set()        # printer error codes there now (a code gone and back is new again ...)
+        self.told: dict[str, float] = {}     # ... unless it was told in the last ERROR_REPEAT seconds: code -> clock
         self.online: bool | None = None      # None = not known; False = known offline (told or first sight)
         self.offline_told = False
         self.offline_since: float | None = None
@@ -312,10 +314,13 @@ class Watcher:
     def _errors(self, pid: str, p: _Printer, obs: dict) -> None:
         """printer.error for each error code that was not there before (HMS codes and the print error)."""
         now = {**obs["hms"], **({obs["error"]: obs.get("stage") or ""} if obs["error"] else {})}
+        at = self._clock()
         for code, text in now.items():
-            if code not in p.errors:
+            if code not in p.errors and at - p.told.get(code, -ERROR_REPEAT) >= ERROR_REPEAT:
                 self._write("printer.error", pid, {"code": code, "text": text})
+                p.told[code] = at
         p.errors = set(now)
+        p.told = {c: t for c, t in p.told.items() if at - t < ERROR_REPEAT}
 
     # ---- do the printers answer
     def _online(self, pid: str, family: str) -> bool | None:
