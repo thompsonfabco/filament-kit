@@ -218,6 +218,67 @@ class Api(
         return AlertParsing.events(call(req.get(), if (q.waitS > 0) q.waitS + EVENTS_EXTRA_S else null))
     }
 
+    // ---- history and data (R84 section 9) ----
+
+    /**
+     * `GET api/events?activity=1`: what was done, newest first, with each event's `undo`. [subject] is `spool:<id>`;
+     * [limit] at most that many. Only the events that name [subject] are kept, because an older Hub ignores the filter.
+     */
+    suspend fun activity(subject: String?, limit: Int): List<ActivityEvent> {
+        val req = request("api", "events") {
+            addQueryParameter("activity", "1")
+            subject?.let { addQueryParameter("subject", it) }
+            addQueryParameter("limit", limit.toString())
+        }
+        return HistoryWire.events(call(req.get()), subject)
+    }
+
+    /**
+     * `POST api/events/{id}/undo`. 409 `changed_since`, `too_old`, `already_undone` or `not_undoable` is an [ApiError]
+     * whose `text` is in [ApiError.extra]; 404 `not_found` is an older Hub (or an event the Hub no longer has).
+     */
+    suspend fun undoEvent(id: Long): UndoAnswer =
+        HistoryWire.undo(call(request("api", "events", id.toString(), "undo").post(ByteArray(0).toRequestBody(null))))
+
+    /** `GET api/health`: [days] is 7 or 30; null when the Hub has no such call (an older Hub, 404), so the table is hidden. */
+    suspend fun health(days: Int): HealthAnswer? = try {
+        HistoryWire.health(call(request("api", "health") { addQueryParameter("days", days.toString()) }.get()))
+    } catch (e: ApiError) {
+        if (e.status == 404) null else throw e
+    }
+
+    /** `GET api/printers/{id}/usage?by=month`; null when the Hub has no such view (an older Hub: no `months`). */
+    suspend fun usageByMonth(id: String): List<UsageMonth>? {
+        val req = request("api", "printers", id, "usage") { addQueryParameter("by", "month") }
+        val answer = call(req.get())
+        return if ((answer as? JsonObject)?.get("months") is JsonArray) HistoryWire.months(answer) else null
+    }
+
+    /**
+     * `GET api/export/{set}.csv` into [to] (`usage` takes [days] and [printer]; `recent` and `spoolman-spools` take
+     * neither): the file is written beside it and only then put in place, so a cut download leaves nothing. 404 is an
+     * older Hub (or a Spoolman without its export).
+     */
+    suspend fun exportCsv(set: String, to: File, days: Int? = null, printer: String? = null) {
+        val part = File(to.parentFile, to.name + ".part")
+        try {
+            withContext(Dispatchers.IO) {
+                val req = request("api", "export", "$set.csv") {
+                    days?.let { addQueryParameter("days", it.toString()) }
+                    printer?.let { addQueryParameter("printer", it) }
+                }.get().build()
+                execute(req, DOWNLOAD_S).use { resp ->
+                    if (!resp.isSuccessful) throw errorFor(resp.code, resp.body.string(), req.header("Authorization"))
+                    resp.body.byteStream().use { src -> copyToDisk(src, part, check = { ensureActive() }) { } }
+                }
+                to.delete()
+                if (!part.renameTo(to)) throw storageError("Could not write ${to.name}")
+            }
+        } finally {
+            part.delete()
+        }
+    }
+
     suspend fun alertsConfig(): AlertsConfig = AlertParsing.alerts(call(request("api", "alerts").get()))
 
     /** Stores nothing: the Hub gives this phone one test alert in its next events answer, within 60 seconds. */

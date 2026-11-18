@@ -1,3 +1,4 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | $set.csv | not text: a route, JSON field or wire value of history and data (HD9)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | .part | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | Authorization | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | Bearer  | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
@@ -18,6 +19,7 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | X-Spoolward
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | accept | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | access_code | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | action | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | activity | not text: a route, JSON field or wire value of history and data (HD9)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | add | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | alert | not text: a route, JSON field, storage key or log value of the alerts feature (EA8)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | alerts | not text: a route, JSON field, storage key or log value of the alerts feature (EA8)
@@ -30,6 +32,7 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | bad_request
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | bambu_parent | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | bs_template | wire identifier (route, field or error code), never shown; the screen's texts are in the catalogue (S4.14)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | build | wire identifier (route, field or error code), never shown; the screen's texts are in the catalogue (S4.14)
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | by | not text: a route, JSON field or wire value of history and data (HD9)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | by_hand | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | camera | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | camera.mjpeg | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
@@ -44,6 +47,7 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | entries | l
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | entry | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | error | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | events | not text: a route, JSON field, storage key or log value of the alerts feature (EA8)
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | export | not text: a route, JSON field or wire value of history and data (HD9)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | family | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | filaments | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | filter | wire key, route or header of phase 3 (EV7a), not a text; found by the widened scan (request 0238)
@@ -51,6 +55,7 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | force | lit
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | form | wire key, route or header of phase 3 (EV7a), not a text; found by the widened scan (request 0238)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | found | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | gross | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | health | not text: a route, JSON field or wire value of history and data (HD9)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | hint | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | history | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | host | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
@@ -81,6 +86,8 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | manual-map 
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | map | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | material | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | message | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | month | not text: a route, JSON field or wire value of history and data (HD9)
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | months | not text: a route, JSON field or wire value of history and data (HD9)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | name | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | names | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | not_found | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
@@ -131,6 +138,7 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | start | lit
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | status | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | stop | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | storage | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | subject | not text: a route, JSON field or wire value of history and data (HD9)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | subnet | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | sync | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | tag | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps

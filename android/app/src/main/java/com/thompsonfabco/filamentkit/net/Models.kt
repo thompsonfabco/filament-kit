@@ -1082,3 +1082,148 @@ object KitWire {
     private fun JsonObject.bool(key: String): Boolean? = (this[key] as? JsonPrimitive)?.booleanOrNull
     private fun JsonObject.objects(key: String): List<JsonObject> = (this[key] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
 }
+
+// ---- history and data (R84 section 9): events with undo, health, usage by month ----
+// Parsed leniently like the rest of KitWire: a missing field is a default, so an older Hub never crashes the app.
+
+/** Why the Hub refuses an undo (`why_not`, also the `error` of a 409 `POST api/events/{id}/undo`). */
+object UndoWhyNot {
+    const val CHANGED_SINCE = "changed_since"
+    const val TOO_OLD = "too_old"
+    const val ALREADY_UNDONE = "already_undone"
+    const val NOT_UNDOABLE = "not_undoable"
+}
+
+/** An event's `undo`: [possible] with the time the Hub allows it until, or the [whyNot] it cannot be undone. */
+data class UndoState(val possible: Boolean, val until: String?, val whyNot: String?)
+
+/**
+ * One event of `GET api/events?activity=1`. [who] is the actor's name (its type when it has none), [text] the Hub's
+ * sentence for it. [undo] is null when the Hub sent none (an older Hub: nothing can be undone from the app).
+ */
+data class ActivityEvent(
+    val id: Long,
+    val at: String,
+    val atMillis: Long?,
+    val kind: String,
+    val who: String,
+    val text: String,
+    val subject: String?,
+    val undo: UndoState?,
+    val undone: Boolean,
+    val undoOf: Long?,
+) {
+    /** The row keeps Undo while the Hub allows it. */
+    val canUndo: Boolean get() = undo?.possible == true && !undone
+}
+
+/** `POST api/events/{id}/undo` 200: [event] is the new event's id, [note] what the Hub adds (a load or unload). */
+data class UndoAnswer(val undone: Boolean, val eventId: Long?, val note: String?)
+
+/** One check of `GET api/health`: [now] is `ok`, `look` or `bad`. */
+data class HealthCheck(val key: String, val group: String, val text: String, val now: String)
+
+/** One change of state of a check: [from] and [to] are `ok`, `look` or `bad`. */
+data class HealthChange(val at: String, val atMillis: Long?, val key: String, val text: String, val from: String, val to: String)
+
+/** `GET api/health`: [since] is when history starts, when the Hub says (the days before it are empty). */
+data class HealthAnswer(
+    val from: String?,
+    val to: String?,
+    val since: String?,
+    val checks: List<HealthCheck>,
+    val changes: List<HealthChange>,
+)
+
+/** One month of `GET api/printers/{id}/usage?by=month`. */
+data class UsageMonth(
+    /** `2026-11`. */
+    val month: String,
+    val grams: Double,
+    val prints: Int,
+    val unfinishedPrints: Int,
+    val topMaterial: String?,
+)
+
+object HistoryWire {
+    fun event(element: JsonElement): ActivityEvent? {
+        val o = element as? JsonObject ?: return null
+        val id = o.long("id") ?: return null
+        val actor = o["actor"] as? JsonObject
+        val subject = o["subject"] as? JsonObject
+        val subjectType = subject?.str("type")?.takeIf { it.isNotBlank() }
+        val at = o.str("at").orEmpty()
+        return ActivityEvent(
+            id = id,
+            at = at,
+            atMillis = runCatching { java.time.Instant.parse(at).toEpochMilli() }.getOrNull(),
+            kind = o.str("kind").orEmpty(),
+            who = actor?.str("name")?.takeIf { it.isNotBlank() } ?: actor?.str("type").orEmpty(),
+            text = o.str("text")?.takeIf { it.isNotBlank() } ?: o.str("title").orEmpty(),
+            subject = subjectType?.let { t -> "$t:${subject.str("id").orEmpty()}" },
+            undo = (o["undo"] as? JsonObject)?.let { u ->
+                UndoState(u.bool("possible") ?: false, u.str("until")?.takeIf { it.isNotBlank() }, u.str("why_not")?.takeIf { it.isNotBlank() })
+            },
+            undone = o.bool("undone") ?: false,
+            undoOf = o.long("undo_of"),
+        )
+    }
+
+    /**
+     * The events of an answer, newest first. An older Hub ignores `subject` and sends every event, so when [subject] is
+     * given only the events that name it are kept.
+     */
+    fun events(root: JsonElement, subject: String? = null): List<ActivityEvent> =
+        ((root as? JsonObject)?.get("events") as? JsonArray).orEmpty().mapNotNull(::event)
+            .filter { subject == null || it.subject == subject }
+            .sortedByDescending { it.id }
+
+    fun undo(root: JsonElement): UndoAnswer {
+        val o = root as? JsonObject ?: JsonObject(emptyMap())
+        val ev = o["event"]
+        return UndoAnswer(
+            undone = o.bool("undone") ?: true,
+            eventId = (ev as? JsonObject)?.long("id") ?: (ev as? JsonPrimitive)?.longOrNull,
+            note = o.str("note")?.takeIf { it.isNotBlank() },
+        )
+    }
+
+    fun health(root: JsonElement): HealthAnswer {
+        val o = root as? JsonObject ?: JsonObject(emptyMap())
+        return HealthAnswer(
+            from = o.str("from"),
+            to = o.str("to"),
+            since = o.str("since")?.takeIf { it.isNotBlank() },
+            checks = o.objects("checks").mapNotNull { c ->
+                val key = c.str("key") ?: return@mapNotNull null
+                HealthCheck(key, c.str("group").orEmpty(), c.str("text").orEmpty(), c.str("now") ?: "ok")
+            },
+            changes = o.objects("changes").mapNotNull { c ->
+                val key = c.str("key") ?: return@mapNotNull null
+                val at = c.str("at").orEmpty()
+                HealthChange(
+                    at, runCatching { java.time.Instant.parse(at).toEpochMilli() }.getOrNull(),
+                    key, c.str("text").orEmpty(), c.str("from") ?: "ok", c.str("to") ?: "ok",
+                )
+            },
+        )
+    }
+
+    /** The months of `usage?by=month`, newest first; a row without a month is dropped. */
+    fun months(root: JsonElement): List<UsageMonth> =
+        (root as? JsonObject)?.objects("months").orEmpty().mapNotNull { m ->
+            val month = m.str("month")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            UsageMonth(
+                month = month,
+                grams = (m["grams"] as? JsonPrimitive)?.doubleOrNull ?: 0.0,
+                prints = m.long("prints")?.toInt() ?: 0,
+                unfinishedPrints = m.long("unfinished_prints")?.toInt() ?: 0,
+                topMaterial = m.str("top_material")?.takeIf { it.isNotBlank() },
+            )
+        }.sortedByDescending { it.month }
+
+    private fun JsonObject.str(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it !is JsonNull }?.contentOrNull
+    private fun JsonObject.long(key: String): Long? = (this[key] as? JsonPrimitive)?.let { it.longOrNull ?: it.doubleOrNull?.toLong() }
+    private fun JsonObject.bool(key: String): Boolean? = (this[key] as? JsonPrimitive)?.booleanOrNull
+    private fun JsonObject.objects(key: String): List<JsonObject> = (this[key] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
+}
