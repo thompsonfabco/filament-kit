@@ -175,7 +175,7 @@ line, then:
 | Hub | name (`--fs-l` `--fw-title`) and address in `--mono` ("192.0.2.10") |
 | Versions | "App 0.5.2 · Hub 0.5.2" in `--mono`; "Hub version not known yet" when it is not |
 | Last answer | relative time ("12 seconds ago"); long-press shows the exact time (F2) |
-| Action | one button by state: Offline "Try again" (filled; runs the check now, label "Checking…" with a spinner while it runs); Certificate changed "Review the certificate" (filled; opens 4.8); No longer paired "Pair again" (filled; opens the pairing graph); Needs local network access "Allow" or "Open app settings" (filled; as 4.2). Connected: "Hub connection settings" (text button; opens 12.3). |
+| Action | one button by state: Offline "Try again" (filled; runs the check now, label "Checking…" with a spinner while it runs); Certificate changed "Review the certificate" (filled; opens 4.8); No longer paired "Pair again" (filled; opens the pairing graph); Needs local network access "Allow" or "Open app settings" (filled; as 4.2). Connected: "Hub connection settings" (text button; opens 12.3) and "The Hub at a glance" (text button; opens 12.8). |
 
 ### 2.5 Routes and Back
 
@@ -210,6 +210,8 @@ line, then:
 | `printers` | Printers (9.1) | Printers root | `home` tab |
 | `printers/add/{serial}` | Add a Bambu Lab printer (dialog destination, 9.2) | Printers | `printers` |
 | `printers/add-klipper` | Add a Klipper printer (dialog destination, 9.3) | Printers | `printers` |
+| `printers/add` | The guided add, step 1: which printer (9.12) | Printers | `printers`; asks first when something was typed |
+| `printers/{id}/map-prompt` | The guided add, step 4: map its slots now (9.12) | Printers | `printers/{id}` |
 | `printers/{id}` | Printer (9.4) | Printers | `printers` |
 | `printers/{id}/slots/{slot}/pick` | Pick a spool for a slot (9.6) | Printers | `printers/{id}` |
 | `printers/{id}/map-by-loading` | Map by loading filament (9.8) | Printers | `printers/{id}`; asks first while a mapping is open |
@@ -223,6 +225,7 @@ line, then:
 | `settings/appearance` | Appearance (12.2) | Settings | `settings` |
 | `settings/alerts` | Alerts (12.7) | Settings | `settings` |
 | `settings/hub` | Hub connection (12.3) | Settings | `settings` |
+| `hub` | The Hub at a glance (12.8) | Shared | the screen it was opened from |
 | `settings/updates` | App updates (12.4, 13) | Settings | `settings` |
 | `settings/licences` | Licences (12.5) | Settings | `settings` |
 | `settings/developer` | Developer (debug builds only, 12.6) | Settings | `settings` |
@@ -544,6 +547,8 @@ Drafts), right (Printers, Slicer presets), each up to `column-max`.
 |     [Open the printer]    [Dismiss]  |
 | 2 more alerts                      > |
 | (i) Update ready: Spoolwarden 0.5.3 >|  <- only when there is one
+| Getting started on the Hub:          |  <- only while steps remain
+|   4 of 8 done                      > |
 |                                      |
 | Add spools                           |
 |  Photograph each label, check what   |
@@ -576,9 +581,10 @@ Drafts), right (Printers, Slicer presets), each up to `column-max`.
 | Local network notice | 3.3, at the top, only in that state. | | Panel |
 | Alert banners | The alert banners of 3.6, at most two, then the line "<n> more alerts" (opens `alerts`). None when nothing is raised or unread. | `GET api/events` | `NoticeCard` |
 | Update notice | Only when an app update is offered or the Hub is newer than the app (13). Notice line of kind `info` "Update ready: Spoolwarden 0.5.3." or of kind `warn` "Update the app: the Hub is newer, so some things may not work." Trailing chevron; tapping opens `settings/updates`. | `GET api/info` | Notice line |
+| Getting started line | Only while steps remain on the Hub and the Hub page's list is not hidden (`getting_started` of `GET api/hub`): one quiet line "Getting started on the Hub: 4 of 8 done" with a trailing chevron. Tapping opens the Hub screen (12.8). Gone when the steps are finished or the list is hidden. | `GET api/hub` | Notice line |
 | Add spools panel | Title "Add spools". Text "Photograph each label, check what was read, then add. Nothing is saved until you add." Main button "Add from label photos" (camera icon) starts a new draft at `add/{id}/photos`. Other button "Add by hand" starts a new draft at `add/{id}/review` with the filament picker (6.4). When the Label Reader is off on the Hub, "Add by hand" is the main button, the photo button is absent, and one line says "The Label Reader is switched off. Add the spool by hand, or switch it on in Features on the Hub page." | `GET api/info` (`labelReading`) | Panel, `Button`, `OutlinedButton` |
 | Drafts panel | Only when drafts exist. Title "Drafts" with the count. One row per draft, newest first: headline the relative time ("3 minutes ago"; exact time on long-press), supporting line "2 photos · note: 3 of the grey ones · tag <tag ID>" (only the parts that exist), trailing chevron. Tapping resumes the draft where it stopped. The row's overflow offers "Discard": dialog "Discard this add?" / "Its photos and edits are removed from this phone." / "Keep" / "Discard" (danger); then the snackbar "Add discarded." | none (drafts live on the phone) | Panel, `ListItem`, `DropdownMenu` |
-| Printers panel | Title "Printers" with the count; header action "All printers" selects the Printers destination. One row per configured printer, at most 4, then "and 2 more": status shape and word, name, and the job when printing ("Printing · 42 % · 1 h 12 min left"). Tapping a row opens `printers/{id}` in the Printers destination. Empty: "No printers yet." with the text button "Add a printer" (selects Printers). Absent when the printers Feature is off. | `GET api/printers` (with each connection check) | Panel, `ListItem` |
+| Printers panel | Title "Printers" with the count; header action "All printers" selects the Printers destination. One row per configured printer, at most 4, then "and 2 more": status shape and word, name, and the job when printing ("Printing · 42 % · 1 h 12 min left"); no slot swatches (those, with the waiting ring, are on the Printers list only, 9.1). Tapping a row opens `printers/{id}` in the Printers destination. Empty: "No printers yet." with the text button "Add a printer" (selects Printers). Absent when the printers Feature is off. | `GET api/printers` (with each connection check) | Panel, `ListItem` |
 | Running low line | Only when at least one spool is running low: a row with the warn triangle and "<n> spools running low" ("1 spool running low"), chevron; tapping opens Spools with the Running low filter on (7.1). It sits under the Printers panel. | `GET api/spools/low` | `ListItem` |
 | Slicer presets panel | 11.1 | `GET api/profiles/status` | Panel |
 
@@ -737,7 +743,7 @@ more than 1, supporting line "Existing filament 41 (3 spools). A different brand
 "New filament", and one status: "Ready" (filled circle, `--ok`), "1 estimated" (triangle, `--warn`), or "Needs:
 Material, Net weight" (octagon, `--bad`). Trailing: the chevron and an overflow "More actions" with "Remove this spool" (no
 dialog; snackbar "Spool removed." with "Undo") and "Add this line to the Filament Catalog" (opens `catalog/new`, 8,
-with Brand, Line and Material filled in from this panel; the draft is kept and Back returns here). When the Label Reader gave a reason for sealed, a line under the header in
+with Brand, Name and Material filled in from this panel; the draft is kept and Back returns here). When the Label Reader gave a reason for sealed, a line under the header in
 `--fs-s` `--muted`: "Label Reader: in a vacuum bag".
 
 **Fields**, in the add-form groups shared with the web app: Identity · Amount · State · Print settings · Storage ·
@@ -851,13 +857,13 @@ result, from a tag tap (2.6), from a printer slot (9.6) or from a deep link.
 Requests: `GET api/spools/low`, `GET api/spools?q=<q>[&sealed=1]`, `GET api/tags/{uid}`, `PATCH api/spools/{id}` with `gross`,
 `remaining`, `location` or `empty` and `dry_run`, `GET api/locations`, `GET api/storage`, `POST api/spools/{id}/link` with
 `{tag, force, dry_run, gross, location}`, `GET api/printers`, `GET api/printers/{id}`,
-`POST api/printers/{id}/slots/{label}/load` with `dry_run`.
+`POST api/printers/{id}/slots/{label}/load` with `dry_run`. The answer of `GET api/spools` also carries `spoolman_url`.
 
 ### 7.1 Spools (`spools`)
 
 ```
 +--------------------------------------+
-| Spools              (o) Connected ☼  |
+| Spools              (o) Connected ☼:|
 +--------------------------------------+
 | [(search) Brand, material, colour  ] |
 | [Sealed only] [Running low (3)]      |
@@ -878,6 +884,7 @@ Requests: `GET api/spools/low`, `GET api/spools?q=<q>[&sealed=1]`, `GET api/tags
 
 | Element | Text / behaviour | Material 3 |
 |---|---|---|
+| Top bar | Title "Spools", connection chip, appearance icon (2.2) and the overflow "More actions" with one item, "Open Spoolman". It opens Spoolman's own page in the phone's browser (plain http). The address is `spoolman_url` of the answer of `GET api/spools`: with Spoolman on the Hub, `http://<the host name the phone uses for the Hub>:7912`, otherwise the configured address. The app never builds it. The item is absent when the Hub gives no address. Searching by colour name and a "quick find" are not offered: this link is the answer. | `TopAppBar`, `DropdownMenu` |
 | Search field | Label "Brand, material, colour…", leading search icon, trailing clear `IconButton` ("Clear search") when not empty, `ImeAction.Search`. Searches 300 ms after typing stops once 2 or more characters are typed, and at once on the keyboard's search key. Clearing the field clears the results. No separate Search button. | `OutlinedTextField` |
 | Sealed only | Filter chip "Sealed only"; the whole chip toggles; re-runs the search. | `FilterChip` |
 | Running low | Filter chip "Running low (<n>)", `<n>` from `GET api/spools/low`; not shown when `<n>` is 0; the whole chip toggles. With it on, the results panel shows the Running low rows instead of the search results, least filament first: swatch, headline the filament name, supporting line "Spool 214 · 96 g left · Rack 1 · 2 more in stock" (or "Last one", with the warn triangle), chevron; tapping opens `spools/{id}`. Opened from Home's "<n> spools running low" line with the chip already on. | `FilterChip` |
@@ -974,7 +981,7 @@ summary row is pinned at the top of each step.
 | Step | Route | Content |
 |---|---|---|
 | 1. Printer | `spools/{id}/load` | Header "Which printer?". One row per configured printer: status shape and word, name, model. Printers that cannot take a load now (offline, wrong Access Code) are shown disabled with the reason as the supporting line ("Offline"). Skipped when exactly one printer can take the load; step 2 then shows "Printer: Workshop X1". Loading: "Loading printers…" skeleton rows. Empty: "No printers are set up yet. Add one under Printers." with the text button "Open Printers". |
-| 2. Slot | `spools/{id}/load/{printerId}` | Header "Which slot on Workshop X1?". The printer's slots grouped by unit ("AMS A", "Toolhead"): one row per slot: slot label in `--mono` (as the Hub names it: "A2", "T0"), swatch, and the line "<material> · <spool name> · <percent> %" ("PETG · Bambu Lab PETG HF Orange · 88 %"); parts the printer or the inventory does not give are left out with their separator ("PLA" for filament linked to no spool); an empty slot reads "Empty" with the dashed swatch; the active slot adds " · in use". A printer problem, when there is one, as a notice line at the top with its fix text. "The printer reports no slots." when empty. Loading: "Loading slots…". |
+| 2. Slot | `spools/{id}/load/{printerId}` | Header "Which slot on Workshop X1?". The printer's slots grouped by unit ("AMS A", "Toolhead"): one row per slot: slot label in `--mono` (as the Hub names it: "A2", "T0"), swatch, and the line "<material> · <spool name> · <percent> %" ("PETG · Bambu Lab PETG HF Orange · 88 %"); parts the printer or the inventory does not give are left out with their separator ("PLA" for filament linked to no spool); an empty slot reads "Empty" with the dashed swatch; a slot a spool is waiting for (Bambu Lab) shows that spool's colour with the dashed ring and the line "Waiting for the spool to load in <slot>."; the active slot adds " · in use". A printer problem, when there is one, as a notice line at the top with its fix text. "The printer reports no slots." when empty. Loading: "Loading slots…". |
 | 3. Preview | `spools/{id}/load/{printerId}/{slot}` | On entry the app asks for a dry run ("Checking…"). Header "Load into Workshop X1, slot A2?". The Hub's preview lines as rows (preset, nozzle, where the spool now in the slot goes back to). The text "This sets the slot on the printer and moves the spool there in the inventory." Buttons "Back" (outlined) and "Load" (main; "Loading…" with a spinner). |
 
 While the load is being written Back is ignored (2.5 rule 2). Results:
@@ -983,6 +990,7 @@ While the load is being written Back is ignored (2.5 rule 2). Results:
 |---|---|
 | Loaded | The load stack closes; the spool screen's result line shows "Loaded into Workshop X1, slot A2." |
 | Accepted, not shown yet | Same, with a `warn` result line: "The printer accepted it but hasn't shown the change yet." |
+| Waiting (the answer says `pending`) | The load stack closes; the result line is an `info` line: "Waiting for the spool to load in <slot>." The slot shows the waiting state (9.5) until the printer shows the load |
 | Connection lost during the write | The step stays open with a `bad` notice: "The connection dropped while loading, so the app can't tell if it worked. Check the printer's slot and the spool's location before trying again." Buttons "Open the printer" and "Done". |
 | Refused | `bad` notice with the Hub's or printer's reason; for a pairing refusal: "Not loaded: the Hub did not accept this phone's pairing at that moment. Nothing was changed." |
 
@@ -1023,24 +1031,25 @@ used.
 ## 8. Add a line to the Filament Catalog (`catalog/new`)
 
 What today's app calls "Add profile": it records a product line's values from the maker's label or data sheet in the
-Filament Catalog, so Slicer presets can be built for it. Reached from the Slicer presets screen (11.2) and from the
-spool panel overflow in 6.3 ("Add this line to the Filament Catalog").
+Filament Catalog, so Slicer presets can be built for it. It is the owner's own entry in the Filament Catalog, not a
+slicer-preset line. Reached from the Slicer presets screen (11.2) and from the spool panel overflow in 6.3 ("Add this
+line to the Filament Catalog"). The form is the same in every interface, and the Hub builds the entry from its values:
+the app sends values and never an entry's text.
 
-Request: `POST api/library/local`; parents from `GET api/profiles/parents?material=`.
+Requests: `POST api/library/local/form` with the values; `GET api/library/local`; `DELETE api/library/local/{id}`; parents
+from `GET api/profiles/parents?material=`.
 
 | Element | Text / behaviour |
 |---|---|
 | Top bar | Title "New catalog line", back arrow. |
 | Intro | "Values from the maker's label or data sheet for one product line. They apply to every colour of the line." |
-| Group "Line" | "Brand *", "Line *", "Material *" |
-| Group "Temperatures" | "Nozzle range" with placeholder "e.g. 190-220", "Bed range" with placeholder "e.g. 55-65" |
-| Group "Material" | "Density", "Max volumetric speed" |
-| Group "Slicer" | "Bambu Studio parent" (as in 6.3) |
-| Group "Notes" | "Notes" (multi-line) |
+| Fields | "Brand *", "Name *" and "Material *" (a choice from the materials the catalog knows, with "Other" and a text field). |
+| Group "More (optional)" | Closed at first. "Nozzle temperature from" and "to" (°C), "Bed temperature from" and "to" (°C), "Density" (g/cm³), "Max volumetric speed" (mm³/s), "Bambu Studio parent" (as in 6.3), "Notes" (multi-line). |
 | Required marker | "*" after the label and the line "Fields marked * are needed." at the top. |
-| Action bar | "Save to the catalog" (main; "Saving…"); disabled until the required fields are filled, with the reason above it: "Fill in Brand, Line and Material." |
-| Success | Back to the screen it came from with the snackbar "Saved to the Filament Catalog. Slicer presets are rebuilt in a minute." The form is gone with its values, so a second tap cannot save the same line twice; while saving, "Save to the catalog" ignores further taps. |
-| Refused | `bad` notice "The Hub could not use these values:" with one bullet per problem; each problem also under its field when it names one. Hub notices as 3.4. |
+| Action bar | "Add" (main; "Adding…"); disabled until the required fields are filled, with the reason above it: "Fill in Brand, Name and Material." |
+| Success | Back to the screen it came from with the snackbar "Added. Slicer presets are rebuilt in a minute." The form is gone with its values, so a second tap cannot add the same entry twice; while adding, "Add" ignores further taps. |
+| Refused | `bad` notice "The Hub could not use these values:" with one bullet per problem (`problems`: field and text); each problem also under its field when it names one. Hub notices as 3.4. |
+| Your own entries | A row "See custom entries" at the foot opens the list (`GET api/library/local`): one row per entry, headline "<brand> <name>", supporting "<material> · added <date>", trailing overflow "More actions" with "Remove" (danger). Remove asks: dialog "Remove <brand> <name> from your own entries?" / "Slicer presets are rebuilt." / "Cancel" / "Remove" (danger); then the snackbar "Removed." Empty: "You have no entries of your own yet." |
 | Leaving with typing | Asks (2.5 rule 1). |
 
 ---
@@ -1087,9 +1096,9 @@ while the printer screen is visible), `POST api/printers/{id}/command` with `{ac
 |---|---|---|
 | Top bar | Title "Printers"; overflow "Refresh", "Find Klipper printers", "Add a Klipper printer". | `TopAppBar`, `DropdownMenu` |
 | Refresh | On every visit and by pull. While refreshing: progress line under the top bar. | `PullToRefreshBox` |
-| Configured printers | Panel, one row per printer: status shape and word (vocabulary below), name (`--fs-b` `--fw-label`), model, job line when printing ("Printing · 42 % · 1 h 12 min left"), slot swatches (up to 8, then "+4"), and, when the printer needs something, a line with the triangle and the fix ("Enter the Access Code again.", "The last slot mapping stopped twice. A report would help."). Tapping opens `printers/{id}` (right pane on expanded width). A printer whose Access Code is wrong opens its screen with the Access Code dialog (9.9) already open. | Panel, `ListItem` |
+| Configured printers | Panel, one row per printer: status shape and word (vocabulary below), name (`--fs-b` `--fw-label`), model, job line when printing ("Printing · 42 % · 1 h 12 min left"), slot swatches (up to 8, then "+4"; a slot a spool is waiting for shows that spool's colour with a dashed ring, and its content description says "waiting"), and, when the printer needs something, a line with the triangle and the fix ("Enter the Access Code again.", "The last slot mapping stopped twice. A report would help."). Tapping opens `printers/{id}` (right pane on expanded width). A printer whose Access Code is wrong opens its screen with the Access Code dialog (9.9) already open. | Panel, `ListItem` |
 | Found on the network | Group title "Found on the network" (`--fs-xs` uppercase). Rows for printers the Hub sees but that are not set up: model, the status "Not configured", address in `--mono`, trailing "Add" (outlined; opens 9.2). Ground `--accent-soft`. | Panel, `ListItem`, `OutlinedButton` |
-| Add a Klipper printer | Outlined button under the lists; opens 9.3. | `OutlinedButton` |
+| Add a Klipper printer | Outlined button under the lists; opens the guided add (9.12). | `OutlinedButton` |
 | Empty | Empty state with the printer icon: title "No printers yet", text "The Hub finds Bambu Lab printers on its network by itself: turn the printer on, then add it here with its Access Code. A Klipper printer is added by its address." Buttons "Refresh" (main) and "Add a Klipper printer". | Empty state |
 
 Printer state vocabulary. The badge words are those of `02-components.md` 7.1; what the state is comes in the fix
@@ -1114,6 +1123,8 @@ While a job is known, the job state follows the badge as words (not a badge): "P
 
 ### 9.2 Add a Bambu Lab printer (dialog destination `printers/add/{serial}`)
 
+Step 2 and 3 of the guided add (9.12).
+
 `BasicAlertDialog` with a form; on compact width it is a `ModalBottomSheet` (F7: dialogs become bottom sheets on
 phones).
 
@@ -1127,6 +1138,8 @@ phones).
 | Result | Success closes it, refreshes the list and shows the snackbar "Added <name>." Failure keeps the form (the Access Code stays only while the dialog is open) with a `bad` notice: the Hub's reason. |
 
 ### 9.3 Add a Klipper printer (dialog destination `printers/add-klipper`) and Find Klipper printers
+
+Step 2 and 3 of the guided add (9.12); the search below is also part of its step 1.
 
 Form: "Address" (placeholder "192.0.2.57 or printer.local", `KeyboardType.Uri`), "Port" (prefilled "7125"), "Name
 (optional)", secret field "Moonraker API key (optional)" with the hint "Only if Moonraker asks for one." Buttons
@@ -1246,21 +1259,41 @@ Tapping a row opens the **slot sheet** (`ModalBottomSheet`):
 
 | Slot holds | Sheet title | Content and actions |
 |---|---|---|
-| A spool from the inventory | "Slot A1" | Spool summary row; buttons "Open spool" (main; opens `spools/{id}` in the Spools destination) and "Unload" (outlined). |
-| Filament the inventory does not know | "Slot A1" | "This slot holds PLA that is not linked to a spool." Button "Load a spool" (main). |
-| Nothing | "Slot A4" | "This slot is empty." Button "Load a spool" (main). |
+| A spool from the inventory | "Slot A1" | Spool summary row; buttons "Open spool" (main; opens `spools/{id}` in the Spools destination), "Unload" (outlined) and "Clear slot" (outlined). |
+| A spool waiting for the slot (Bambu Lab) | "Slot A2" | Spool summary row and the line "Waiting for the spool to load in A2."; buttons "Open spool" (main), "Load a spool" (outlined) and "Clear slot" (outlined). |
+| Filament the inventory does not know | "Slot A1" | "This slot holds PLA that is not linked to a spool." Buttons "Load a spool" (main) and "Clear slot" (outlined). |
+| Nothing | "Slot A4" | "This slot is empty." Buttons "Load a spool" (main) and "Clear slot" (outlined). |
+
+A waiting slot's row has that spool's colour in the swatch with a dashed ring and, in place of the level bar, the line
+"Waiting for the spool to load in A2."
 
 "Load a spool" opens 9.6. "Unload" runs the dry run and opens the dialog: title "Unload from <slot>?" ("Unload from
-A1?"), body "Unload Polymaker PolyTerra PLA Charcoal Black from A1? It goes back to Shelf A. Only the inventory
-changes; the printer's slot setting stays as it is.", buttons "Cancel" and "Unload" (main). Result: notice line under
-the slots, "Unloaded from A1. Spool 214 is back on Shelf A."
+A1?"), body "Unload Polymaker PolyTerra PLA Charcoal Black from A1? It goes back to Shelf A." followed, on a Bambu Lab
+printer, by "Only the inventory changes; the printer's slot setting stays as it is." and, on a Klipper printer, by "The
+slot's setting on the printer is cleared.", buttons "Cancel" and "Unload" (main). Result: notice line under the slots,
+"Unloaded from A1. Spool 214 is back on Shelf A."
+
+"Unload" means "I took this spool out". "Clear slot" means "the Hub forgets which spool is in this slot": for a spool
+the Hub does not know, or a record that is simply wrong. It is offered on every slot. It runs the dry run and opens the
+dialog: title "Clear slot A1?", body "The Hub forgets the spool recorded here. Polymaker PolyTerra PLA Charcoal Black
+goes back to Shelf A." (the second sentence only when a spool is recorded; on a Bambu Lab printer it ends with "The
+printer still shows the old filament for this slot until a spool is loaded."), buttons "Cancel" and "Clear slot"
+(danger, filled). Both do the same, in this order: a spool waiting for the slot is no longer waiting; the spool recorded
+in the slot goes back where it was before it was loaded; on a Klipper printer the slot's setting on the printer is
+cleared when the printer is online and can do it; on a Bambu Lab printer what the printer shows for the slot is left as
+it is, and the answer of Clear slot says `printer_cleared: false`. Afterwards the slot has no spool: filament used from
+it is logged with no spool and taken off none, until the next load, the next scanned assignment or the slot's own tag
+sets a spool again. Results, as notice lines under the slots: "Cleared slot A1. Spool 214 is back on Shelf A." (without
+a spool: "Cleared slot A1."); "No spool is waiting for A1 any more." when a waiting assignment ended; and, on a Bambu
+Lab printer (where `printer_cleared` is always false), "The printer still shows the old filament for this slot until a
+spool is loaded."
 
 ### 9.6 Pick a spool for a slot (`printers/{id}/slots/{slot}/pick`)
 
 Header "Load into Workshop X1, slot A4". The Spools search of 7.1 (same field, chip and results) with the tag hint
 "Or hold the spool's tag to the back of the phone." While this screen is open a tag tap picks that spool instead of
 opening it. Picking a spool opens the preview step of 7.6 for this printer and slot; after loading, Back returns to
-the printer screen.
+the printer screen. A load that waits for the printer (`pending`) leaves the slot in the waiting state of 9.5.
 
 ### 9.7 Slot mapping panel
 
@@ -1382,11 +1415,25 @@ The same texts on the Hub page and in the web app, where they show the same thin
 | Results of the controls (9.4) | "Resumed." · "Paused." · "Stopped." · "Light on." · "Light off." |
 | Stop dialog (9.4) when the printer gives no job name | Title as always "Stop the print?"; body "Stop the print on <printer>? It cannot be resumed." (a whole second text; no phrase is filled into the usual body) |
 | Load preview rows (7.6) | "Preset: <name>" or "Preset: none" · "Nozzle: <n> mm" or "Nozzle size not reported by the printer; assuming <n> mm" · "Spool <id> now in <slot> goes back to <location>" (when the place is not known, the whole text "Spool <id> now in <slot> goes back to its previous place"; when the spool's number is not known, "The spool now in <slot> goes back to <location>" or "The spool now in <slot> goes back to its previous place"; the word "Unknown" is never filled in as a number) |
-| Unload dialog (9.5) when the place is not known | Body "Unload <spool name> from <slot>? It goes back to its previous place. Only the inventory changes; the printer's slot setting stays as it is." (a whole second text beside the usual body with "<location>"; title and buttons as always) |
+| Unload dialog (9.5) when the place is not known | Body "Unload <spool name> from <slot>? It goes back to its previous place." and then the sentence for the printer's family as in 9.5 (a whole second text beside the usual body with "<location>"; title and buttons as always) |
 | Map by loading rows (9.8) | "<slot>: <status>"; the nozzle as "Right nozzle" or "Left nozzle" |
 | Printer settings (9.9) | Field "Name", error "Enter a name."; results "Saved."; after a new Access Code is saved, "Access Code replaced." (`02-components.md` 5.3; the printer's name is not repeated) |
 | Sharing a printer report | No app can take the file: "No app on this phone can share or save the file." |
 | Back or a tap outside while a dialog or sheet is still writing (2.5 rule 2) | Snackbar: for a load "Loading into the printer… wait for its answer."; for any other write (Unload, Map slots, Put it back, Forget, adding a printer, replacing an Access Code, the settings dialogs) "Still working. Wait for it to finish." The dialog stays open. |
+
+### 9.12 The guided add (`printers/add`)
+
+Adding a printer takes the guided order of the Hub page's drawer (`03-hub-page.md` 5.6), for the first printer and every
+later one. Four steps; "Back" returns to the step before, and typed values are kept while the flow is open. Leaving
+with typed values asks as 2.5 rule 1. The list's overflow "Add a Klipper printer" and the button of 9.1 open step 1; a
+found printer's "Add" opens step 2 with its details filled in.
+
+| Step | Route | Content |
+|---|---|---|
+| 1. Which printer? | `printers/add` | Header "Which printer?". "Found on your network": one row per printer found, each with "Use this": the Bambu Lab printers the Hub has seen, and the Klipper printers of the search (9.3) below. Searching "Looking…"; nothing found "None found. Type its address in the next step." The search for Klipper printers is the field and button of 9.3. A choice chip "Bambu Lab" / "Klipper" shows only for the families whose Feature is on |
+| 2. Its details | `printers/add/{serial}` (Bambu Lab, 9.2), `printers/add-klipper` (Klipper, 9.3) | The form of 9.2 or 9.3, including the Klipper "Moonraker API key (optional)", asked here and not in a step of its own |
+| 3. Test, then add | the same dialog | "Add printer" tests first and says the result in words, then adds; busy "Connecting to the printer…" (Bambu Lab) or "Connecting to Moonraker…" (Klipper). A Klipper printer that does not answer: `bad` notice "The Hub could not reach a Klipper printer at <address>:<port>." with "Try again" and "Add anyway" (for a printer that is switched off), which saves it without the test. Nothing is saved after a failed test unless "Add anyway" is pressed. The Hub's other refusals are the notice of 9.2 and 9.3 |
+| 4. Map its slots now? | `printers/{id}/map-prompt` | Header "Map its slots now?" with the text "Mapping tells the Hub which slot is which. Nothing heats or moves." and the buttons "Map slots" (main; asks first as 9.7) and "Later" (opens the printer, `printers/{id}`, whose state line says "Added. The Hub is connecting to it.") |
 
 ---
 
@@ -1687,6 +1734,7 @@ Console.
 | Status | Shape and word (2.4) with the last answer time. | Status |
 | Field rows | "Hub" Workshop hub; "Address" 192.0.2.10 (`--mono`); "Certificate fingerprint" (grouped, `--mono`, selectable); "Hub version" 0.5.2. None paired: "No Hub is paired." with the main button "Pair with a Hub". | Panel, field rows |
 | Open the Hub page | Outlined button "Open the Hub page", with the line "Features, keys, devices and backups are set on the Hub page." Opens the Hub page's address (today `https://<host>:<port>/setup`) in the browser. Errors: "No browser on this phone could open it." / "The Hub's address isn't known yet." | `OutlinedButton` |
+| The Hub at a glance | Outlined button "The Hub at a glance", with the line "What the Hub shows about itself, read only." Opens 12.8. | `OutlinedButton` |
 | Pair again | Outlined button "Pair again" (opens `pair`). | `OutlinedButton` |
 | Fingerprint check | Group "Security". Switch row "Check the fingerprint when pairing by address", on by default, with the supporting text "When this is off, the app trusts the certificate a Hub presents when you pair by typing its address. A scanned QR code is always checked." Turning it off asks: dialog "Skip the fingerprint check?" / "Only do this on a network you trust." / "Cancel" / "Skip the check". | `ListItem` + `Switch` |
 | Forget this Hub | Below a divider, danger outlined "Forget this Hub". Dialog: title "Forget Workshop hub?", body "This phone stops using it until you pair again. Drafts stay on this phone.", buttons "Cancel" and "Forget" (danger, filled). Afterwards the pairing graph opens. | `OutlinedButton` (danger), `AlertDialog` |
@@ -1733,6 +1781,52 @@ with the line "Change this on the Hub page." and is otherwise about this phone.
   notification is removed. Only alerts of a type that is on at the Hub are notified.
 - States: loading shows a skeleton row; the Hub not answering shows the notice of 3.2; the switch is disabled with the
   reason "Needs the Hub." while offline.
+
+### 12.8 The Hub at a glance (`hub`)
+
+A read-only screen with the Hub's state, from the button "The Hub at a glance" of 12.3 and from the connection sheet
+of 2.4 (the connection line of Home), and from the Getting started line of Home (5). Nothing on it can be changed.
+
+```
++--------------------------------------+
+| <  The Hub at a glance  (o) Conn. ☼  |
++--------------------------------------+
+| Status                               |
+|  (o) OK  Spoolman answers            |
+|  (!) Needs a look  Storage: 4 GB     |
+|      free of 117 GB (97 % used)      |
+|  Change this on the Hub page.        |
+|  [ Open the Hub page ]               |
+| Getting started                      |
+|  4 of 8 done                         |
+|  Change this on the Hub page.        |
+|  [ Open the Hub page ]               |
+| Version                              |
+|  Installed 0.5.2 · Newest 0.5.3      |
+|  Last checked 2026-11-12 03:10       |
+|  (i) Update available                |
+|  ...                                 |
++--------------------------------------+
+```
+
+Groups, in this order. Every group ends with the line "Change this on the Hub page." and, where the Hub page can be
+reached (`hub_page` is in the answer), the outlined button "Open the Hub page" (as 12.3).
+
+| Group | Content |
+|---|---|
+| Status | The Checks rows of the Hub page's Overview, each with its status (OK, Needs a look, Note, Off) and its fix line |
+| Getting started | "<n> of <m> done"; shown only while steps remain and the Hub page's list is not hidden |
+| Version | "Installed <version>", "Newest <version>", "Last checked <time>"; the `info` line "Update available" when it is |
+| Features | One row per feature: its name and "On" or "Off" |
+| Filament Catalog | "Version <version>", "Last check <time>"; "Not downloaded yet." or "Last check: never." where there is none |
+| Backups | "Last backup <time>" or "No backup yet."; "Nightly backup: On" or "Nightly backup: Off" |
+| Label Reader | "Engine: <engine>" and "Anthropic API key: Set" or "Not set"; never the key |
+| Devices | One row per device: its name, its kind and when it was last seen; this phone's row is marked "This phone". Names only: no addresses |
+| Recently added | "Records kept: <n>" |
+
+Everything is redacted as the Hub page's Overview is for a locked page: no addresses, no serial numbers, no secrets.
+Request: `GET api/hub`. Loading: skeleton rows. Error: `bad` notice "Could not read the Hub. <the Hub's text>" with "Try
+again"; Hub notices as 3.4. Offline: the last data with the notice of 3.2.
 
 ---
 
@@ -1860,6 +1954,7 @@ The design above works with the Hub as it is. These additions to the Hub's paire
 | A per-record confidence summary (the lowest level and the fields concerned) in `GET api/intake/history`. | 10.1 "To check" filter and row marks | The filter and the row marks are absent. |
 | Share corrections on the paired API: `sharing` and `corrections_waiting` in `GET api/intake/history`; the corrections waiting with thumbnails, and remove. | 10.1, 10.3, 10.4, 6.3, 10.6 | No Share corrections lines and no Corrections waiting screen. |
 | A single spool by number: `GET api/spools/{id}` with location, remaining and net weight, tag, sealed or opened, filament number, empty spool weight and lot. | 7.2 Details, deep links, restoring after the app was stopped | The spool screen shows the fields the search or tag answer carries; after a restart it shows the last summary and refreshes after the first change. |
+| `PATCH api/spools/{id}` takes `{"auto_location": true, "dry_run": ...}` as a fourth kind of change beside `gross`, `remaining`, `location` and `empty` (one per call): the Hub moves the spool where its placement rule puts it; the answer is unchanged. | Not used by the app: 7.4 names its locations. The Hub page and the command line use it. | Nothing in the app changes. |
 | Phone-callable Slicer presets actions: list filaments without a preset line, add them to a line, create a line, build presets now (today these exist only under `api/profiles/web/`, which phones may not call). | 11.2 | 11.2 points to the Hub page and the web app. |
 | The Hub's default theme ("Theme for new devices", F6.2) in `GET api/info` as the field `look` (for example `"look": "console"`). | 12.2 first start | The app starts on Console. |
 | `GET api/storage` on the paired API: the locations in fill order `{id, name, type, limit, count, used, free, prefix, containers: [{name, number, taken}], fill, materials, overflow, default_overflow, sealed, position}` (`prefix` and `containers` are `null` for bulk; `used` and `free` equal the counts of `taken`), with `order_by_material` and `everything_else`; `GET api/locations` keeps its answer (a list of names). | 6.3 Location field, 6.5 rows, 7.4 Move | The Location field and the "Move to" sheet list the names from `GET api/locations` without how full, and "Automatic" shows no reason. |
@@ -1867,6 +1962,11 @@ The design above works with the Hub as it is. These additions to the Hub's paire
 | `POST api/alerts/test` for the calling phone (the test comes back as `test` in the events answer) | 12.7 | The test button is absent. |
 | `GET api/spools/low`: `{threshold_g, spools: [{id, filament, material, color, remaining_g, location, in_stock, last_one}]}`, least filament first | 5 the running low line; 7.1 the Running low chip | No line and no chip. |
 | A per-item structure in the dry-run answer of `POST api/intake/add` (what is created, what is reused, where each spool goes). | 6.5 rows | The app shows the Hub's lines one per row. |
+| `GET api/hub`: `{name, version, newest: {version, checked_at}?, update_available, checks: [{group, state: "ok", "look", "note" or "off", text, fix?}], getting_started: {done, total, hidden, finished}, features: [{id, name, on}], catalog: {version?, checked_at?}, backup: {last_at?, nightly}, reader: {engine, key_set}, devices: [{name, kind, version?, last_seen?, out_of_date, this}], records_kept, spoolman_url?, hub_page?}`; `hub_page` and `spoolman_url` are built from the host the phone used and are absent where the thing cannot be reached | 5 the Getting started line, 12.8 | No Hub screen and no Getting started line. |
+| `POST api/printers/{id}/slots/{label}/clear` with `{dry_run}` (answer `{slot, spool?, moved_back?, waiting_ended, printer_cleared, dry_run}`); the answer of `unload` gains `waiting_ended`; the load answer's `pending` is read | 9.5 Clear slot, 7.6 and 9.5 waiting | No "Clear slot" button; a waiting load shows as loaded. |
+| `POST api/library/local/form` with `{brand, name, material, nozzle_min?, nozzle_max?, bed_min?, bed_max?, density?, max_volumetric_speed?, bambu_parent?, notes?}` (201 `{entry}`; 400 `{error: "invalid_entry", problems: [{field, text}]}`), `GET api/library/local` (`{entries: [{id, brand, name, material, added}]}`), `DELETE api/library/local/{id}` (`{removed: true}`) | 8 | The form and the list are absent. |
+| `spoolman_url` in the answer of `GET api/spools` | 7.1 "Open Spoolman" | The item is absent. |
+| The header `X-Spoolwarden-Client: android/<version>` on every call, which the Hub keeps with the pairing | 12.8 (the Hub's Devices list names this phone and its version) | The Hub shows the phone without a version. |
 
 Routes this design uses that today's app does not call, all already on the Hub's paired API (`server/filament_kit/api.py`,
 behind the paired-device check), so they need nothing new from the Hub:
@@ -2005,7 +2105,8 @@ Every route, screen, dialog and flow of today's app (`filament-kit` Android app)
 
 | Today | Where it is now |
 |---|---|
-| Add profile title, help, fields (Vendor*, Product line*, Material*, nozzle low/high, bed range, density, max volumetric speed, Bambu Studio parent, Notes) | 8, grouped (Product line is "Line"; nozzle low and high are one "Nozzle range (°C)") |
+| Add profile title, help, fields (Vendor*, Product line*, Material*, nozzle low/high, bed range, density, max volumetric speed, Bambu Studio parent, Notes) | 8: Brand, Name and Material, and the rest under "More (optional)" (nozzle and bed temperature each from and to); the entry is built by the Hub, not by the app |
+| (none) | 8 "See custom entries" with Remove |
 | "Back" / "Done", "Save" / "Saving…", "Fill in the fields marked *." | 8 action bar and reason; Back is the top bar |
 | Error card "The server could not use these values", "Pair again", success "Saved. Presets are rebuilt in a minute." | 8 Refused, Success; 3.4 |
 | Settings "No server is paired." | 12.3 "No Hub is paired." |
@@ -2042,6 +2143,8 @@ Every route, screen, dialog and flow of today's app (`filament-kit` Android app)
 | "Remove printer" + dialog "Remove printer?" ("Remove" / "Keep") | 9.9 "Forget printer" and dialog "Forget <name>?" |
 | Dialog "Map slots?" | 9.7 "Map the slots of <name>?" |
 | Dialog "Unload?" | 9.5 "Unload from <slot>?" |
+| (none) | 9.5 "Clear slot" and its dialog; the waiting state of a slot (9.1, 7.6, 9.5) |
+| Add printer dialogs, then "Find Klipper printers" in the overflow | The guided add: which printer, details, test then add, map its slots now (9.12, 9.2, 9.3) |
 | Dialog "Undo this?" | 9.10 "Put it back on the spool?" |
 | Two-step stop: "Stop the print?" then "Are you sure?" | One dialog naming the job, 9.4 (same as the web app and the Hub page) |
 | Manual map screen: "Back", title, printer name, "Starting…", error + "Try again" | 9.8 |

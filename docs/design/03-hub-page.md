@@ -11,7 +11,7 @@ sections, cards, fields, words, order and actions.
 
 Contents: 1 Conventions · 2 Page-wide behaviour · 3 Global chrome · 4 Overview · 5 Printers · 6 Recently added ·
 7 Devices · 8 Slicer presets · 9 Features · 10 Settings · 11 Flash a device · 12 Updates · 13 Logs ·
-14 Where today's controls went · 15 Needs from the Hub
+14 Where today's controls went · 15 Needs from the Hub · 16 Spools
 
 ---
 
@@ -46,10 +46,11 @@ every detail that can be opened has an address; reloading returns to it, Back an
 | Address | Opens |
 |---|---|
 | `#overview` (also empty or unknown) · `#overview/storage-use` · `#overview/running-low` | Overview; Overview with the Storage use panel open; Overview with the full Running low list open (the places that "Show storage use" and "Show running low" of an alert banner go to) |
-| `#printers` · `#printers/<id>` · `#printers/add` · `#printers/find` | Printers; one printer's row expanded and scrolled to; the Add a printer drawer; the Find Klipper printers card focused |
+| `#printers` · `#printers/<id>` · `#printers/add` · `#printers/find` | Printers; one printer's row expanded and scrolled to, with its live view (5.10); the Add a printer drawer; the Find Klipper printers card focused |
 | `#printers/<id>/load-map` · `#printers/<id>/reports` | The Map by loading filament drawer; the Saved reports drawer. `<id>` is the Hub's key for the printer (for a Bambu Lab printer it may equal the serial), so a Klipper printer has an address too |
+| `#spools` · `#spools/<id>` | Spools; one spool's Detail region (16) |
 | `#recent` · `#recent/<id>` | Recently added; one record |
-| `#devices` · `#devices/pair` · `#devices/trusted` · `#devices/tag-readers` | Devices; the pairing dialog; the Trusted computers card; the Tag Readers card |
+| `#devices` · `#devices/pair` · `#devices/trusted` · `#devices/tag-readers` · `#devices/<id>` | Devices; the pairing dialog; the Trusted computers card; the Tag Readers card; the detail of a device that serves no page of its own (7.10; `<id>` is a device's id, never one of those four words) |
 | `#presets` · `#presets/updates` | Slicer presets; its Updates card |
 | `#features` · `#features/<feature>` · `#features/setup-<mode>` | Features; the preview drawer for turning that feature on or off; the preview drawer for changing the setup |
 | `#settings` · `#settings/<group>` | Settings; one group (`appearance`, `general`, `storage`, `alerts`, `label-reader`, `backups`, `network`, `passphrase`, `catalog`, `voice`) |
@@ -94,6 +95,8 @@ Rules:
 - **Trust that stops working.** When a reply carries `trust_gone`, the page switches to Locked, shows the toast
   "This computer is no longer trusted. Enter the setup code to go on." and opens the unlock dialog for the action
   that failed.
+- **The camera is the one thing that only looks and still needs the code** (5.10): a picture from inside a home can
+  be as private as an address, so the camera, like every control of a printer, waits for Unlocked or Trusted.
 - **Questions are never skipped.** Unlocked or trusted, every confirmation dialog of this document is still asked.
 - **Lockout.** When the Hub answers "too many wrong setup codes", the unlock dialog shows the Hub's own wording at
   the field (as `02-components.md` section 3.2 gives for too many tries); Unlock stays enabled, and pressing it before the wait is over shows the
@@ -201,7 +204,8 @@ buttons fill the width, the safe action on the left.
 |---|---|---|
 | `G state` | Page load; after any change that alters printers, devices, readers, features or addresses | No timer |
 | `G trust` | Page load; after unlock, trust, revoke | No timer |
-| Section data | When the section opens; when its own change succeeds (only that region) | Overview: when it opens and on **Run the checks again**. Printers: printer states every 10 s while the section is visible (`G state`). Weigh Station requests: every 5 s while Devices is visible and the page is Unlocked or Trusted. |
+| Section data | When the section opens; when its own change succeeds (only that region) | Overview: when it opens and on **Run the checks again**. Printers: printer states every 10 s while the section is visible (`G state`). Weigh Station requests: every 5 s while Devices is visible and the page is Unlocked or Trusted. Spools: no timer. |
+| A printer's live state (`G printers/<id>/live`, 5.10) | When the printer's detail opens | Every 2 s while the detail is open and the tab is visible; the Printers list keeps its 10 s |
 | `G job?from=N` | Page load; while a job runs | Every 1 s; while the Hub restarts, `G state` every 2 s instead (section 3.6) |
 | Polls of a running flow | Slot mapping every 2 s, Map by loading filament every 2 s, pairing every 3 s | Until the flow ends or its expiry passes |
 | `G events` (`GET api/events`) | Page load; then on every section, with `since` set to the last `next` | Every 10 s with `wait=0` (section 2.8) |
@@ -236,8 +240,9 @@ open the Alerts list of 02 section 8.9 as a dialog.
 - **Notifications outside the page.** With Settings > Alerts > "Notifications in this browser" on, the page also shows
   a browser notification for each new alert while a Hub page tab is open in that browser (the tab may be in the
   background). Nothing is sent when no tab is open. A notification has the title of the alert, one line of body and,
-  when chosen, opens the place of its action. One per event; a condition notifies when it is raised, not again while
-  it lasts; clearing sends nothing.
+  when chosen, opens the place of its action. A condition's notification has the tag `sw-condition-<key>` (02 section
+  8.8); a moment's has a tag of its own per event. One per event; a condition notifies when it is raised, not again
+  while it lasts; clearing sends nothing.
 
 ---
 
@@ -278,13 +283,14 @@ it (the job strip shows on its own above the bottom bar; the version stays on Ov
 
 ### 3.2 Navigation
 
-Uses the navigation component (`nav` profile `rail` in Console) with the ten sections of foundations section 8, in
+Uses the navigation component (`nav` profile `rail` in Console) with the eleven sections of foundations section 8, in
 two groups separated by a hairline.
 
 | Section | Address | Rail label | Bottom bar | Live summary (More sheet, rail tooltip) |
 |---|---|---|---|---|
 | Overview | `#overview` | Overview | Overview | "<n> to do" or "All checks OK" or "<n> need a look" |
 | Printers | `#printers` | Printers | Printers | "<n> connected · <m> offline" |
+| Spools | `#spools` | Spools | More | "<n> running low" or "<n> spools" |
 | Recently added | `#recent` | Recently added | Recent | "Newest: spool <id>, <relative time>" |
 | Devices | `#devices` | Devices | More | "<n> paired · <m> Tag Readers" |
 | Slicer presets | `#presets` | Slicer presets | More | "Last build <relative time>" or "No build yet" |
@@ -299,7 +305,9 @@ Overview shows "<n> to do" when the page's Still to do list (4.2) has entries, e
 "All checks OK"; Settings shows "<group> unsaved" while a group holds unsaved edits, else the Hub's "<n> groups".
 The Hub runs its checks only when Overview is read, so the Overview summary is empty until then: the page reads
 Overview once in the background after it has loaded, and a section whose summary is empty shows no second line.
-Summaries are refreshed with every state read, so relative times in them stay current. Flash a device names the
+Spools shows "<n> running low" when the Running low list (4.2) has entries, else "<n> spools" (the `total` of `G spools`
+with `limit` 1). Summaries are refreshed with every state read, so relative times in them stay current. Flash a device
+names the
 devices by their design names ("Tag Reader", "Weigh Station display"), whatever the Hub's firmware ids are; a
 firmware id the page does not know is shown as the Hub names it.
 
@@ -307,14 +315,14 @@ firmware id the page does not know is shown as the Hub names it.
   in two lines ("Recently added", "Slicer presets", "Flash a device") break into two lines, never truncate. The
   active entry has `--accent-soft` ground, weight 600 label, the 3 px `--accent-text` mark at the rail's inner edge and
   `aria-current="page"`. Hover shows the live summary as a tooltip.
-- **Phone:** the bottom bar with Overview, Printers, Recent, Settings, More. More opens the More sheet: the six
+- **Phone:** the bottom bar with Overview, Printers, Recent, Settings, More. More opens the More sheet: the seven
   other sections, each a row with icon, name, live summary and chevron; the active one has `aria-current="page"`.
-  When one of those six is open, More shows the active mark and its accessible name ends ", current: <section>".
+  When one of those seven is open, More shows the active mark and its accessible name ends ", current: <section>".
 - A badge on a navigation entry shows only these: Overview a warn triangle when a check needs a look; Updates an
   info dot when a newer version is available; Settings a warn dot while a group has unsaved changes; a dimmed
   hollow circle for a section switched off.
-- Live summaries come from data the page already has (`G state`, the job); the More sheet reads `G presets` and
-  `G updates` when it opens if those were not read yet, showing a skeleton line until they arrive.
+- Live summaries come from data the page already has (`G state`, the job); the More sheet reads `G presets`, `G updates`
+  and `G spools` when it opens if those were not read yet, showing a skeleton line until they arrive.
 
 ### 3.3 Lock chip
 
@@ -403,6 +411,9 @@ address. Reload the page and try again."
   only "<Section>"), the page title (`--fs-xl`, one per
   screen), an optional meta line of status badges and short facts, and at the right the section's actions (at most
   one primary). On phone the actions wrap under the title; the primary comes first.
+- **The page menu.** At the right end of every section's actions, an icon button "More actions for this page" (the
+  overflow menu of `02-components.md` 4.2). It holds **Open the web app**, which opens the home address of the web
+  app in a new tab (`G webapp`, 7.4). It is on every section and is shown only while the web app's feature is on.
 - Moving to another section scrolls to the top and focuses the page title (`tabindex="-1"`).
 - Content is at most 1400 px wide on desktop with `--s5` gutters; `--s4` on tablet and phone.
 - Cards: a title row (`--fs-l`, weight 650, optional icon, optional status badge, optional
@@ -563,7 +574,7 @@ under" setting (10.13); the dialog's foot says "Spools at or under <n> g that ar
 |---|---|---|---|
 | Printers | "<n> connected" with the status badge shape | "<m> offline", "<k> not configured", or "No printers yet" | `G state` `printers.list` |
 | Recently added | "Spool <id>" | Relative time of the newest record, or "Nothing added yet" | `G intake/history` |
-| Devices | "<n> paired" | "<m> Tag Readers" | `G state` `devices`, `readers` |
+| Devices | "<n> paired" | "<m> Tag Readers", and, when any device is out of date (7.2), the warn line "<k> out of date" | `G state` `devices`, `readers`; `G devices` for the out-of-date count |
 | Label Reader | "<used> of <limit>" | "Cloud reads used today" | The "reads used today" check row of `G overview` |
 
 When Share corrections is on and corrections are waiting (10.5.2), the Label Reader tile adds the link line
@@ -607,6 +618,7 @@ When the feature behind a tile is off, the tile shows "Switched off" in `--muted
   | Group | Status | Row | Fix |
   |---|---|---|---|
   | Devices | Needs a look | "The Weigh Station <name> is not using HTTPS. Update it." (a Weigh Station that has not been updated sends no fingerprint, and the Hub keeps calling it over plain HTTP until it is) | none: the text is the fix |
+  | Devices | Needs a look | "<n> devices are out of date." ("1 device is out of date.") | **Open Devices** → `#devices` (the Hub does not update a satellite itself, 7.2) |
   | Devices | Needs a look | "The tag source <address> is not using HTTPS." (a printer-side tag service that answers only on plain HTTP, which the Hub still reads) | none |
   | Devices | Needs a look | "The certificate of the tag source <address> has changed." | "Save the tag source again to trust the new certificate." |
   | Label Reader | Needs a look | "The Label Reader at <address> is not using HTTPS." (a reader on another machine, until its own side serves HTTPS) | none |
@@ -659,7 +671,7 @@ Lab printers or Klipper printers in Features to connect printers." The button op
 Desktop
 +----------------------------------------------------------------------------------------------------+
 | Printers                                                                                           |
-| Printers               [camera Open the live printer view] [Find Klipper printers] [+ Add a printer] |
+| Printers                                             [Find Klipper printers] [+ Add a printer] [...] |
 | 3 printers · (*) 2 connected · ( ) 1 offline · (i) 1 found, not added                              |
 |                                                                                                    |
 |     PRINTER v           ADDRESS v            STATE v        SLOTS            CONNECTION             |
@@ -698,8 +710,7 @@ Phone:  each printer is a card:
 | [Test connection]                     [...]  |
 | [v Details]                                  |
 +----------------------------------------------+
-        Header actions: [+ Add a printer] full width, then Find Klipper printers and the live view link
-        as ghost buttons in one row.
+        Header actions: [+ Add a printer] full width, then Find Klipper printers as a ghost button.
 ```
 
 ### 5.2 Printer collection
@@ -713,7 +724,7 @@ Klipper printers a scan found that are not configured (`configured: false`).
 | Printer (sortable) | Name in weight 600; under it the model in `--muted`. When both families are on, a tag "Bambu Lab" or "Klipper" after the name. | P1 |
 | Address (sortable) | `ip` (Bambu Lab) or `host:port` (Klipper) in `--mono`, or "No address yet" in `--muted`; under it "SN <serial>" (Bambu Lab) or "Moonraker" (Klipper). Hidden values read "Hidden while locked". | P3 |
 | State (sortable) | Status badge and sentence from `state`, as the printer states table of `02-components.md` 7.1 gives them (the Klipper states `unknown_model`, `unauthorized`, `klippy_not_ready` and `connecting` included) | P1 |
-| Slots | Slot strip of filament swatches with fill level and "<loaded> of <total> loaded"; or "No slot data while offline"; or "No slots read yet" | P1 |
+| Slots | Slot strip of filament swatches with fill level and "<loaded> of <total> loaded"; a slot with a spool waiting for it (5.10) shows that spool's colour with a dashed ring; or "No slot data while offline"; or "No slots read yet" | P1 |
 | Connection | Bambu Lab: "Certificate pinned" or "Certificate not pinned yet"; "Slots mapped" when mapped. Klipper: "Moonraker API key" with status badge "Set" (OK) or "Not set" (Note); "Lane data: <auto, on or off>" | P3 |
 | Actions | Default button **Test connection** ("Test" on tablet) and icon button "More actions for <name>" (overflow menu) | P1 |
 
@@ -730,7 +741,8 @@ Two columns on desktop, one on tablet and phone.
 
 | Part | Bambu Lab | Klipper |
 |---|---|---|
-| Slots | Title "AMS slots". One line per slot: slot name (`--mono`), filament swatch, filament name, colour name, hex in `--mono` `--muted`, fill bar and percentage. An empty slot: hollow swatch and "Empty". | Title "Tool slots", same lines |
+| Live view | For a connected printer, the top of the expansion: state, job, progress, temperatures, alerts, **Show camera** and the print controls (5.10) | The same |
+| Slots | Title "AMS slots". One line per slot: slot name (`--mono`), filament swatch, filament name, colour name, hex in `--mono` `--muted`, fill bar and percentage, and the slot's actions **Load**, **Unload** and **Clear slot** (5.10). An empty slot: hollow swatch and "Empty". A slot a spool is waiting for: the spool's name and "Waiting for the spool to load in <slot>." | Title "Tool slots", same lines |
 | Facts (key-value list) | Address · Serial · Access Code "Saved (hidden)" or "Not set" · Certificate "Pinned" or "Not pinned yet" | Address · Moonraker API key, status badge "Set" or "Not set" · Lane data, segmented choice Auto / On / Off |
 | Actions | Primary **Map slots**; default **Map by loading filament**. When `report_why` is set, the row's one primary is **Collect a report** in the message row (5.2), so Map slots here becomes a default button. Not configured: primary **Connect** instead of both. | Primary **Detect model and slots**; default **Map by loading filament** |
 | Change (ghost buttons) | Rename · Change address · Replace Access Code · Collect a report · Saved reports | Rename · Change address · Set Moonraker API key or Replace Moonraker API key · Clear Moonraker API key (only when set) |
@@ -745,7 +757,6 @@ Remove; danger items in `--bad`.
 |---|---|---|---|
 | **Add a printer** | Primary button (header) | Opens the Add a printer drawer (5.6) | |
 | **Find Klipper printers** | Default button (header; Klipper on) | Scrolls to the Find Klipper printers card and focuses Subnet | |
-| **Open the live printer view** | Ghost link with camera icon (header; Bambu Lab on) | Opens the web app's printers page in a new tab: `<base>/intake#printers` | |
 | **Test connection** | Default button (row) | Inline spinner "Testing the connection to <address>…", then the result in the message row (5.8). One test per printer every 3 s: a press inside that time shows "Wait 3 seconds between tests." | `P printers/<serial>/test` (view) |
 | **Map slots** | Primary (Bambu Lab, expansion) | Confirm dialog, then mapping (5.7) | `P printers/<serial>/map` (code); poll `G printers/<serial>/map` |
 | **Stop** | Default button in the mapping message row | Stops the mapping | `P printers/<serial>/map/stop` (code) |
@@ -841,7 +852,7 @@ Empty required fields are refused at the field before anything is sent (5.5).
 **Step 4: Map its slots now?** One sentence: "Mapping tells the Hub which slot is which. Nothing heats or moves." **Map slots**
 (primary) opens the existing map flow (5.7) for the new printer. **Later** closes the drawer on the new printer's row,
 expanded with the message "Added. The Hub is connecting to it." and its Test connection button focused. The fifth
-step of a guided add, loading a spool, is not here: the Hub page has no load flow.
+step of a guided add, loading a spool, is not here: a spool is loaded from the printer's live view (5.10).
 
 ### 5.7 Mapping and reports
 
@@ -919,11 +930,107 @@ in the drawer foot.
 | Loading | Three skeleton rows |
 | Empty (no printers, nothing found) | Empty state with the printer icon: title "No printers yet"; sentence "Bambu Lab printers on the network appear here once they announce themselves. Klipper printers are found by a scan." (only the sentences for families that are on); primary **Add a printer**; default **Find Klipper printers** (Klipper on) |
 | Only one family on | The other family's tool card, tag and type choice are absent; one quiet line at the page foot: "Klipper printers are switched off. Switch them on in Features." (or "Bambu Lab printers are switched off. …"), with Features as a link |
-| Locked | Addresses and serials read "Hidden while locked"; every change asks for the code in place |
+| Locked | Addresses and serials read "Hidden while locked"; every change asks for the code in place; the live view shows state, slots and filament used, and its camera and controls ask for the code in place (5.10) |
 | Row busy | The busy button shows an inline spinner and its working label ("Testing…", "Mapping…"); the row's other buttons stay usable |
 
 **Main action:** Add a printer. Per row: Test connection (default), with Map slots or Detect model and slots as the
 expansion's primary; a problem line's Collect a report outranks both.
+
+### 5.10 The live view
+
+**Purpose.** What the web app's printer page shows, in the printer's own Detail region (the inline expansion of 5.3),
+so a person at the computer works in one page. Address `#printers/<id>`. A connected printer shows it above the facts
+of 5.3; a printer that is offline shows the facts alone, with the line "No live status: the printer is offline."
+The page has its own routes for it (section 15) that call the same printer code as the Hub's other interfaces; it does
+not call the web app's routes, so the page's lock applies whether or not the web app is switched on.
+
+```
+Desktop: the expansion of Workshop X1
++--------------------------------------------------------------------------------------------------+
+| (*) Printing: Benchy                                          [Pause] [Turn the light off]         |
+| [==============----------------]  42 %                                    [Show camera] [Stop print] |
+| Layer 80 of 190 · 1 h 12 min left · Nozzle 220 / 220 °C · Bed 55 / 55 °C                           |
+| /!\ Printer alert 0300_0100                                                                      |
+|                                                                                                  |
+| AMS A · AMS 2 Pro                                                                                |
+| A1 [#] Polymaker PolyTerra PLA  Charcoal Black #2B2B2E   62 %  In use  [Load] [Unload] [Clear slot] |
+| A2 [#] Bambu Lab PETG HF Orange                                                                  |
+|        Waiting for the spool to load in A2.                             [Load] [Clear slot]      |
+| A4 [ ] Empty                                                            [Load] [Clear slot]      |
+|                                                                                                  |
+| Filament used                                                                      Last 7 days   |
+| 12.4 g   Benchy · A1                                  2026-11-12 14:05                  [Undo]   |
++--------------------------------------------------------------------------------------------------+
+Tablet: one column; the controls wrap under the progress.
+Phone:  one column; each slot is a card with its actions on their own line; the camera opens under the controls.
+```
+
+| Part | Content |
+|---|---|
+| State | A status badge and the sentence from `state` (`02-components.md` 7.1), then the print state as a sentence with its shape: "Printing", "Paused", "Preparing", "Finished", "Print failed", "Idle", followed by ": <job name>" |
+| Progress | While Printing, Paused or Preparing: the determinate bar (`02-components.md` 8.3) with the percentage in `--mono`, then "Layer <n> of <total> · <time> left", where <time> is "<h> h <m> min" or "<m> min" under an hour |
+| Temperatures | "<name> <current> / <target> °C", joined by " · " |
+| The printer's alerts | One error-shape line each: the printer's text, or "Printer alert <code>" |
+| Camera | **Show camera** and **Hide camera**; a 16:9 box under the controls; MJPEG printers draw the picture, HLS printers play it; the box and its states are those of `04-web-app.md` 6.4 |
+| Slots | The full slot strip (`02-components.md` 7.5), grouped by unit; each row has the slot's actions (below). A waiting slot shows the spool's colour with the dashed ring (`02-components.md` 7.3) and the line "Waiting for the spool to load in <slot>." |
+| Filament used | Title "Filament used" and "Last 7 days"; the rows, newest first, up to 20: "<g> g" in `--mono`, "<job> · <slot>", the time in `--mono` `--muted`, and ghost **Undo** on each row that can still be undone; an undone row is struck through and ends "(undone)". Empty: "Nothing used in the last 7 days." |
+
+**Waiting.** A spool assigned to a slot that has not loaded yet (Bambu Lab printers) is shown wherever a slot is
+shown: in the live view, in the slot strip of the Slots column (5.2) and in the result of a load. The state ends by
+itself when the printer shows the load, or by **Unload** or **Clear slot**.
+
+| Control | Shown when | Style | Does | Endpoint |
+|---|---|---|---|---|
+| **Pause** | Printing | Default | Result "Paused." | `P printers/<id>/command` (code) `{action: "pause"}` |
+| **Resume** | Paused | Primary | Result "Resumed." | `{action: "resume"}` |
+| **Stop print** | Printing, Paused or Preparing | Danger, apart at the end of the row | Opens "Stop the print?"; result "Stopped." | `{action: "stop", confirm: true}` |
+| **Turn the light on** / **Turn the light off** | The printer reports a light | Ghost; the label says what pressing does | Result "Light on." / "Light off." | `{action: "light_on"}` / `{action: "light_off"}` |
+| **Show camera** / **Hide camera** | The printer has a camera | Default | Shows or closes the box; closing the region, leaving the section or hiding the tab stops the stream | `G printers/<id>/camera.mjpeg` or `G printers/<id>/camera/<name>` (code; on a computer that is not trusted, with `?ticket=<ticket>` from `P printers/<id>/camera/ticket`, see Lock) |
+| **Load** | Every slot | Default | Opens the Load dialog (below) | `P printers/<id>/slots/<slot>/load` (code) `{spool_id, dry_run}` |
+| **Unload** | A spool is recorded in the slot | Default | Runs the dry run, then opens "Unload from <slot>?" | `P printers/<id>/slots/<slot>/unload` (code) `{dry_run}` |
+| **Clear slot** | Every slot, whether a spool is recorded there or not | Ghost | Runs the dry run, then opens "Clear slot <label>?" | `P printers/<id>/slots/<slot>/clear` (code) `{dry_run}` |
+| **Undo** (Filament used) | The entry can be undone | Ghost | Opens "Put it back on the spool?" | `P usage/<entry>/undo` (code) |
+
+Controls that a printer does not have are not shown: a Klipper printer shows the same view and leaves out what the
+Hub answers with `not_supported`. While a command is sent its button shows the working shape. When the printer refuses,
+the result is the sentence in the reply's `message` as sent, or the Hub's text for a refusal (printer offline, no reply,
+busy, slot in use, certificate changed, needs Developer Mode, no preset, write refused, already running).
+
+**Clear slot and Unload** mean two things. **Clear slot** is "the Hub forgets which spool is in this slot": for a spool
+the Hub does not know, or a record that is simply wrong. **Unload** is "I took this spool out". Both do this, in this
+order: a spool waiting for the slot is no longer waiting; the spool recorded in the slot goes back where it was before
+it was loaded; on a Klipper printer the slot's setting on the printer is cleared when the printer is online and can do
+it. On a Bambu Lab printer what the printer shows for the slot is left as it is, and Clear slot's `printer_cleared` is
+always false there. Afterwards the slot has no spool:
+filament used from it is logged with no spool and taken off none, until the next Load, the next scanned assignment or
+the slot's own tag sets a spool again.
+
+| Dialog | Title | Body | Buttons |
+|---|---|---|---|
+| Stop the print | "Stop the print?" | "Stop <job> on <printer>? It cannot be resumed." (without a job name: "Stop the print on <printer>? It cannot be resumed.") | Cancel (focused first) · **Stop print** (danger) |
+| Unload | "Unload from <slot>?" | "Unload <spool name> from <slot>? It goes back to <place>." and then, on a Bambu Lab printer, "Only the inventory changes; the printer's slot setting stays as it is.", on a Klipper printer, "The slot's setting on the printer is cleared." | Cancel · **Unload** (primary) |
+| Clear slot | "Clear slot <label>?" | "The Hub forgets the spool recorded here. <Spool> goes back to <place>." (the second sentence only when a spool is recorded) and then, on a Bambu Lab printer, "The printer still shows the old filament for this slot until a spool is loaded." | Cancel · **Clear slot** (danger) |
+| Put it back | "Put it back on the spool?" | "Put <g> g back on the spool? (<job>, <slot>, <time>)" | Keep · **Put it back** (primary) |
+| Load into <slot> | "Load into <slot>" | The button **Use the last tapped tag**, "or", a search field "Brand, colour, material" with rows of opened and sealed spools. Before a pick: "Pick a spool: tap its tag on a reader, or search." After a pick, the plan lines of the dry run: "Load <spool> into <slot>", "Preset: <name or none>", "Nozzle: <mm> mm" ("Nozzle size not reported by the printer; assuming <mm> mm"), "Spool <n> now in <slot> goes back to <place>", and the Hub's problems as error lines. The tag lines: "Tag <id> is not linked to a spool." / "No tag read yet: tap one." | Cancel · **Load** (primary; disabled with "Pick a spool first." or "Working out the plan…") |
+
+| Result | Shape | Text |
+|---|---|---|
+| Loaded | OK | "Loaded into <slot>." (or "Sent to <slot>. The printer accepted it but hasn't shown the change yet.") |
+| Load waits for the printer (Bambu Lab) | Note | "Waiting for the spool to load in <slot>." |
+| Unloaded | OK | "Unloaded <spool name> from <slot>. Moved back: spool <n> to <place>." |
+| Slot cleared | OK | "Cleared slot <label>. Spool <n> is back on <place>." (without a spool: "Cleared slot <label>.") |
+| A waiting assignment ended | Note | "No spool is waiting for <slot> any more." |
+| Cleared on a Bambu Lab printer (`printer_cleared` is always false there) | Note | "The printer still shows the old filament for this slot until a spool is loaded." |
+| Filament put back | OK | "Put <g> g back on the spool." |
+
+**Lock.** Looking needs nothing: state, slots, waiting and filament used show on a Locked page. The camera, the print
+controls, the light and every slot action need the page Unlocked or Trusted (section 2.1) and ask for the code in place.
+**The camera's address.** On a trusted computer the page asks for the stream directly. Otherwise it first asks
+`P printers/<id>/camera/ticket` with the setup code and gets `{ticket, expires_in: 60}`; the stream's address takes
+`?ticket=<ticket>`. A ticket starts one stream within 60 seconds, for that printer only; the stream runs until it is
+closed.
+**State is read** every 2 seconds while the detail is open and the tab is visible (`G printers/<id>/live`, section 2.7);
+the Printers list keeps its 10 seconds.
 
 ---
 
@@ -1049,10 +1156,12 @@ a suggestion is shown, otherwise **Edit by hand** is a default button and there 
 ## 7. Devices
 
 **Purpose.** Everything that connects to the Hub: phones and the app, Slicer Sync, the Weigh Station, Tag Readers,
-and trusted computers. Address `#devices`.
+and trusted computers; what version each runs, whether it is out of date, and each device's own page. Address
+`#devices`.
 
-**Data.** `G state` (`devices`, `readers`, `station`), `G webapp`, `G trust`; when Unlocked or Trusted also `P
-stations/requests` and `P trust/list`.
+**Data.** `G state` (`devices`, `readers`, `station`), `G devices`, `G device/<id>`, `G webapp`, `G trust`; when
+Unlocked or Trusted also `P stations/requests` and `P trust/list`. `G state` keeps its `devices` and `readers` fields as
+they are.
 
 ### 7.1 Layout
 
@@ -1060,11 +1169,14 @@ stations/requests` and `P trust/list`.
 Desktop
 +--------------------------------------------------------------------------------------------------+
 | Devices                                                     [Link Slicer Sync ...] [+ Pair a phone] |
-| 3 paired · 1 Tag Reader · 1 trusted computer                                                      |
+| 3 paired · 1 Tag Reader · 1 trusted computer · 1 out of date                                      |
 | +-- Paired devices ---------------------------------------------------------------------------+ |
-| |  DEVICE                PAIRED              LAST SEEN                                         | |
-| |  Kitchen phone         2026-11-02 18:20    2026-11-12 14:05                      [Unpair]    | |
-| |  This Hub's web app    (built in)          2026-11-12 14:06                                  | |
+| |  DEVICE          KIND           VERSION   PAIRED            LAST SEEN                        | |
+| |  Kitchen phone   Phone          0.5.2     2026-11-02 18:20  2026-11-12 14:05    [Open][Unpair] | |
+| |  Bench scale     Weigh Station  0.5.0     2026-11-03 09:10  2026-11-12 14:03    [Open][Unpair] | |
+| |  /!\ Out of date (0.5.0; the Hub is 0.7.0). On that machine: sudo spoolwarden update          | |
+| |  Printer bench   Tag Reader     build 41  (made 2026-11-01) 2026-11-12 14:01    [Open]         | |
+| |  This Hub's web app  Web app    0.5.2     (built in)        2026-11-12 14:06    [Open]         | |
 | +---------------------------------------------------------------------------------------------+ |
 | +-- Weigh Stations asking to pair ------+ +-- The web app on a phone ---------------------------+ |
 | | No Weigh Station is asking to pair.   | | At home: https://192.0.2.10/intake  [QR]           | |
@@ -1086,10 +1198,14 @@ Collection (`table`):
 
 | Column | Content | Priority |
 |---|---|---|
-| Device | `name`; built-in pairings show a tag "Built in" and the line "This Hub's own pairing" in `--muted` | P1 |
-| Paired | `paired` as `YYYY-MM-DD HH:MM`, or "Unknown" | P2 |
-| Last seen | `last_seen`, or "Never" | P1 |
-| Action | Ghost **Unpair** (not on built-in rows) | P1 |
+| Device | `name`; built-in pairings show a tag "Built in" and the line "This Hub's own pairing" in `--muted`. A device that is out of date has the warn line of 7.9 under its name. | P1 |
+| Kind | "Phone", "Slicer Sync PC", "Weigh Station", "Web app", "Tag Reader" or "Built in" (7.9) | P2 |
+| Version | The version in `--mono` ("build <n>" for a Tag Reader), or "Version not known" in `--muted` (7.9) | P2 |
+| Paired | `paired` as `YYYY-MM-DD HH:MM`, or "Unknown" | P3 |
+| Last seen | `last_seen`, or "Never"; for a Weigh Station it says that the station is running (7.9) | P1 |
+| Action | Ghost **Open** (7.10) and ghost **Unpair** (not on built-in rows, and not on a Tag Reader's row: its token is revoked in the Tag Readers card, 7.5) | P1 |
+
+The Tag Readers that have used their token are rows of this list too, with the kind Tag Reader.
 
 Header actions: primary **Pair a phone**; default **Link Slicer Sync**; overflow menu with **Link a Weigh Station** and,
 when the Weigh Station feature is on, **Pair the Weigh Station on this Hub**.
@@ -1100,6 +1216,7 @@ when the Weigh Station feature is on, **Pair the Weigh Station on this Hub**.
 | **Link Slicer Sync** | Opens the pairing dialog for Slicer Sync | `P pair` (code) `{kind: "pc"}` |
 | **Link a Weigh Station** | Opens the pairing dialog for a Weigh Station on another computer | `P pair` (code) `{kind: "station"}` |
 | **Pair the Weigh Station on this Hub** | Starts pairing of the Hub's own Weigh Station; job strip follows | `P pair` (code) `{kind: "station"}`, then job `station_pair` |
+| **Open** | A Weigh Station's page in a new tab, or the detail of any other device (7.10) | `G device/<id>` |
 | **Unpair** | Confirm dialog | `P devices/<id>/revoke` (code) |
 
 **Pairing dialog** (dialog on desktop and tablet, bottom sheet on phone; address `#devices/pair`). Polls `G state`
@@ -1133,7 +1250,8 @@ A paired Weigh Station serves HTTPS with a certificate it made itself. At every 
 fingerprint, its port and its version over the connection it already has, and the Hub then calls it only at that port
 and accepts only that certificate; nobody types an address or a fingerprint for it. A Weigh Station on this Hub's own
 machine is called at `http://127.0.0.1:5003`, which never leaves the machine. A station that has not been updated sends
-no fingerprint and is still called over plain HTTP; the Checks show it (4.2).
+no fingerprint and is still called over plain HTTP; the Checks show it (4.2). A paired Weigh Station also calls the Hub
+every 5 minutes (`GET api/station/hello`), so its "Last seen" in Devices (7.2) means that it is running.
 
 ### 7.4 The web app on a phone
 
@@ -1141,7 +1259,7 @@ From `G webapp` → `{url, qr_svg, public_url, public_qr_svg}`.
 
 | Part | Content |
 |---|---|
-| At home | "At home, open this address in the phone's browser:" the `url` in `--mono` with Copy, and its QR block (alt "QR code of the web app's home address") |
+| At home | "At home, open this address in the phone's browser:" the `url` in `--mono` with Copy and the default button **Open**, and its QR block (alt "QR code of the web app's home address"). **Open** opens the home address of the web app in a new tab; it is shown only while the web app's feature is on. |
 | Hint | "The browser warns once about the Hub's own certificate: accept it to go on. This address works on the home network only." |
 | Away from home (only with `public_url`) | "Away from home too:" the `public_url` with Copy and its QR block (alt "QR code of the web app's public address") |
 | Keep it | "To keep it on an iPhone: tap Share, then Add to Home Screen." |
@@ -1150,7 +1268,8 @@ From `G webapp` → `{url, qr_svg, public_url, public_qr_svg}`.
 ### 7.5 Tag Readers
 
 Code name: reader tokens (`readers`). A Tag Reader needs a token to reach the Hub; Flash a device makes one by
-itself, so this card is for readers built by hand.
+itself, so this card is for readers built by hand. It is where a token is made and revoked; a reader that uses its token
+is also a row of Paired devices (7.2) with its build and last seen.
 
 | Part | Content |
 |---|---|
@@ -1195,8 +1314,73 @@ Title "Trusted computers" with status badge "On" or "Off".
 | Empty paired devices | "Nothing paired yet. Pair a phone to add spools from it." (primary stays **Pair a phone** in the header) |
 | Built-in revoke refused (409) | Not reachable: built-in rows have no Unpair |
 | Weigh Station feature off | **Pair the Weigh Station on this Hub** is absent; the other pairings stay |
+| A device sends no version | "Version not known" in its row; it is never called out of date (7.9) |
+| The Weigh Station's page cannot be reached | **Open** opens a page of the Hub that says "The Weigh Station <name> does not answer. Check that it is on, then try again." |
 
 **Main action:** Pair a phone.
+
+### 7.9 Kind, version and out of date
+
+**Kind.** Every row has a kind: Phone, Slicer Sync PC, Weigh Station, Web app, Tag Reader, or Built in. The page route
+`G devices` gives it as `kind` (`phone`, `pc`, `station`, `web`, `reader`, `builtin`).
+
+**How the Hub learns kind and version.** Every client of ours sends one header on every call,
+`X-Spoolwarden-Client: <kind>/<version>`, with the kind `android`, `slicer-sync`, `weigh-station` or `web`; the Hub keeps
+the newest value with the pairing, beside "last seen". A Weigh Station also gives its version on its hello call. A Tag
+Reader sends `X-Reader-Build: <number>` with its token to the web unit, which hands the build and the time of the
+reader's last call to the Hub; the Hub keeps the newest values with the reader's entry. The web unit does this when a
+reader's build changes and otherwise at most once a minute per reader, so a reader's "last seen" can be a minute old.
+A device that sends nothing shows "Version not known"; a pairing without a kind shows its name alone.
+
+**Check-in.** A Weigh Station calls its hello every 5 minutes, so its "Last seen" says that it is running, not that
+it was last used; Devices shows "Last seen" for a station as for every other row.
+
+**Out of date.** The row says it, in a warn line under the name, with what to do:
+
+| Kind | Out of date when | The row says |
+|---|---|---|
+| Weigh Station | its version is lower than the Hub's | "Out of date (0.5.0; the Hub is 0.7.0). On that machine: sudo spoolwarden update" |
+| Slicer Sync PC | its version is lower than the Hub's | "Out of date (<version>). Install the current Slicer Sync on that PC." |
+| Phone (Android app) | its build is lower than the app the Hub offers | "Out of date. The app offers the update when it is opened." |
+| Tag Reader | its build is lower than the firmware the Hub offers | "Out of date. Hold the knob for 4 seconds to update." |
+
+A device whose version is not known is never called out of date. The Overview's Devices tile and one Checks row (group
+Devices, Needs a look: "<n> devices are out of date.", 4.2) point to Devices. The Hub does not update a satellite
+itself.
+
+### 7.10 A device's own page
+
+**The Weigh Station's page.** A paired Weigh Station serves a small page of its own over its HTTPS listener. It shows
+the station's status (the tag, the scale, the last weight, the panel and its version, the air, the step of a running
+intake and the photo) and its settings: sounds (beep, speech, voice, volume), the panel (the yellow and red swap) and
+**which lamp lights for which step** of an intake, chosen from the panel's lamps or Off. The settings are kept on the
+station in a file of their own in its state folder and win over the values the installer wrote; **Back to the installed
+values** removes them and the installed values apply again.
+
+**How it is reached.** From Devices: **Open** on the station's row opens `https://<hub>/setup/device/<id>/` in a new
+tab. The Hub passes the station's page through, with its own pinned HTTPS call to the station, so the browser needs no
+second certificate warning and the station needs no sign-in of its own; the lock of this page decides. Looking needs
+nothing; saving a setting needs the page Unlocked or Trusted and asks for the code in place. The station answers only
+the Hub, and takes a setting change only with a proof the Hub can give because the station is paired.
+
+**A device that serves nothing.** **Open** shows a detail in the Hub page itself (`#devices/<id>`, a side drawer on
+desktop, a full-height dialog on tablet, a bottom sheet on phone):
+
+| Device | The detail |
+|---|---|
+| Tag Reader | Name, build, last seen, and "Its settings are changed in Flash a device." with the link **Flash a device** (`#flash`) |
+| Phone, Slicer Sync PC, Web app | Kind, version, paired, last seen |
+
+A Label Reader on another machine is not a paired device; Settings > Label Reader stays its place (10.5). The Weigh
+Station voice group of Settings (10.10) links to the station's page, and the voice is one value: the station's own file
+wins, and the group reads it through the same pass-through when the station answers.
+
+| Control | Does | Endpoint |
+|---|---|---|
+| **Open** (a Weigh Station's row) | Opens the station's page in a new tab | `G /setup/device/<id>/` and what is under it (the pass-through; looking open) |
+| **Open** (any other row) | Opens the detail | `G device/<id>` |
+| A setting on the station's page | Saves it on the station | `P device/<id>/settings` (code) `{<setting id>: <value>}` |
+| **Back to the installed values** | Removes the station's own values; result "The installed values apply again." | `P device/<id>/settings` (code) `{reset: true}` |
 
 ---
 
@@ -1401,7 +1585,7 @@ Side drawer on desktop, full-height dialog on tablet, bottom sheet on phone. Add
 one group `#settings/<group>`.
 
 **Data.** `G settings/general` (view) → `{values, station_on, remote_on, web_on, spoolman_external, intake_history,
-spoolman_url}`; `G state` (`anthropic`, `passphrase`, `library_token`, `web`, `station`); `G library`; when
+spoolman_url}`; `G state` (`anthropic`, `passphrase`, `web`, `station`); `G library`; `G library/local`; when
 Unlocked or Trusted, `P backups/list`; `G alerts` for Alerts. Each group reads only its own
 data again after its own save.
 
@@ -1792,17 +1976,19 @@ fields clear after saving.
 Description: "The catalog of known filaments and their settings." Title row from `G library`: status badge "OK"
 when up to date; "Needs a look" (triangle) followed by the sentence "The last check failed." when it failed; when
 the catalog is not downloaded yet, no badge but the sentence "The catalog is not downloaded yet." When the Filament Catalog feature is off: the off state "The Filament
-Catalog is switched off." with **Go to Features**; the token field stays.
+Catalog is switched off." with **Go to Features**.
 
 | Part | Content |
 |---|---|
 | State | "Version <v> (<source>), <n> entries of your own." or "The catalog is not downloaded yet."; "Last check <at>: OK." / "Last check <at>: <error>" (warn) / "Last check: never."; `skipped` as a Note line |
 | **Update now** | Default → job `library_update` (code) |
 | **Go back to the version before** | Ghost → confirm, job `library_rollback` (code) |
-| Catalog token | Secret field "Catalog token (optional)", hint "Lets the Filament Catalog download from a private repository, for example a GitHub token." Status badge "Set" / "Not set" beside the label; ghost danger **Remove token** when set → confirm, `P library_token/remove` (code). A new token is sent by the group's Save → `P library_token` (code). |
-| Add your own entry | Text area `--mono`, 4 rows, label "Add your own entry", placeholder `{"brand": "…", "name": "…", "material": "PLA"}`, hint "One entry as JSON. It is checked like `spoolwarden catalog add` checks it, and a preset build follows." Default **Add entry** → `P library/add` (code) `{entry}`; result "Added <vendor> <product>." Errors at the field: "This is not valid JSON: check the brackets, quotes and commas." (checked in the page), or "Entry not added: <reason>." |
+| Add your own entry | A form of three fields and a button: **Brand**, **Name** and **Material** (all required; Material is a choice from the materials the catalog knows, with "Other" and a text field), and the primary **Add**. Under a closed disclosure "More (optional)": Nozzle temperature from and to (°C), Bed temperature from and to (°C), Density (g/cm³), Maximum volumetric speed (mm³/s), Bambu Studio parent, Notes. The page sends the form's values and never an entry's text: the Hub builds the entry with one function, so every interface gives the same entry, and there is no box to paste an entry into. Result "Added. Slicer presets are rebuilt in a minute." Empty required fields are refused at the field: "Enter the brand.", "Enter the name.", "Choose the material." (for "Other": "Type the material."). The Hub's own refusals (`problems`) show at the field they name, or above the button. → `P library/local` (code) `{brand, name, material, nozzle_min, nozzle_max, bed_min, bed_max, density, max_volumetric_speed, bambu_parent, notes}` |
+| See custom entries | Default button. Opens a list of the owner's own entries in a dialog (a bottom sheet on a phone): a collection of Brand, Name, Material and Added (`YYYY-MM-DD`) with a ghost **Remove** per entry, which asks first (10.11). Empty: "You have no entries of your own yet." → `G library/local` (view); `P library/local/<id>/remove` (code) |
 
-Save: **Save Catalog token** (only the token field). Update now, Go back and Add entry are actions.
+No Save button: Update now, Go back, Add and Remove are actions. The Hub page has no field for the catalog token: a
+token that is stored keeps working, and `spoolwarden catalog token` (`06-command-line.md` 9.11) is the one place to
+set or remove it.
 
 ### 10.10 Weigh Station voice
 
@@ -1815,6 +2001,10 @@ state "The Weigh Station is switched off on this machine." with **Go to Features
 
 No Save button.
 
+When the Weigh Station is paired, the group ends with the ghost link **Open the Weigh Station's page** (7.10), where the
+station's sounds and lamps are set too. The voice is one value: the station's own file wins, and this group reads it
+through the same pass-through when the station answers.
+
 ### 10.11 Dialogs
 
 | Dialog | Title | Body | Buttons |
@@ -1824,7 +2014,7 @@ No Save button.
 | Send the corrections waiting | "Send <n> corrections?" ("Send 1 correction?") | "The photos and values in this list go to the project maintainer for review, to improve the Label Reader. This cannot be taken back." | Cancel · **Send** (primary) |
 | Remove all corrections waiting | "Remove all corrections waiting?" | "<n> corrections are taken out of this list and are not sent. The records in Recently added are unchanged." | Cancel · **Remove all** (danger) |
 | Share corrections switched off while corrections wait (asked by Save Label Reader) | "Stop sharing corrections?" | "<n> corrections are still waiting. Keep them to send later, or delete them now." | Cancel · **Keep them** (default) · **Delete them** (danger). Cancel saves nothing; the other two save the group. |
-| Remove Catalog token | "Remove the Catalog token?" | "The Filament Catalog can then download only from public sources." | Cancel · **Remove token** (danger) |
+| Remove a custom entry | "Remove <brand> <name> from your own entries?" | "Slicer presets are rebuilt." | Cancel · **Remove** (danger) |
 | Catalog go back | "Go back to the previous Filament Catalog?" | "The version before the last update comes back. Your own entries are kept." | Cancel · **Go back** (danger) |
 | Get the certificate | "Get the certificate now?" | "Port 80 on your router must reach this Hub while it runs. Spoolwarden never changes your firewall or router." | Cancel · **Get the certificate** (primary) |
 | Restore (typed word) | "Restore this backup?" | The check summary in short ("Backup of <host> made <created>"), then "This replaces the spools, settings, printers and pairings on this Hub. What is here now is saved as a backup first. The Hub restarts, and afterwards the setup code is the one from the backup." Field "Type restore to go on" (`--mono`, placeholder `restore`) | Cancel · **Restore** (danger, enabled only when the field reads `restore`) → `P job` (code) `{name: "restore", confirm: "restore", sha256: <the checked copy's SHA-256>}` |
@@ -2140,7 +2330,7 @@ and meaning, possibly reworded; "Moved to" a new place; "Merged into" combined w
 | Setup code card and field | Moved to | Unlock dialog, opened from the lock chip or in place by any change (2.1) |
 | "This computer is trusted (<name>): no setup code needed here." + link Trusted computers | Moved to | Lock chip state "Trusted computer" and its dialog with the link (2.6) |
 | Trust offer: "Trust this computer?" text, **Trust this computer**, **Not now** | Merged into | Checkbox "Trust this computer" in the unlock dialog; Not now is not ticking it (2.1) |
-| Tab nav "Console sections" (9 tabs) | Renamed | Navigation rail / bottom bar with ten sections (3.2) |
+| Tab nav "Console sections" (9 tabs) | Renamed | Navigation rail / bottom bar with eleven sections (3.2) |
 | Tab "Modules" | Renamed | Features (9) |
 | Tab "Presets" | Renamed | Slicer presets (8) |
 | Tab "Intake" | Renamed | Recently added (6) |
@@ -2226,7 +2416,7 @@ and meaning, possibly reworded; "Moved to" a new place; "Merged into" combined w
 | Select "Lane data: auto / on / off" | Renamed | Segmented choice Lane data (5.4) |
 | **Detect** + "Asking it…" | Renamed | **Detect model and slots** (5.4) |
 | Test result texts (eight) | Kept | Reworded (5.8) |
-| Card "Live printer view" + link | Moved to | Header ghost link **Open the live printer view** (5.4) |
+| Card "Live printer view" + link | Moved to | The printer's live view in its Detail region (5.10); the link is gone |
 | Card "Add a printer": Type select, Bambu and Klipper fields, **Add** | Moved to | Add a printer drawer, **Add printer** (5.6) |
 | Add errors (names itself, serial, bad address) | Kept | Field errors (5.6) |
 | Card "Find Klipper printers": text, subnet field, **Scan**, results, limits | Kept | Find Klipper printers card (5.4, 5.8) |
@@ -2236,7 +2426,7 @@ and meaning, possibly reworded; "Moved to" a new place; "Merged into" combined w
 
 | Today | Fate | New place and reason |
 |---|---|---|
-| Card "Phones, PC and station" | Renamed | Card "Paired devices" (7.2) |
+| Card "Phones, PC and station" | Renamed | Card "Paired devices", with the columns Kind and Version and the button **Open** (7.2) |
 | Row text "<name> · paired <date> · last seen <date>" | Kept | Columns (7.2) |
 | "built in: this server's own pairing" | Kept | Tag "Built in" and "This Hub's own pairing" (7.2) |
 | **Revoke** + confirm "Unpair <name>?" | Renamed | **Unpair** with dialog (7.2, 7.7) |
@@ -2251,7 +2441,8 @@ and meaning, possibly reworded; "Moved to" a new place; "Merged into" combined w
 | "No station is asking to pair." | Kept | "No Weigh Station is asking to pair." (7.3) |
 | Request text, six-digit hint, **Pair**, **Refuse**, "Paired <name>…" | Kept | (7.3) |
 | Card "iPhone: the web app" | Renamed | "The web app on a phone" (7.4) |
-| Home address + QR, Safari warning, public address + QR, "Add to Home Screen", error | Kept | (7.4) |
+| Home address + QR, Safari warning, public address + QR, "Add to Home Screen", error | Kept | (7.4); the home address gains **Open** |
+| (none) | Added | Kind, version, "Out of date" lines, the Weigh Station's own page and the detail of a device that serves nothing (7.9, 7.10) |
 | Card "NFC readers" | Renamed | "Tag Readers" (7.5) |
 | Reader rows + **Revoke** + confirm, "No reader tokens.", store error | Kept | (7.5, 7.7) |
 | Name field + **Make a token**, token block, "Shown only this once…" note | Kept | (7.5) |
@@ -2335,11 +2526,12 @@ and meaning, possibly reworded; "Moved to" a new place; "Merged into" combined w
 | **Remove** + confirm | Kept | Dialog (10.11) |
 | **Check**, "Checking…", "wait 3 s between checks" | Kept | (10.5) |
 | Card "Web passphrase" + pill, text, two fields, **Set** / **Replace**, mismatch text | Kept | Web passphrase group (10.8) |
-| Card "Library token" + pill, text, field, **Set** / **Replace**, **Remove** | Merged into | Filament Catalog, "Catalog token"; Remove now confirms (10.9) |
+| Card "Library token" + pill, text, field, **Set** / **Replace**, **Remove** | Removed | The Hub page no longer takes the token; a stored token keeps working and `spoolwarden catalog token` sets or removes it (10.9) |
 | Card "Filament library": version, last check, skipped | Renamed | Filament Catalog state (10.9) |
 | **Update now** | Kept | (10.9) |
 | **Go back to the version before** + confirm | Kept | (10.9, 10.11) |
-| Add entry text, text area, **Add entry**, "Added <vendor> <product>.", "entry not added: …" | Kept | (10.9) |
+| Add entry text, text area, **Add entry**, "Added <vendor> <product>.", "entry not added: …" | Removed | The JSON text box goes; the form of Brand, Name and Material with **Add** takes its place (10.9) |
+| (none) | Added | **See custom entries** with **Remove** per entry (10.9) |
 | Card "Addresses": "Web public address" + Save | Renamed | Network and addresses, "Public address" (10.7) |
 | Card "Addresses": "Station address" + Save | Renamed | Network and addresses, "Weigh Station address" (10.7) |
 | "Saved; applying…" | Kept | "Saved; applying… Follow it in the job panel." (10.7) |
@@ -2377,6 +2569,13 @@ and meaning, possibly reworded; "Moved to" a new place; "Merged into" combined w
 | "Only the end is shown: the rest is too long for this page." | Kept | (13.3) |
 | (none) | Added | Section Flash a device (11): writes firmware to a Tag Reader or a Weigh Station display over USB |
 
+### 14.11 Spools
+
+| Today | Fate | New place and reason |
+|---|---|---|
+| (none: the Hub page had no spool list; spools were found in the web app and the app) | Added | Section Spools: list, search, chips, detail and its actions (16) |
+| (none) | Added | Header link **Open Spoolman** (16.2) |
+
 ---
 
 ## 15. Needs from the Hub
@@ -2411,3 +2610,146 @@ column says.
 | The three values a Weigh Station tells the Hub at every start on `GET api/station/hello`: `fp` (the SHA-256 of its certificate), `port` and `version`, kept with its pairing | The Hub's calls to a Weigh Station (7.3), the Checks row "The Weigh Station <name> is not using HTTPS. Update it." (4.2) | A Weigh Station that sends none is called over plain HTTP as before, and the Checks show that row |
 | Printers announced by Bambu Lab printers, listed by the Hub's own listener for them | Add a printer, step 1 (5.6) | The found list holds Klipper printers only, with the sentence "Bambu Lab printers are added by address." |
 | A Label Reader on another machine that serves HTTPS on its port (a change in the reader's own repository) | Settings > Label Reader, Address and Test (10.5) | The Hub accepts the reader's `http://` address as before and the Checks show the row "The Label Reader at <address> is not using HTTPS." |
+| The page routes of the Spools section, under `/setup/api/`: `GET spools` (`q`, `filter`, `offset`, `limit`; answer `{spools, total, offset, has_more, spoolman_url?}`, `filter` one of `sealed`, `opened`, `loaded`, `low`, none meaning every spool that is not empty), `GET spools/{id}` (`{spool, last_use: {at, printer, grams}?}`), `POST spools/{id}` (`{gross` or `remaining` or `location` or `auto_location: true` or `empty`, `dry_run}` → `{spool, before, dry}`), `GET spools/last-tag` (`{tag: {uid, read_at, source}?}`), `POST spools/{id}/link` (`{tag, dry_run}` → `{spool, before, dry}`); a spool carries `loaded` and `low` besides the spool view; the three changes need the page unlocked | Spools (16) | The section shows the error state "Could not read the spools. <Hub's text>" with **Try again** |
+| The page routes of the live view: `GET printers/{id}/live` (`{summary, status}` as `GET api/printers/{id}` gives them, the slots with `pending`), `POST printers/{id}/command` (`{action}`: `pause`, `resume`, `stop` with `confirm: true`, `light_on`, `light_off`), `POST printers/{id}/slots/{label}/load`, `unload` and `clear` (`{spool_id?, dry_run}`; `clear` answers `{slot, spool?, moved_back?, waiting_ended, printer_cleared, dry_run}`), `GET printers/{id}/usage` (`days`), `POST usage/{entry}/undo`, `GET printers/{id}/camera.mjpeg` and `camera/{name}` (on a computer that is not trusted, with `?ticket=<ticket>` from `POST printers/{id}/camera/ticket`, which takes the setup code and answers `{ticket, expires_in: 60}`: a ticket starts one stream within 60 seconds, for that printer only); they call the same printer code as the kit routes, in the Hub's process, and not the web app's routes; the state and usage reads are open, and every other route, the camera included, needs the page unlocked | Printers, the live view (5.10) | The expansion shows the facts of 5.3 and no live view |
+| The Hub page's part of the catalog form: `GET library/local` (`{entries: [{id, brand, name, material, added}]}`), `POST library/local` (the form's values; 400 `{error: "invalid_entry", problems: [{field, text}]}`) and `POST library/local/{id}/remove` (`{removed: true}`); the Hub builds the entry from the values with one function | Settings > Filament Catalog (10.9) | The group shows its state and the update buttons only |
+| Devices: `GET devices` (`{devices: [{id, name, kind, version?, newest?, out_of_date, advice?, paired?, last_seen?, reachable?, built_in, page}]}`, `kind` one of `phone`, `pc`, `station`, `web`, `reader`, `builtin`; the Tag Readers are rows of it), `GET device/{id}` (`{device, status?, settings?: [{id, label, kind, value, choices?, min?, max?}]}`) and `POST device/{id}/settings` (code); the Hub keeps each client's `X-Spoolwarden-Client: <kind>/<version>` and each reader's `X-Reader-Build` with its pairing, and a Weigh Station's hello gives its version every 5 minutes; `GET state` keeps its `devices` and `readers` fields | Devices (7.2, 7.9) | The list is the one of `G state`, without Kind, Version and out-of-date lines |
+| The station's own page passed through: `/setup/device/{id}/` and what is under it, over the Hub's own pinned HTTPS call to the station (relative addresses only), with this page's lock deciding: looking open, saving a setting unlocked | Devices, **Open** (7.10) | **Open** on a Weigh Station shows the detail of 7.10 only |
+
+---
+
+## 16. Spools
+
+**Purpose.** Find any spool, see where it is and what is left of it, and keep its record right: update its weight, move
+it, link a tag, mark it empty. Group Everyday, after Printers (foundations section 8); on a phone inside the More sheet.
+Address `#spools`; one spool `#spools/<id>`. Adding spools stays on the phones (`04-web-app.md` 4, `05-android-app.md` 6).
+
+**Data.** `G spools` (view) with `q`, `filter`, `offset` and `limit` (50 by default) → `{spools, total, offset, has_more,
+spoolman_url?}`; `G spools/<id>` (view) → `{spool, last_use?}`; `G spools/last-tag` (view) → `{tag?}`; the changes `P
+spools/<id>` (code) and `P spools/<id>/link` (code). A spool in these answers is the spool view of the Hub's inventory:
+`{id, location, remaining_g, net_g, tare_g, tag, state, filament_id, vendor, name, material, color_hex, lot}` with
+`loaded: {printer_id, printer, slot}` when it is in a printer and `low` when it is running low. The page routes are in
+section 15.
+
+### 16.1 Layout
+
+```
+Desktop: list
++--------------------------------------------------------------------------------------------------+
+| Spools                                                                                           |
+| Spools                                                                        [Open Spoolman]    |
+| 214 spools                                                                                       |
+| [ Search: brand, name, material, location, number or tag                      ]                  |
+| [Sealed] [Opened] [In a printer] [Running low]                                                   |
+|                                                                                                  |
+|  NO.  SPOOL                                MATERIAL  LEFT            WHERE             STATE   TAG |
+|  214  [#] Polymaker PolyTerra PLA ...      PLA       (o) 620 g       Workshop X1 · A1  Opened  Tagged |
+|           Charcoal Black #2B2B2E                                                                 |
+|  212  [#] Bambu Lab PETG HF Orange         PETG      (o) 880 g       Workshop X1 · A2  Opened  Tagged |
+|  213  [#] Bambu Lab PETG HF Orange         PETG      (O) 1000 g      Shelf B           Sealed  No tag |
+|   77  [#] Polymaker PETG Teal              PETG      (o) 140 g /!\ Running low  Rack 2  Opened  No tag |
+|                                    Showing 50 of 214   [ Show more ]                              |
++--------------------------------------------------------------------------------------------------+
+
+Desktop: one spool (#spools/214)
++--------------------------------------------------------------------------------------------------+
+| Spools / Spool 214                                                                  [< Back]     |
+| Polymaker PolyTerra PLA Charcoal Black                                                           |
+| Opened · 620 g left · Workshop X1 · A1                                                           |
+| +-- The spool --------------------------------+ +-- Actions ------------------------------------+ |
+| | (ring)  62 %   620 g left of 1000 g          | | [Update weight] [Move] [Link the last tapped tag] | |
+| | Spool          214                           | |   Weight updated: 482 g left.                  | |
+| | Material       PLA        Lot  F57           | | ---------------------------------------------- | |
+| | Colour         [#] #2B2B2E                   | | [Mark empty]                                   | |
+| | Empty spool    140 g                         | +------------------------------------------------+ |
+| | Where          Workshop X1 · A1              |                                                  |
+| | Tag            04A1B2C3D4                    |                                                  |
+| | Last filament taken off it                   |                                                  |
+| |                12.4 g, Workshop X1, 2026-11-12 14:05                                            | |
+| +----------------------------------------------+                                                  |
++--------------------------------------------------------------------------------------------------+
+
+Tablet: the list keeps No., Spool, Left and Where; Material, State and Tag move under the spool's name. The detail
+        opens in place under its row (the inline expansion), one column.
+Phone:  rows become cards (swatch, number and name, grams with the ring, where it is, state); a spool opens as a full
+        page with the same parts, and its actions in a column under the facts.
+```
+
+### 16.2 List
+
+A collection (`table` profile in Console), filled from `G spools`.
+
+| Column | Content | Priority |
+|---|---|---|
+| No. | The spool's number, `--mono` | P1 |
+| Spool | The filament swatch (`02-components.md` 7.3) and "<vendor> <name>" as the link to `#spools/<id>`; under it the colour's hex in `--mono` `--muted` | P1 |
+| Material | `material` | P3 (under the name on tablet and phone) |
+| Left | The small spool ring (`02-components.md` 7.4) and "<g> g"; a sealed spool shows its net weight; a spool that is running low adds the warn shape and "Running low" | P1 |
+| Where | `location`; for a spool in a printer "<printer> · <slot>" as a link to `#printers/<id>`; "No place" in `--muted` when it has none | P2 |
+| State | Status badge "Sealed" or "Opened" | P2 |
+| Tag | "Tagged" with the tag icon, or "No tag" in `--muted` | P3 |
+
+- **Search.** A text field, label "Find a spool", placeholder "Brand, name, material, location, number or tag". It
+  matches the way the Hub's own word match does (`inventory.find`): every word must be found in the brand, name,
+  material, location, spool number or tag. It searches 300 ms after typing stops, and on Enter.
+- **Chips.** Four toggle chips under the field: **Sealed**, **Opened**, **In a printer**, **Running low**. One is on at
+  a time (`filter` `sealed`, `opened`, `loaded` or `low`); pressing the chosen one again, or **Show all spools** in the
+  empty state, shows every spool that is not empty. A chip works together with the search.
+- **Paging.** 50 rows at a time. Under the last row "Showing <n> of <total>" and the default button **Show more**, which
+  adds the next 50 and moves focus to the first new row (foundations section 12, rule 7).
+- **Header.** The meta line holds the count, "<total> spools" ("1 spool"). At the right, the ghost link **Open
+  Spoolman**, which opens Spoolman's own page in a new tab (`spoolman_url`, given by the Hub: the address with the host
+  name the person uses for the Hub, or the configured address of a Spoolman elsewhere). Spoolman's page is plain http.
+  The link is absent when the Hub gives no address. The page never builds the address itself.
+
+### 16.3 Spool
+
+The Detail region of the theme: in Console the inline expansion under the row on tablet and desktop, a full page on a
+phone. Address `#spools/<id>`.
+
+| Part | Content |
+|---|---|
+| Header | Breadcrumb "Spools / Spool <id>" with the list as link; title "<vendor> <name>"; meta: state badge, "<g> g left", the place. Ghost **Back** (to `#spools`) |
+| The spool | Key-value list with the large spool ring: Spool, Material, Colour (swatch and hex), Net weight and Left, Empty spool weight, Lot, Where, Tag ("None" when there is none) |
+| Last filament taken off it | "<g> g on <printer>, <date and time>", or "No filament has been taken off it yet." (`last_use`) |
+| Actions | **Update weight** (primary), **Move**, **Link the last tapped tag**, and, apart under a hairline, **Mark empty** (danger). Each shows its result beside the button |
+
+Every action previews first, with the Hub's dry run, and shows what would change before anything is saved. Changes need
+the page Unlocked or Trusted, like every change on the Hub page (2.1); looking does not.
+
+| Control | Does | Endpoint |
+|---|---|---|
+| **Update weight** | Opens a small form in place: a segmented choice "Weight with the spool" / "Filament left" and a number field in g. A valid number shows the preview "Remaining changes from 620 g to 482 g."; then the primary **Save weight**. Result "Weight updated: 482 g left." | `P spools/<id>` (code) `{gross or remaining, dry_run}` |
+| **Move** | Opens a menu "Move to": "Automatic" first, then every storage location in fill order with how full it is (as 10.4 and `04-web-app.md` 5.4 give them; a full one stays choosable and says "Full"). A choice shows the preview "Spool 214 would move to Shelf B." with **Move**. Result "Moved to Shelf B." | `P spools/<id>` (code) `{location, dry_run}`; for "Automatic" `{auto_location: true, dry_run}` (the Hub moves the spool where its placement rule puts it) |
+| **Link the last tapped tag** | Shows the last tag ("Tag <id>, tapped <age> on the Tag Reader", read when the detail opens and every 3 s while it is open) and the preview "Tag <id> would be linked to spool 214." with **Link tag**. With no tag read the button is disabled with "No tag read yet: tap the spool's tag on a reader." Result "Tag linked." | `G spools/last-tag` (view); `P spools/<id>/link` (code) `{tag, dry_run}` |
+| **Mark empty** | Dry run, then the dialog "Mark spool <id> empty?". Result "Marked empty." | `P spools/<id>` (code) `{empty: true, dry_run}` |
+
+The preview, the Hub's refusals (for example a tag that belongs to another spool) and every result show beside the
+button that was pressed, in an `aria-live="polite"` region, and are never lost by another part's redraw.
+
+### 16.4 Dialogs, results and states
+
+| Dialog | Title | Body | Buttons |
+|---|---|---|---|
+| Mark empty | "Mark spool <id> empty?" | "<Vendor> <name> will be marked as used up." | Cancel (focused first) · **Mark empty** (danger) |
+
+| Event | Shape | Text |
+|---|---|---|
+| Weight preview | Note | "Remaining changes from <before> g to <after> g." |
+| Weight saved | OK | "Weight updated: <g> g left." |
+| Moved | OK | "Moved to <place>." |
+| Tag linked | OK | "Tag linked." |
+| Marked empty | OK | "Marked empty." |
+| Weight not a number above 0 | error, at the field | "Enter grams above 0." |
+| The Hub refuses | error | The Hub's text, as sent |
+
+| State | Text |
+|---|---|
+| Loading | Five skeleton rows; a spool: skeleton ring and facts |
+| Empty (no spools at all) | Empty state with the spool icon: title "No spools yet", sentence "Add your first one from your phone." (read together: "No spools yet. Add your first one from your phone.") |
+| No match | "No spools match." and the default button **Show all spools** |
+| Spool not found (a deep link to an empty or removed spool) | Error state "This spool is not in the inventory." with **Back to Spools** |
+| Locked | The list and the facts show; every action asks for the code in place |
+| Error | "Could not read the spools. <Hub's text>" + **Try again** |
+
+**Main action:** none in the list (it is for finding); in a spool, **Update weight**.

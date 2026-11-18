@@ -294,8 +294,9 @@ takes its place.
 live one-line summary of each section. One markup serves all four `nav` profiles and, on phones, the bottom bar
 and the More sheet.
 
-**Anatomy.** A `nav` holding two groups (foundations §8): **Everyday** (Overview, Printers, Recently added, Devices,
-Slicer presets) and **System** (Features, Settings, Flash a device, Updates, Logs). Each group: a heading and a list.
+**Anatomy.** A `nav` holding two groups (foundations §8): **Everyday** (Overview, Printers, Spools, Recently added,
+Devices, Slicer presets) and **System** (Features, Settings, Flash a device, Updates, Logs). Each group: a heading and
+a list.
 Each item: icon, label, live summary (one short line, for example "2 connected · 1 offline"), chevron. Items that sit
 in the phone bottom bar carry `data-tab`. A **More** button closes the navigation; it is shown only by profiles and
 breakpoints that hide items (pills on wide screens, the bottom bar on phones).
@@ -447,7 +448,7 @@ section list (2.3). `collection`, `detail`: no change.
 
 ### 2.5 More sheet
 
-**Purpose.** On phones, the six sections that do not fit the bottom bar, each with a live one-line summary, one tap
+**Purpose.** On phones, the seven sections that do not fit the bottom bar, each with a live one-line summary, one tap
 away.
 
 **Anatomy.** A bottom sheet (9.2) titled "More sections", holding a `nav` with two lists, one under the Everyday
@@ -500,7 +501,8 @@ The current row has `aria-current="page"`.
 
 **Anatomy.** Breadcrumb (only below section level: "Printers / Workshop X1"), page title `h1`, meta line (counts and
 status badges, for example "3 printers · Connected 2 · Offline 1"), page actions (at most one primary button, other
-buttons default or ghost; a long list goes into an overflow menu).
+buttons default or ghost; a long list goes into an overflow menu), and at the right end the page menu: an overflow
+menu (4.2) for what every section shares. On the Hub page it holds **Open the web app**.
 
 **Sizes and tokens.** Bottom padding and margin `--s4`, 1 px `--border` hairline under it. Breadcrumb `--fs-s` `--mono`
 `--muted`. Title `--fs-xl` weight 650, line height 1.25. Meta `--fs-m` `--muted`, gap `var(--s1) var(--s4)`. Actions
@@ -527,7 +529,8 @@ actions at the right) and the page `h1` belongs to the content pane. Others: no 
 change.
 
 **Android.** The `TopAppBar` title takes the page title; page actions become a `Button` row at the top of the
-content, the main one as `Button`, others `OutlinedButton`, the rest in the bar's overflow `DropdownMenu`.
+content, the main one as `Button`, others `OutlinedButton`, the rest in the bar's overflow `DropdownMenu`, which is
+also the page menu.
 
 **HTML.**
 ```html
@@ -1099,8 +1102,8 @@ with `ImeAction.Search`.
 
 ### 5.3 Secret field
 
-**Purpose.** Typing a secret (Access Code, setup code, Moonraker API key, Anthropic API key, web passphrase, the
-Catalog token) without showing it by default, and showing the state of a secret that is already saved without ever showing
+**Purpose.** Typing a secret (Access Code, setup code, Moonraker API key, Anthropic API key, web passphrase)
+without showing it by default, and showing the state of a secret that is already saved without ever showing
 its value.
 
 **Anatomy.** Two forms:
@@ -2217,7 +2220,9 @@ fields"); full lists are in the detail.
 
 **Anatomy.** A block filled with the filament colour (`--swatch`, set by script, 1.4) with a 1 px `--border-strong`
 outline (so a white spool on a white card is still visible, foundations §4.1); variants: **level** (a tall swatch
-whose filled part is the remaining amount, `--level`), **empty** (dashed outline, no fill: an empty slot), **no
+whose filled part is the remaining amount, `--level`), **empty** (dashed outline, no fill: an empty slot), **waiting**
+(the spool's colour as the fill, with the dashed outline of the empty variant drawn around it: a spool is assigned to
+the slot and has not loaded yet), **no
 colour** (a hatched fill of `--surface-2` and `--surface-3` stripes `var(--s1)` wide). Always beside the colour's name
 or hex in text.
 
@@ -2244,7 +2249,7 @@ sentence ("A1 Polymaker PolyTerra PLA Charcoal Black #2B2B2E, 62 % left").
 swatches. `nav`, `detail`: no change.
 
 **Android.** The app's existing `ColorSwatch` composable (a `Canvas` with fill, 1 dp outline in the `outline` role,
-dashed ring for empty), kept and fed from the theme.
+dashed ring for empty, and the same dashed ring over the fill for waiting), kept and fed from the theme.
 
 **HTML.**
 ```html
@@ -2261,7 +2266,8 @@ visual of the Palette theme's tiles, and the spool picture in every detail of a 
 **Anatomy.** An inline SVG: a track circle (`--surface-3`), an arc in the filament colour from 12 o'clock clockwise
 for the remaining share, 1 px `--border-strong` rings inside and outside the band (pale colours stay visible), a hub
 circle (`--surface-2`, 1 px `--border-strong`). Text beside or below: "62 %" and "620 g left" in `mono`. Empty slot:
-dashed outline ring and the word "Empty". Remaining unknown: full track, no arc, "Unknown".
+dashed outline ring and the word "Empty". Waiting slot: the arc in the spool's colour with the dashed outline ring and
+the word "Waiting". Remaining unknown: full track, no arc, "Unknown".
 
 **Sizes and tokens.** Small `--s6` (32 px), medium `calc(var(--s7) + var(--s4))` (64 px), large `calc(var(--s7) * 2)`
 (96 px); band width one eighth of the size. Arc colour `var(--swatch)`; arc length from `--level` (the circle has
@@ -2303,15 +2309,18 @@ the outline drawn behind it.
 ### 7.5 Slot strip
 
 **Purpose.** Show what is loaded in each slot of a printer (AMS slots, tool slots), how much is left, and which slot
-is in use; offer Load and Unload where the interface has them.
+is in use; offer Load, Unload and Clear slot where the interface has them.
 
 **Anatomy.** Two forms:
-1. **Compact** (in a collection cell or on a card): one level swatch per slot in a row, empty slots dashed, then
+1. **Compact** (in a collection cell or on a card): one level swatch per slot in a row, empty slots dashed, a slot a
+   spool is waiting for in that spool's colour with the dashed ring (7.3), then
    "3 of 4 loaded" in `mono`, and an `sr` sentence listing every slot.
 2. **Full** (in a detail): a list, grouped under unit headings ("AMS A", "AMS HT A") when a printer has several
    units. Each row: slot label (`mono`: A1, T0), medium swatch, filament name with colour name and hex (`--muted`),
-   remaining as a determinate bar (8.3) plus "62 %", "In use" for the active slot, and the row's actions (web app and
-   app: **Load**, **Unload**).
+   remaining as a determinate bar (8.3) plus "62 %", "In use" for the active slot, and the row's actions (Hub page, web
+   app and app: **Load**, **Unload**, **Clear slot**). A slot a spool is waiting for shows that spool's name, the waiting
+   swatch and the line "Waiting for the spool to load in <slot>." instead of the bar. **Unload** is on a row only
+   while a spool is recorded in the slot; **Clear slot** is on every row.
 
 **Sizes and tokens.** Compact: swatches gap `--s1`. Full: rows min height 44 px, grid
 `calc(var(--s6) - var(--s1) / 2) calc(var(--s4) + var(--s1) / 2) minmax(0, 1fr) 7rem auto` (30 px, 18 px), gap
@@ -2324,25 +2333,27 @@ percentage stays) and the last column shrinks to 4.5rem.
 - Hover: rows with actions take `--surface-2`.
 - Focus: as the buttons inside.
 - Pressed: as the buttons.
-- Disabled: Load and Unload are disabled with the reason when the printer cannot take them now ("Available when the
-  printer is connected.").
+- Disabled: Load, Unload and Clear slot are disabled with the reason when the printer cannot take them now ("Available
+  when the printer is connected.").
 - Loading: a slot the printer is still reading shows a spinner and "Reading…"; the whole strip shows skeleton rows
   until the first status arrives.
 - Error: no slot data: one line in place of the rows: "No slot data: the printer is offline." or "No slots read yet.
   Test the connection, then map the slots."
 
 **Behaviour and keyboard.** Updates live from the printer status without moving focus. Load opens the load flow for
-that slot; Unload asks first (9.1), naming the spool and where it goes back to.
+that slot; Unload and Clear slot ask first (9.1), naming the spool and where it goes back to.
 
 **Accessibility.** Full form: a `ul` with an `aria-label` ("AMS slots of Workshop X1"); each row's text reads in order
-"A1, Polymaker PolyTerra PLA, Charcoal Black, 62 % left, in use". Compact form: swatches `aria-hidden`, the `sr`
+"A1, Polymaker PolyTerra PLA, Charcoal Black, 62 % left, in use"; a waiting slot reads "A2, Bambu Lab PETG HF Orange,
+waiting to load". Compact form: swatches `aria-hidden`, the `sr`
 sentence carries the content, "3 of 4 loaded" is visible.
 
 **Theme profiles.** `collection` = table and cards: compact form in the Slots cell; tiles: one small spool ring per
 slot instead of swatches; rows: only "3 of 4 loaded" in the row's sub-line. Full form in every `detail`.
 
-**Android.** Full: `Column` of rows (swatch, texts, `LinearProgressIndicator(progress)`, `TextButton`s Load and
-Unload); compact: a `Row` of swatches with a `semantics { contentDescription = … }` sentence.
+**Android.** Full: `Column` of rows (swatch, texts, `LinearProgressIndicator(progress)`, `TextButton`s Load,
+Unload and Clear slot); compact: a `Row` of swatches with a `semantics { contentDescription = … }` sentence, on the
+printers list only (Home has no swatches).
 
 **HTML.**
 ```html
@@ -3092,6 +3103,14 @@ Android app; no screen draws its own.
   on that device only; it comes back if it gets worse (warn to bad) or is raised again later.
 - A moment's banner (print failed, printer error) stays until it is dismissed on that device, at most 24 hours. The
   banners read the events of the last 24 hours with `alert=1`.
+- The tag of a notification. A notification for a condition has the tag `sw-condition-<key>` everywhere (the Hub
+  page's browser notifications, Web Push, the web app's tidy-up), where `<key>` is the condition's key; a notification
+  for a moment keeps a tag of its own per event and is never replaced.
+- When an alert is over, Web Push replaces its notification: the push carries the notification of the event that ended
+  it (for example "Print resumed" with its text), with the same tag as the alert it ends, `silent: true` and
+  `renotify: false`. This is done only for print paused or filament ran out (ended by resumed, finished or failed) and
+  device stopped answering (ended by answering again); nothing is pushed when storage almost full or spool running low
+  end.
 - Titles and sentences, the one table every interface uses (`<...>` is filled from the values of the event):
 
   | Event | Title | Sentence | Action |
