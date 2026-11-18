@@ -23,8 +23,10 @@ import ipaddress
 import re
 import shlex
 import socket
+import sys
+import urllib.parse
 
-from . import config, output, pairing, release, updates
+from . import config, output, pairing, release, spools_cli, updates
 from .bridge import registry
 from .bridge.klipper import detect as kdetect
 from .bridge.klipper import hardware as kh
@@ -283,6 +285,276 @@ def detect_printer(p: registry.Printer) -> int:
     if warning:
         output.note(warning)
     return 0
+
+
+# ---------- the printer commands that call the Hub (R83 10.5): slots, usage, watch ----------
+# `api` is the kit API client (cli._server_api()), None when no Hub answers; `printer` is {"serial", "name"} (cli.py
+# resolves the name the person typed). Every changing command asks for a dry run, shows it, asks, and then does it.
+# The CLI_* constants are catalogue keys in capitals (see spools_cli.py).
+
+CLI_SLOT_LOAD_PREVIEW = "Load spool {n}, {name}, into slot {slot} of {printer}."
+CLI_SLOT_LOAD_ASK = "Load spool {n} into slot {slot} of {printer}?"
+CLI_SLOT_LOAD_DONE = "Spool {n} is loaded in slot {slot} of {printer}."
+CLI_SLOT_LOAD_WAITING = "Waiting for the spool to load in {slot}."
+CLI_SLOT_UNLOAD_PREVIEW = "Unload slot {slot} of {printer}: spool {n}, {name}, goes back to {place}."
+CLI_SLOT_UNLOAD_ASK = "Unload slot {slot} of {printer}?"
+CLI_SLOT_UNLOAD_DONE = "Slot {slot} of {printer} is unloaded. Spool {n} is at {place}."
+CLI_SLOT_CLEAR_ASK = "Clear slot {slot}? The Hub forgets the spool recorded here."
+CLI_SLOT_CLEAR_ASK_SPOOL = "Clear slot {slot}? The Hub forgets the spool recorded here. {name} goes back to {place}."
+CLI_SLOT_CLEAR_DONE = "Slot {slot} of {printer} is cleared."
+CLI_SLOT_MOVED_BACK = "Spool {n} goes back to {place}."
+CLI_SLOT_WAITING_ENDED = "No spool waits for slot {slot} any more."
+CLI_SLOT_WAITING_ENDS = "The spool waiting for slot {slot} stops waiting."
+CLI_SLOT_PRINTER_CLEARED = "The slot's setting on the printer is cleared."
+CLI_SLOT_NO_SPOOL = "No spool is recorded in slot {slot}."
+CLI_SLOT_BAD = "{value} is not a slot of a printer."
+CLI_SLOT_BAD_FIX = "see the slots: spoolwarden printer show <name>"
+CLI_SLOT_REFUSED = "the Hub did not change slot {slot}: {why}"
+CLI_USAGE_EMPTY = "No filament used in the last {days} days."
+CLI_USAGE_EMPTY_DEFAULT = "No filament used lately."
+CLI_USAGE_NO_SPOOL = "no spool"
+CLI_USAGE_UNDONE = "undone"
+CLI_USAGE_OBSERVED = "seen only"
+CLI_USAGE_DAYS_BAD = "{value} is not a number of days."
+CLI_WATCH_STOP = "(Ctrl-C stops)"
+CLI_WATCH_NO_STATE = "No state yet."
+
+_SLOT = re.compile(r"[A-Za-z0-9-]{1,16}")
+
+
+def _slot_call(api, printer: dict, slot: str, action: str, body: dict, dry: bool):
+    quote = urllib.parse.quote
+    return api.post(f"/api/printers/{quote(printer['serial'], safe='')}/slots/{quote(slot, safe='')}/{action}",
+                    {**body, "dry_run": dry})
+
+
+def _slot_refused(e, slot: str) -> int:
+    if getattr(e, "code", None) == "unreachable":
+        return spools_cli.fail(e)
+    if getattr(e, "http", None) in (400, 404):
+        output.error(str(e).rstrip(".") + ".")
+        return output.USAGE
+    output.error(CLI_SLOT_REFUSED.format(slot=slot, why=str(e).rstrip(".") + "."))
+    return output.FAILED
+
+
+def _spool_label(spool: dict) -> str:
+    """Brand and name of a spool: the raw Spoolman spool load and unload answer with, or a spool view."""
+    f = spool.get("filament") if isinstance(spool.get("filament"), dict) else None
+    if f is not None:
+        return f"{(f.get('vendor') or {}).get('name') or ''} {f.get('name') or ''}".strip() or "no name"
+    return spools_cli.spool_name(spool)
+
+
+def _q(name: str) -> str:
+    return name if re.fullmatch(r"[\w.-]+", name) else shlex.quote(name)
+
+
+def cmd_printer_slot(api, printer: dict, action: str, slot: str, spool=None, yes: bool = False) -> int:
+    """`printer load|unload|clear <name> <slot> [<spool n>]`: the preview (a dry run), the question, the change."""
+    if not _SLOT.fullmatch(slot or ""):
+        output.error(CLI_SLOT_BAD.format(value=slot), CLI_SLOT_BAD_FIX)
+        return output.USAGE
+    body: dict = {}
+    if action == "load":
+        n = spools_cli._number(spool)
+        if n is None:
+            output.error(spools_cli.CLI_SPOOL_NUMBER_BAD.format(value=spool), spools_cli.CLI_SPOOL_NOT_FOUND_FIX)
+            return output.USAGE
+        body = {"spool_id": n}
+    if api is None:
+        return spools_cli.down()
+    from .web.slots import SlotError
+    name = printer["name"]
+    try:
+        plan = _slot_call(api, printer, slot, action, body, True)
+    except SlotError as e:
+        return _slot_refused(e, slot)
+    spool_v = plan.get("spool") or {}
+    sid, label = spool_v.get("id"), _spool_label(spool_v)
+    back = [m for m in plan.get("moved_back") or [] if isinstance(m, dict)]
+    place = next((m.get("location") for m in back if m.get("id") == sid), None) or spool_v.get("location") or "its place"
+    if action == "load":
+        lines = [CLI_SLOT_LOAD_PREVIEW.format(n=body["spool_id"], name=label, slot=slot, printer=name)]
+        lines += [CLI_SLOT_MOVED_BACK.format(n=m.get("id"), place=m.get("location")) for m in back]
+        ask = CLI_SLOT_LOAD_ASK.format(n=body["spool_id"], slot=slot, printer=name)
+    elif action == "unload":
+        lines = [CLI_SLOT_UNLOAD_PREVIEW.format(slot=slot, printer=name, n=sid, name=label, place=place)]
+        ask = CLI_SLOT_UNLOAD_ASK.format(slot=slot, printer=name)
+    else:
+        moved = plan.get("moved_back")
+        lines = [] if plan.get("spool") else [CLI_SLOT_NO_SPOOL.format(slot=slot)]
+        if plan.get("waiting_ended"):
+            lines.append(CLI_SLOT_WAITING_ENDS.format(slot=slot))
+        ask = (CLI_SLOT_CLEAR_ASK_SPOOL.format(slot=slot, name=label, place=moved) if plan.get("spool") and moved
+               else CLI_SLOT_CLEAR_ASK.format(slot=slot))
+    output.out_lines(lines)
+    rerun = f"spoolwarden printer {action} {_q(name)} {slot}" + (f" {body['spool_id']}" if body else "")
+    rc = spools_cli.confirmed(ask, f"{action} of slot {slot} on {name}", rerun, yes)
+    if rc is not None:
+        return rc
+    try:
+        r = _slot_call(api, printer, slot, action, body, False)
+    except SlotError as e:
+        return _slot_refused(e, slot)
+    output.emit(r)
+    if action == "load":
+        output.out(CLI_SLOT_LOAD_WAITING.format(slot=slot) if r.get("pending") else
+                   CLI_SLOT_LOAD_DONE.format(n=body["spool_id"], slot=slot, printer=name))
+    elif action == "unload":
+        output.out(CLI_SLOT_UNLOAD_DONE.format(slot=slot, printer=name, n=sid, place=r.get("location") or place))
+        if r.get("waiting_ended"):
+            output.out(CLI_SLOT_WAITING_ENDED.format(slot=slot))
+    else:
+        output.out(CLI_SLOT_CLEAR_DONE.format(slot=slot, printer=name))
+        if r.get("spool") and r.get("moved_back"):
+            output.out(CLI_SLOT_MOVED_BACK.format(n=r["spool"].get("id"), place=r["moved_back"]))
+        if r.get("waiting_ended"):
+            output.out(CLI_SLOT_WAITING_ENDED.format(slot=slot))
+        if r.get("printer_cleared"):
+            output.out(CLI_SLOT_PRINTER_CLEARED)
+    return 0
+
+
+def _when(at) -> str:
+    """A log time as `2026-11-17 14:05` (the Hub's ISO 8601 text, in the time it was written)."""
+    m = re.match(r"(\d{4}-\d\d-\d\d)[T ](\d\d:\d\d)", at) if isinstance(at, str) else None
+    return f"{m.group(1)} {m.group(2)}" if m else (str(at) if at else "")
+
+
+def cmd_printer_usage(api, printer: dict, days=None) -> int:
+    """`printer usage <name> [--days n]`: the filament the printer used, newest first, with the spool it came off."""
+    query = ""
+    if days is not None:
+        try:
+            if not float(days) >= 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            output.error(CLI_USAGE_DAYS_BAD.format(value=days))
+            return output.USAGE
+        query = "?" + urllib.parse.urlencode({"days": f"{float(days):g}"})
+    if api is None:
+        return spools_cli.down()
+    from .web.slots import SlotError
+    try:
+        r = api.get(f"/api/printers/{urllib.parse.quote(printer['serial'], safe='')}/usage{query}")
+    except SlotError as e:
+        return spools_cli.fail(e)
+    output.emit(r)
+    entries = r.get("entries") or []
+    if not entries:
+        output.out(CLI_USAGE_EMPTY.format(days=f"{float(days):g}") if days is not None else CLI_USAGE_EMPTY_DEFAULT)
+        return 0
+
+    def note(e: dict) -> str:
+        return ", ".join(x for x in (CLI_USAGE_UNDONE if e.get("undone") else "",
+                                     CLI_USAGE_OBSERVED if e.get("observe") else "", e.get("error") or "") if x)
+
+    def spool_cell(e: dict) -> str:
+        if e.get("spool"):
+            return f"{e['spool'].get('id')} {spools_cli.spool_name(e['spool'])}"
+        return str(e["spool_id"]) if e.get("spool_id") is not None else CLI_USAGE_NO_SPOOL
+
+    output.out_lines(output.table(
+        ["When", "Job", "Slot", "Used", "Spool", "Note"],
+        [[_when(e.get("at")), e.get("job") or "", e.get("slot") or "", spools_cli.grams(e.get("grams")),
+          spool_cell(e), note(e)] for e in entries], long=1, right=(3,)))
+    return 0
+
+
+def _snapshot(r: dict) -> list[str]:
+    """The lines of one look at a printer (`GET /api/printers/<id>`): state, job, temperatures, slots."""
+    st = r.get("status") or {}
+    if not st:
+        return [CLI_WATCH_NO_STATE]
+    name = (r.get("printer") or {}).get("name") or ""
+    state = ", ".join(x for x in (st.get("gcode_state") or st.get("state") or "unknown", st.get("stage")) if x)
+    lines = [f"{name}: {state}" if name else state]
+    if st.get("job"):
+        job = f"  {st['job']}, {st.get('percent') or 0}%"
+        if st.get("layer") is not None and st.get("total_layers"):
+            job += f", layer {st['layer']} of {st['total_layers']}"
+        if st.get("remaining_min"):
+            m = int(st["remaining_min"])
+            job += f", {m // 60} h {m % 60:02d} min left" if m >= 60 else f", {m} min left"
+        lines.append(job)
+    temps = st.get("temps") or {}
+    nozzles = temps.get("nozzle") or []
+    parts = []
+    for label, t in ([(f"nozzle {i + 1}" if len(nozzles) > 1 else "nozzle", t) for i, t in enumerate(nozzles)]
+                     + [("bed", temps.get("bed")), ("chamber", temps.get("chamber"))]):
+        if isinstance(t, dict) and isinstance(t.get("current"), (int, float)):
+            tgt = t.get("target")
+            parts.append(f"{label} {t['current']:g}" + (f"/{tgt:g}" if isinstance(tgt, (int, float)) and tgt else "") + " °C")
+    if parts:
+        lines.append("  " + ", ".join(parts))
+    rows = []
+    for u in st.get("ams") or []:
+        for s in u.get("slots") or []:
+            spool = s.get("spool") or {}
+            what = spool.get("name") or s.get("type") or ("empty" if not s.get("present", True) else "unknown")
+            if s.get("pending"):
+                what += f" (waiting: spool {s['pending'].get('spool_id')})"
+            rows.append([s.get("label", ""), what,
+                         spools_cli.grams(spool["remaining_weight"]) if spool.get("remaining_weight") is not None else ""])
+    if rows:
+        lines += [""] + output.table(["Slot", "Filament", "Left"], rows, long=1, right=(2,))
+    return lines
+
+
+def cmd_printer_watch(api, printer: dict, *, every: float = 2.0, sleep=None, ticks: int | None = None) -> int:
+    """`printer show <name> --watch`: the printer's state, asked every `every` seconds until Ctrl-C (`ticks`: at most
+    that many looks, for a test). `--json` gives one look and stops."""
+    import time
+    sleep = sleep or time.sleep
+    if api is None:
+        return spools_cli.down()
+    from .web.slots import SlotError
+    at_screen = output.terminal() and not output.plain() and not output.json_mode()
+    looks = 0
+    try:
+        while True:
+            try:
+                r = api.get(f"/api/printers/{urllib.parse.quote(printer['serial'], safe='')}")
+            except SlotError as e:
+                return spools_cli.fail(e)
+            output.emit(r)
+            if output.json_mode():
+                return 0
+            if at_screen:
+                sys.stdout.write("\x1b[H\x1b[J")
+            elif looks:
+                output.out()
+            output.out_lines(_snapshot(r) + ([""] + [CLI_WATCH_STOP] if at_screen else []))
+            looks += 1
+            if ticks is not None and looks >= ticks:
+                return 0
+            sleep(every if at_screen else max(every, output.PLAIN_EVERY))
+    except KeyboardInterrupt:
+        return 0
+
+
+def add_printer_parsers(psub) -> None:
+    """`printer load|unload|clear|usage` (the `--watch` of `printer show` is cli.py's own parser line)."""
+    PRINTER = dict(metavar="printer", help="its name, serial or id (or the start of its name)")
+    for name, text in (("load", "load a spool into a slot"), ("unload", "take the spool out of a slot"),
+                       ("clear", "make the Hub forget which spool is in a slot")):
+        p = psub.add_parser(name, help=text)
+        p.add_argument("printer", **PRINTER)
+        p.add_argument("slot", help="the slot's label, as printer show gives it")
+        if name == "load":
+            p.add_argument("spool", help="the spool's number")
+        p.add_argument("-y", "--yes", action="store_true", help="do not ask")
+    u = psub.add_parser("usage", help="the filament the printer used, newest first")
+    u.add_argument("printer", **PRINTER)
+    u.add_argument("--days", type=float, help="how many days back (default: the last week)")
+
+
+def run_printer(args, api, printer: dict) -> int:
+    """Run one of the commands above on `printer` ({"serial", "name"})."""
+    if args.printer_cmd == "usage":
+        return cmd_printer_usage(api, printer, args.days)
+    return cmd_printer_slot(api, printer, args.printer_cmd, args.slot, getattr(args, "spool", None), args.yes)
 
 
 def run(args) -> int:
