@@ -63,6 +63,7 @@ INDEX_LIMIT = 8 * 2**20
 ENTRY_LIMIT = 256 * 2**10
 LOCAL_LIMIT = 256 * 2**10
 MAX_ENTRIES = 20_000
+SAMPLE = 60                     # entries of one material read to fill the catalog form's values
 TIMEOUT = 30
 DEADLINE = 600                  # seconds for a whole update
 TOTAL_LIMIT = 256 * 2**20       # bytes downloaded by one update
@@ -130,6 +131,18 @@ def _num(v):
         return float(v)
     except (TypeError, ValueError):
         return None
+
+
+_BED = re.compile(r"\s*(\d+(?:\.\d+)?)\s*(?:[-–]\s*(\d+(?:\.\d+)?))?(?:\D.*)?$")
+
+
+def _bed_range(text) -> tuple[float, float] | None:
+    """'55-65' -> (55.0, 65.0); '60' -> (60.0, 60.0); anything else None (an entry's `bed_all_plates`)."""
+    m = _BED.match(text) if isinstance(text, str) else None
+    if not m:
+        return None
+    lo = float(m.group(1))
+    return lo, float(m.group(2)) if m.group(2) else lo
 
 
 log = logging.getLogger(__name__)
@@ -388,6 +401,58 @@ class Library:
         e = self._cache[path]
         return copy.deepcopy(e) if e is not None else None
 
+    def materials(self) -> list[str]:
+        """The materials the catalog knows (its index rows and the owner's entries), sorted, one spelling each."""
+        seen: dict[str, str] = {}
+        for r in self.index.get("entries", []):
+            if isinstance(r, dict) and isinstance(r.get("material"), str) and r["material"].strip():
+                seen.setdefault(_key(r["material"].strip()), r["material"].strip())
+        for e in self._local_list:
+            seen.setdefault(_key(e["material"].strip()), e["material"].strip())
+        return sorted(seen.values(), key=_key)
+
+    def material_values(self, material: str) -> dict:
+        """What the catalog says for a material, from up to SAMPLE of its entries: the middle of their `nozzle`
+        (low, high), `bed` (low, high), `density` and `max_volumetric_speed`; a key is absent when no entry has it
+        (nothing at all for a material the catalog does not know)."""
+        want = _key(material.strip())
+        entries = []
+        for r in self.index.get("entries", []):
+            if isinstance(r, dict) and isinstance(r.get("material"), str) and _key(r["material"].strip()) == want:
+                e = self._entry(r)
+                if e is not None:
+                    entries.append(e)
+            if len(entries) >= SAMPLE:
+                break
+        entries += [e for e in self._local_list if _key(e["material"].strip()) == want]
+
+        def mid(xs):
+            xs = sorted(xs)
+            return xs[len(xs) // 2] if xs else None
+        lows, highs, beds_lo, beds_hi, dens, mvs = [], [], [], [], [], []
+        for e in entries:
+            f = e.get("fields") if isinstance(e.get("fields"), dict) else {}
+            for key, into in (("nozzle_temperature_range_low", lows), ("nozzle_temperature_range_high", highs),
+                              ("filament_density", dens), ("filament_max_volumetric_speed", mvs)):
+                x = _num(_first(f, key))
+                if x is not None:
+                    into.append(x)
+            pr = e.get("published_ranges") if isinstance(e.get("published_ranges"), dict) else {}
+            b = _bed_range(pr.get("bed_all_plates"))
+            if b is not None:
+                beds_lo.append(b[0])
+                beds_hi.append(b[1])
+        out = {}
+        if lows and highs:
+            out["nozzle"] = (mid(lows), mid(highs))
+        if beds_lo:
+            out["bed"] = (mid(beds_lo), mid(beds_hi))
+        if dens:
+            out["density"] = mid(dens)
+        if mvs:
+            out["max_volumetric_speed"] = mid(mvs)
+        return out
+
     def lookup(self, vendor: str, product: str) -> Lookup:
         row = self._rows.find(vendor, product)
         loc = self._local.find(vendor, product)
@@ -508,6 +573,164 @@ def add_local(data: bytes) -> tuple[dict, str]:
         make_state_dir(path.parent)
         _write_atomic(path, dumps(entry).encode("utf-8"), 0o644, state_owned=True)
     return entry, line_id(entry["vendor"], entry["product"])
+
+
+# ---------- the catalog form: one function builds the entry ----------
+
+FORM_KEYS = ("brand", "name", "material", "nozzle_min", "nozzle_max", "bed_min", "bed_max", "density",
+             "max_volumetric_speed", "bambu_parent", "notes")
+TEXT_LIMIT = 100
+NOTES_LIMIT = 500
+LOCAL_ID = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*--[a-z0-9]+(?:-[a-z0-9]+)*")
+NEEDS_TEMPS = "is not in the catalog yet: give its {what}"
+_FORM_FIELD_OF = (("vendor", "brand"), ("product", "name"), ("material", "material"), ("parent", "bambu_parent"))
+
+
+class FormError(ValueError):
+    """The form's values are not an entry: `problems` is [{field, text}], one per value that is wrong or missing."""
+
+    def __init__(self, problems: list[dict]):
+        super().__init__("; ".join(f"{p['field']}: {p['text']}" for p in problems))
+        self.problems = problems
+
+
+def _text_value(form: dict, key: str, required: bool, limit: int, problems: list) -> str | None:
+    v = form.get(key)
+    if v is None or (isinstance(v, str) and not v.strip()):
+        if required:
+            problems.append({"field": key, "text": "required"})
+        return None
+    if not isinstance(v, str):
+        problems.append({"field": key, "text": "must be text"})
+        return None
+    v = v.strip()
+    if len(v) > limit:
+        problems.append({"field": key, "text": f"at most {limit} characters"})
+        return None
+    return v
+
+
+def _number_value(form: dict, key: str, lo: float, hi: float, unit: str, problems: list) -> float | None:
+    v = form.get(key)
+    if v is None or (isinstance(v, str) and not v.strip()):
+        return None
+    x = None if isinstance(v, bool) else _num(v.strip() if isinstance(v, str) else v)
+    if x is None or x != x or not lo <= x <= hi:
+        problems.append({"field": key, "text": f"must be a number from {lo:g} to {hi:g}{unit}"})
+        return None
+    return x
+
+
+def _g(x: float) -> str:
+    return f"{x:g}"
+
+
+def build_entry(form: dict, lib: "Library | None" = None) -> dict:
+    """The owner's catalog entry for the form's values (`FORM_KEYS`; brand, name and material are required), built
+    in one place for every interface. Values the form leaves out are the catalog's for that material (the middle
+    of its entries'); a material the catalog does not know needs the nozzle and bed temperatures. FormError lists
+    every problem. The entry is checked as `add_local` checks it."""
+    if not isinstance(form, dict):
+        raise FormError([{"field": "brand", "text": "the form is not an object"}])
+    lib = lib or load()
+    problems: list[dict] = []
+    brand = _text_value(form, "brand", True, TEXT_LIMIT, problems)
+    name = _text_value(form, "name", True, TEXT_LIMIT, problems)
+    material = _text_value(form, "material", True, TEXT_LIMIT, problems)
+    parent = _text_value(form, "bambu_parent", False, TEXT_LIMIT, problems)
+    notes = _text_value(form, "notes", False, NOTES_LIMIT, problems)
+    if parent and "@" in parent:
+        problems.append({"field": "bambu_parent", "text": "give the name without an '@<printer>' suffix"})
+    nmin = _number_value(form, "nozzle_min", 150, 450, " C", problems)
+    nmax = _number_value(form, "nozzle_max", 150, 450, " C", problems)
+    bmin = _number_value(form, "bed_min", 0, 150, " C", problems)
+    bmax = _number_value(form, "bed_max", 0, 150, " C", problems)
+    density = _number_value(form, "density", 0.5, 3.0, " g/cm3", problems)
+    mvs = _number_value(form, "max_volumetric_speed", 0.001, 100, " mm3/s", problems)
+    nozzle = [x for x in (nmin, nmax) if x is not None]
+    bed = [x for x in (bmin, bmax) if x is not None]
+    if len(nozzle) == 2 and nmin > nmax:
+        problems.append({"field": "nozzle_min", "text": "is above the upper nozzle temperature"})
+    if len(bed) == 2 and bmin > bmax:
+        problems.append({"field": "bed_min", "text": "is above the upper bed temperature"})
+    if problems:
+        raise FormError(problems)
+    known = {_key(m): m for m in lib.materials()}
+    material = known.get(_key(material), material)
+    fill = lib.material_values(material)
+    if not nozzle and "nozzle" not in fill:
+        problems.append({"field": "nozzle_min", "text": f"{material} " + NEEDS_TEMPS.format(what="nozzle temperature")})
+    if not bed and "bed" not in fill:
+        problems.append({"field": "bed_min", "text": f"{material} " + NEEDS_TEMPS.format(what="bed temperature")})
+    if problems:
+        raise FormError(problems)
+    lo, hi = (min(nozzle), max(nozzle)) if nozzle else fill.get("nozzle", (None, None))
+    fields: dict = {}
+    if lo is not None:
+        fields["nozzle_temperature_range_low"] = [_g(lo)]
+        fields["nozzle_temperature_range_high"] = [_g(hi)]
+    for key, own, theirs in (("filament_density", density, fill.get("density")),
+                             ("filament_max_volumetric_speed", mvs, fill.get("max_volumetric_speed"))):
+        x = own if own is not None else theirs
+        if x is not None:
+            fields[key] = [_g(round(x, 3))]
+    ranges: dict = {}
+    b = (min(bed), max(bed)) if bed else fill.get("bed")
+    if b is not None:
+        ranges["bed_all_plates"] = _g(b[0]) if b[0] == b[1] else f"{_g(b[0])}-{_g(b[1])}"
+    if notes:
+        ranges["_notes"] = notes
+    entry = {"schema_version": SCHEMA_VERSION, "vendor": brand, "product": name, "material": material}
+    if parent:
+        entry["bambu_parent"] = parent
+    entry["fields"] = fields
+    if ranges:
+        entry["published_ranges"] = ranges
+    entry["updated"] = datetime.date.today().isoformat()
+    left = validate(entry, local=True)
+    if left:
+        raise FormError([{"field": next((f for k, f in _FORM_FIELD_OF if k in t), "brand"), "text": t}
+                         for t in left])
+    return canonical(entry)
+
+
+def local_row(entry: dict, line: str | None = None) -> dict:
+    return {"id": line or line_id(entry["vendor"], entry["product"]), "brand": entry["vendor"],
+            "name": entry["product"], "material": entry["material"], "added": entry.get("updated")}
+
+
+def add_local_form(form: dict) -> dict:
+    """Build the entry of the form (`build_entry`) and store it as `add_local` does. Returns the list row
+    (`local_row`: {id, brand, name, material, added}); FormError for a form that is not an entry."""
+    entry = build_entry(form)
+    stored, line = add_local(json.dumps(entry).encode("utf-8"))
+    return local_row(stored, line)
+
+
+def local_list() -> dict:
+    """The owner's own entries, `GET /api/library/local`: {entries: [{id, brand, name, material, added}]} by brand
+    and name. `id` is what `remove_local` takes."""
+    rows = [local_row(e) for e in _load_local()]
+    rows.sort(key=lambda r: (_key(r["brand"]), _key(r["name"])))
+    return {"entries": rows}
+
+
+def remove_local(entry_id: str) -> bool:
+    """Delete the owner's entry `entry_id` (a `local_list` id); False when there is none (nothing is touched)."""
+    if not isinstance(entry_id, str) or not LOCAL_ID.fullmatch(entry_id):
+        return False
+    vslug, pslug = entry_id.split("--", 1)
+    path = _local_dir() / vslug / f"{pslug}.json"
+    with _locked():
+        e = _read_json(path)
+        if not (isinstance(e, dict) and not validate(e, local=True)):
+            return False
+        path.unlink()
+        try:
+            path.parent.rmdir()
+        except OSError:
+            pass                      # other entries of the brand stay
+    return True
 
 
 # ---------- adopting an older bundled copy ----------
