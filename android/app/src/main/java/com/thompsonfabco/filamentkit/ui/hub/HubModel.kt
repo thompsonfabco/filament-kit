@@ -74,14 +74,14 @@ internal fun hubInstant(raw: String?): Instant? {
     }
 }
 
-/** [raw] (the Hub's time: seconds since 1970 or ISO 8601 with offset) in the phone's zone and language; the text as given when it is not a time. */
+/** [raw] (the Hub's time: ISO 8601 with offset; seconds since 1970 are read too) in the phone's zone and language; the text as given when it is not a time. */
 fun hubTime(raw: String?, zone: ZoneId = ZoneId.systemDefault(), locale: Locale = Locale.getDefault()): String? {
     if (raw.isNullOrBlank()) return null
     val at = hubInstant(raw) ?: return raw
     return DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT).withLocale(locale).format(at.atZone(zone))
 }
 
-/** Like [hubTime], the day only ("Nov 17, 2026"); a plain `YYYY-MM-DD` text (an older Hub's entry day) is read as that day. */
+/** Like [hubTime], the day only ("Nov 17, 2026"); a plain `YYYY-MM-DD` text (a library entry's `added`) is read as that day. */
 fun hubDay(raw: String?, zone: ZoneId = ZoneId.systemDefault(), locale: Locale = Locale.getDefault()): String? {
     if (raw.isNullOrBlank()) return null
     val format = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale)

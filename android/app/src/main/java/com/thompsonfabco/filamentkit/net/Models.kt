@@ -951,8 +951,8 @@ data class HubAnswer(
 )
 
 /**
- * One of the owner's own Filament Catalog entries (`GET /api/library/local`). [added] is the Hub's time as it came: whole
- * seconds since 1970 as text (a Hub since `ev1a-kit-side`), or ISO text from an older one; `hubTime`/`hubDay` read both.
+ * One of the owner's own Filament Catalog entries (`GET /api/library/local`). [added] is a plain date `YYYY-MM-DD` as the
+ * Hub gives it (R83 section 10); `hubDay` reads that, ISO text and whole seconds since 1970.
  */
 data class LocalEntry(val id: String, val brand: String, val name: String, val material: String, val added: String?)
 
