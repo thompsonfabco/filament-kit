@@ -27,10 +27,10 @@ def spool(i, grams=80, **over):
 
 
 def storage_state(state="ok", percent=42.0):
-    return {"filesystems": [{"path_label": "Hub state", "total": 100_000_000_000, "free": int(100_000_000_000 * (100 - percent) / 100),
+    return {"filesystems": [{"path_label": "state", "title": "The Hub's disk", "total": 100_000_000_000, "free": int(100_000_000_000 * (100 - percent) / 100),
                              "percent_used": percent, "state": state}],
             "items": [{"key": "backups", "title": "Backups", "bytes": 4_200_000_000}, {"key": "photos", "title": "Photos", "bytes": 310_000_000},
-                      {"key": "label_reader", "title": "Label Reader", "bytes": 1_900_000_000}, {"key": "events", "title": "Events and logs", "bytes": 52_000_000}]}
+                      {"key": "reader", "title": "Label Reader", "bytes": 1_900_000_000}, {"key": "events", "title": "Events and logs", "bytes": 52_000_000}]}
 
 
 def fresh():

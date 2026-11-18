@@ -177,11 +177,11 @@ await until(() => $("dialog[open] .stuse__item"), "the parts after Try again");
 out.retry = $$("dialog[open] .stuse__item").length;
 """)
     assert page["skeleton"] == "Loading Storage use…" and page["hash"] == "#overview/storage-use" and page["title"] == "Storage use"
-    assert page["bar"] == {"label": "Hub state", "now": "91", "line": "9.0 GB free of 100 GB (91 % used)"}
+    assert page["bar"] == {"label": "The Hub's disk", "now": "91", "line": "9.0 GB free of 100 GB (91 % used)"}
     keep = page["keep"]
     assert page["items"] == [
         {"title": "Backups", "size": "4.2 GB", "where": "Open Backups", "link": "#settings/backups"},
-        {"title": "Photos", "size": "310 MB", "where": f"Recently added keeps the last {keep}.", "link": None},
+        {"title": "Photos", "size": "310 MB", "where": f"Recently added keeps the last {keep}", "link": None},
         {"title": "Label Reader", "size": "1.9 GB", "where": "Settings > Label Reader", "link": "#settings/label-reader"},
         {"title": "Events and logs", "size": "52 MB", "where": "", "link": None}]
     assert page["after"] == "#overview" and page["backups"] == {"hash": "#settings/backups", "open": False}
