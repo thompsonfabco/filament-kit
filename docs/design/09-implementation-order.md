@@ -10,7 +10,8 @@ Contents: 1 Rules of the road · 2 How a step is written · 3 Stage 0: groundwor
 the Hub page · 5 Stage 2: Hub page sections · 6 Stage 3: the web app · 7 Stage 4: the app · 8 Stage 5: the command
 line · 9 Stage 6: Themes · 10 Stage 7: wording · 11 Hub API additions · 12 Dependencies and the first ten steps ·
 13 Open points · 14 Coverage · 15 Stage 8: Share corrections · 16 Stage 9: Storage locations · 17 Stage 10: Events
-and alerts · 18 Stage 11: Address and first run · 19 Stage 12: Every function in every version
+and alerts · 18 Stage 11: Address and first run · 19 Stage 12: Every function in every version · 20 Stage 13:
+History, data and safety, and Home Assistant
 
 ---
 
@@ -1269,7 +1270,7 @@ all four · S · Depends on: S5.9, S7.4 to S7.7 · Beside: none
 
 Every item of the merged list of what the design needs from the Hub, with the step that adds it and the first step
 that uses it. Items marked "feature idea" belong to an idea of `10-feature-ideas.md` that this order does not build;
-they come with that idea, except the ideas Stage 12 builds (B1 to B5 and B8).
+they come with that idea, except the ideas Stages 12 and 13 build (B1 to B5 and B8; C2, C5, C9, C12, D3 and D6).
 
 | # | Need | Added in | First used by |
 |---|---|---|---|
@@ -1313,23 +1314,23 @@ they come with that idea, except the ideas Stage 12 builds (B1 to B5 and B8).
 | N38 | Add a Filament Catalog entry from the web app | Feature idea B8; `POST /api/library/local/form`, the list and remove (EV1) | EV4d, EV6a, EV7b |
 | N39 | `/LICENSE` and `/THIRD-PARTY.md` served as text | Feature idea B9 | none in this order |
 | N40 | Running-low thresholds and list | Feature idea C1 | none in this order |
-| N41 | Undo tokens for spool changes and slot loads | Feature idea C2 | none in this order |
+| N41 | Undo for spool changes and slot loads: the rule, `POST /api/events/{id}/undo` | HD1 | HD7d, HD8, HD9 |
 | N42 | Where the Access Code is on each printer model | Feature idea C3 | none in this order |
 | N43 | Colour name and family per filament, searchable | Feature idea C4 | none in this order |
-| N44 | CSV downloads | Feature idea C5 | none in this order |
+| N44 | CSV export and import: `GET /api/export/{set}.csv`, `POST /api/import/spools`, `POST /api/import/locations` | HD5 | HD6, HD7d, HD8 |
 | N45 | Spool label SVG with QR | Feature idea C6 | none in this order |
 | N46 | Printer events with kind and reason; a stream for the app | Feature idea C7 | none in this order |
 | N47 | Spools grouped by location with dry-box humidity | Feature idea C8 | none in this order |
-| N48 | Monthly usage totals, kept 13 months | Feature idea C9 | none in this order |
+| N48 | Monthly usage totals, kept 13 months: `GET /api/analytics`, `by=month` | HD3 | HD7b, HD8, HD9 |
 | N49 | Demo data store, simulated printers, `demo` flag | Feature idea C11 | none in this order |
-| N50 | Activity record with actor | Feature idea C12 | none in this order |
+| N50 | Activity record with actor: the kinds of Stage 10's catalogue, `activity=1`, `subject`, `actor` | HD1 | HD6, HD7a, HD8 |
 | N51 | Read a project file and match spools | Feature idea C13 | none in this order |
 | N52 | Disk use per category | Feature idea D1 | none in this order |
 | N53 | Update window and "no printer printing" check | Feature idea D2 | none in this order |
-| N54 | Hub report job with redaction | Feature idea D3 | none in this order |
+| N54 | Hub report job with redaction | HD6 | HD7a |
 | N55 | Second backup folder and copy state | Feature idea D4 | none in this order |
 | N56 | Backup check job | Feature idea D5 | none in this order |
-| N57 | Scheduled status checks kept 30 days | Feature idea D6 | none in this order |
+| N57 | Health history from the event store: `GET /api/health` | HD1 | HD6, HD7e, HD8 |
 
 ---
 
@@ -1391,6 +1392,12 @@ Stage 12  EV0 to EV9 from the start, against the contracts of the stage      EV7
           AF6 > EV5 (setup_page.py, setup_overview.js)      EA6 > EV5 (setup.js)      AF6 > EV4d (setup_settings.js)
           files held by earlier steps: AF2 > EV3      AF3 > EV4b      EA7 + EA4 > EV6a, EV6b      EA8 > EV7a      AF8 > EV8
           (every step but EV7b and EV10 can start at once; the other steps send EV2 their string keys before it files)
+
+Stage 13  HD0 to HD10 from the start, against the contracts of the stage      HD1 to HD10 > HD11
+          registry files: EV1 > HD1 (api.py)      EV2 > HD2 (cli.py, status.py, the string catalogue)
+          EV5 > HD7e (setup_page.py, setup.js, setup_overview.js)      EA5 > HD7e (components.js, components.css)
+          files held by earlier steps: EV6a + EV6b > HD8      EV7a + EV7b > HD9
+          (every step but HD8, HD9 and HD11 can start at once; HD2 files the string keys of the other steps)
 ```
 
 Stages 3 and 4 do not wait for Stages 1 and 2: once Stage 0 is done they run beside them, each needing only the Hub
@@ -1469,12 +1476,12 @@ Every screen-level section of 03, 04 and 05 and every command group of 06, with 
 | 2.4 Standard states; 2.5 A section whose feature is switched off | S1.10 |
 | 2.6 Dialogs used everywhere | S1.6 |
 | 2.7 Refreshing data | S1.7, S2.3 |
-| 3.1 Top bar; 3.2 Navigation; 3.8 Page frame | S1.3; the Spools entry and the page menu EV5 |
+| 3.1 Top bar; 3.2 Navigation; 3.8 Page frame | S1.3; the Spools entry and the page menu EV5; the Analytics entry HD7e |
 | 3.3 Lock chip | S1.5 |
 | 3.4 Appearance control | S1.2 |
 | 3.5 Job indicator and job strip | S1.8, S1.9 |
 | 3.6 The Hub is restarting; 3.7 The Hub is not answering | S1.9 |
-| 4 Overview | S2.1, S2.2; the Devices tile and Checks row EV2, EV5 |
+| 4 Overview | S2.1, S2.2; the Devices tile and Checks row EV2, EV5; the history strips and the Filament line HD7e |
 | 5 Printers (5.1 to 5.5, 5.7 to 5.9) | S2.3, S2.4 (dialogs S1.6) |
 | 5.10 The live view | EV4b |
 | 5.6 Add a printer; 5.4 Find Klipper printers and Klipper add-on | S2.5 |
@@ -1485,10 +1492,11 @@ Every screen-level section of 03, 04 and 05 and every command group of 06, with 
 | 10 Settings | S2.17, S2.18, S2.19; 10.2 Theme S6.2, Theme for new devices S6.1, S6.10; 10.9 the form and list EV4d |
 | 11 Flash a device | S2.15, S2.16 |
 | 12 Updates | S2.13 |
-| 13 Logs | S2.14 |
+| 13 Logs | S2.14; 13.4 Activity and 13.5 the Hub report HD6, HD7a |
 | 14 Where today's controls went | the steps above, section by section |
 | 15 Needs from the Hub | section 11 |
-| 16 Spools | EV4a, EV5 |
+| 16 Spools | EV4a, EV5; 2.9 Undo, 2.10 CSV, the last ten events HD7d |
+| 17 Analytics | HD7b, HD7e |
 
 ### 14.2 `04-web-app.md`
 
@@ -1498,12 +1506,13 @@ Every screen-level section of 03, 04 and 05 and every command group of 06, with 
 | 2 Navigation | S3.3 |
 | 3.1 to 3.6 Patterns used on every screen | S3.2, S3.6 |
 | 3.7 Sheets and dialogs | S3.5 |
+| 3.9 Undo the last action | HD8 |
 | 4 Add spools | S3.7, S3.8 |
-| 5 Spools | S3.9, S3.10; 5.6 EV6a |
-| 6 Printers | S3.11; 6.5 Clear slot and 6.9 the guided add EV6b |
+| 5 Spools | S3.9, S3.10; 5.6 EV6a; the last events and the download HD8 |
+| 6 Printers | S3.11; 6.5 Clear slot and 6.9 the guided add EV6b; Undo, By month and the download HD8 |
 | 7 Recently added | S3.12 |
 | 8 Slicer presets | S3.13; your own entries EV6a |
-| 9 More and Settings | S3.3; theme S6.2; 9.1 and 9.3 EV6a |
+| 9 More and Settings | S3.3; theme S6.2; 9.1 and 9.3 EV6a; the history table and the report line in 9.3 HD8 |
 | 10 Home screen, offline and "Cannot reach the Hub" | S3.6, S3.14, S3.15, S3.17 |
 | 11 The refusal page and the sign-in page | S3.16 |
 | 12 Dialogs that replace the browser's own | S3.5 |
@@ -1521,12 +1530,12 @@ Every screen-level section of 03, 04 and 05 and every command group of 06, with 
 | 4 Pairing | S4.5 |
 | 5 Home | S4.6; the Getting started line EV7a |
 | 6 Add spools | S4.7 |
-| 7 Spools and the spool screen | S3.9, S4.8; the Spools menu EV7b |
+| 7 Spools and the spool screen | S3.9, S4.8; the Spools menu EV7b; 7.9 Undo and the last events HD9 |
 | 8 Add a line to the Filament Catalog | S4.9; the form and list EV7b |
-| 9 Printers | S4.10, S4.11; 9.5 Clear slot and waiting, 9.12 EV7b |
-| 10 Recently added | S4.12 |
+| 9 Printers | S4.10, S4.11; 9.5 Clear slot and waiting, 9.12 EV7b; 9.10 By month and the download HD9 |
+| 10 Recently added | S4.12; the download HD9 |
 | 11 Slicer presets | S4.13, S4.14 |
-| 12 Settings | S4.15; 12.2 theme S6.3; 12.3 and 12.8 EV7a |
+| 12 Settings | S4.15; 12.2 theme S6.3; 12.3 and 12.8 EV7a; the history table and the report line in 12.8 HD9 |
 | 13 App updates | S4.15 |
 | 14 Accessibility | S4.4 (AUT-8), and the check of every screen step |
 | 15 Strings and wording | S0.8, S4.3 |
@@ -1544,19 +1553,20 @@ Every screen-level section of 03, 04 and 05 and every command group of 06, with 
 | 6 Output conventions | S5.1, S5.3 |
 | 7 Confirmations | S5.2 |
 | 8 Interactive screens | S5.4 |
-| 9.1 `status` | S2.1, S5.1 |
+| 9.1 `status` | S2.1, S5.1; `--history` HD2 |
 | 9.2 `printer` and `klipper` | S5.5; `load`, `unload`, `clear`, `usage`, `--watch` EV2 |
 | 9.3 `recent` | S5.6 |
-| 9.4 `devices` and `pair` | S2.8, S5.6; `show`, `set` and the new columns EV2 |
+| 9.4 `devices` and `pair` | S2.8, S5.6; `show`, `set` and the new columns EV2; `pair --home-assistant` HD2 |
 | 9.5 `presets` | S5.7 |
 | 9.6 `features` | S2.11, S5.7 |
 | 9.7 `weigh-station` and `tag-reader` | S5.7 |
 | 9.8 `config show`, `config set`, `config theme` | S5.8; `config theme` S6.10 |
 | 9.9 `label-reader` | S2.18, S5.8 |
-| 9.10 `backup` and `restore` | S5.2, S5.8 |
+| 9.10 `backup` and `restore` | S5.2, S5.8; `backup password`, `restore --password-file` HD2, HD4 |
 | 9.11 `catalog` | S5.8; `add --ask`, `local` EV2 |
 | 9.12 `web`, `remote`, `setup-code`, `certificate`, `spoolman` | S5.8 |
 | 9.21 `spools` and `spool` | EV2 |
+| 9.22 `activity`; 9.23 `undo`; 9.24 `usage`; 9.25 `export` and `import`; 9.26 `report` | HD2 |
 | 9.13 `update` and `uninstall` | S5.2, S5.8 |
 | 9.14 `logs` | S5.8 |
 | 10 What the command line cannot do (`add`, `spool`, `printer live`) | S5.5, S5.8 |
@@ -1567,7 +1577,9 @@ Every screen-level section of 03, 04 and 05 and every command group of 06, with 
 ### 14.5 What this order does not build
 
 The parity gaps that the parts keep on purpose stay open after the last step: Add spools on the Hub page (feature idea
-B7); licences outside the app (B9). Stage 12 builds the live printer view and the Spools section on the Hub page (B1,
+B7); licences outside the app (B9). Stage 13 builds undo, the activity log, the health history, analytics, CSV, the
+encrypted backups, the Hub report (C2, C12, D6, C9, C5, D3 and the backup password) and the Home Assistant
+integration. Stage 12 builds the live printer view and the Spools section on the Hub page (B1,
 B2), the Hub summary in the web app and the app (B4), Find Klipper printers in the web app (B3), the catalog form in
 every interface (B8) and the spool and slot commands (B5). The other ideas
 of `10-feature-ideas.md` are not scheduled here either.
@@ -1886,10 +1898,10 @@ An event has:
 | `kind` | a dotted name from the catalogue below, e.g. `print.paused` |
 | `severity` | `info`, `ok`, `warn` or `bad` (the banner kinds) |
 | `subject` | what it is about: type and id, plus the name at that time: `printer`, `spool`, `device`, `location`, `hub` |
-| `actor` | who caused it: `hub` (the Hub noticed it), `device` with the paired device's id and name (the phone web app's pairing is a device), `page` (Hub page), `cli`, `connector` |
+| `actor` | who caused it, as `{type, id?, name?}`: `hub` (the Hub noticed it, or the installer or an automatic job did it), `device` with the paired device's id and name (the phone web app's pairing and a Weigh Station are devices), `page` (Hub page), `cli`, `connector`. The Hub page gives the id of the trusted computer it runs on (empty when the computer is not trusted) and that computer's name (or "Hub page"); the command line gives the name "command line" |
 | `data` | named values of the kind (job name, grams, slot, spool id, material, before and after values; `run` and `batch` below) |
 | `condition` | only for lasting states: a key such as `print-paused:<printer id>` and `raised` or `cleared` |
-| `undo` | reserved for the undo of the activity log: empty now. User-action events carry the before and after values in `data`, so undo can be built later without opening the emitting code again |
+| `undo` | served with every event, not stored: `{possible, until?, why_not?}`, with `undone` and `undo_of?` beside it (Stage 13). User-action events carry the complete before and after values in `data` (below), which is what an undo puts back |
 
 - **Texts are not stored.** An event stores its kind and values; each interface builds the sentence from the catalogue
   of texts (so a language pack changes old events too). The API also returns the built title and sentence in the Hub's
@@ -1917,7 +1929,9 @@ An event has:
   with the rest of the state, as the restore dialog says.
 - **Reading.** `GET api/events` takes `since` (an id) or `since_at` (a time, UTC) and `alert=1` (only events of alert
   types that are on). The answer gains `oldest` (the lowest id still kept), `gap` (true when `since` is lower than
-  `oldest` minus one: events between were deleted by age) and `test` (the test alert, below).
+  `oldest` minus one: events between were deleted by age) and `test` (the test alert, below). Stage 13 adds the query
+  values `activity=1` (only the kinds of the Activity list), `subject=<type>:<id>` and `actor=<type>` or
+  `actor=<type>:<id>`.
 - **Two values that tie events together.** Every `print.*` event of one print run and its `usage.recorded` carry the
   same `run`, made by the Hub when it first writes an event for that run (`r-<id of that first event>`); Klipper events
   also carry `printer_job` (Moonraker's job id) when known. Bambu gives no usable run id of its own (its task id is "0"
@@ -1944,8 +1958,8 @@ An event has:
 
 ### The catalogue of kinds
 
-"Written now" means this stage's code emits it. "Later" means the name is reserved now and the feature that owns the
-action emits it.
+"Now" means this stage's code emits it. "Stage 13" means the name is reserved here and Stage 13 emits it (its
+values are in the table, so the kinds never change).
 
 | Kind | When | Severity | Condition | Values | Written |
 |---|---|---|---|---|---|
@@ -1965,9 +1979,20 @@ action emits it.
 | `storage.low` | the Hub's disk passes the warn or the bad limit (one event per limit passed) | warn / bad | raises `storage-low` | free, total, percent used, direction (`down` when the disk fell back from a worse limit) | now |
 | `storage.ok` | the disk is under the warn limit again | ok | clears `storage-low` | free, total | now |
 | `device.down` / `device.up` | a Weigh Station stops or starts answering (Tag Readers are not covered, below) | warn / ok | `device-down:<device>` | - | now |
-| `check.failed` / `check.ok` | a row of the Hub's checks changes between OK and Needs a look | warn / ok | `check:<row key>` | row text | now (written; shown later as the health history) |
+| `check.failed` / `check.ok` | a row of the Hub's checks changes between OK and Needs a look | warn / ok | `check:<row key>` | row text | now (shown as the health history, Stage 13) |
 | `condition.cleared` | a raised condition is no longer true (see Conditions and alerts) | info | clears the key it names | key, reason (`reconciled`, `subject_removed`, `feature_off`) | now |
-| `hub.started`, `hub.updated`, `backup.finished`, `backup.failed`, `device.paired`, `device.removed`, `settings.changed` | - | - | - | - | later (the activity log) |
+| `hub.started` | the Hub starts | info | - | version | Stage 13 |
+| `hub.updated` | after an update or a rollback | info | - | from, to, rollback | Stage 13 |
+| `hub.restored` | after a restore | info | - | backup, made_at | Stage 13 |
+| `backup.finished` | a backup is made, by either backup maker | ok | - | file, bytes, encrypted, nightly | Stage 13 |
+| `backup.failed` | a backup fails, in either backup maker | warn | - | reason, nightly | Stage 13 |
+| `device.paired` / `device.removed` | a pairing is made or revoked | info | - | kind | Stage 13 |
+| `settings.changed` | every settings save and feature switch, from the page, the command line or the installer | info | - | group, names (the settings' names), feature, on | Stage 13 |
+| `printer.added`, `printer.changed`, `printer.removed` | the registry's add, edit and remove | info | - | family, names (what changed) | Stage 13 |
+| `catalog.changed` | an own entry is added or removed, the catalog is updated or rolled back | info | - | what (`entry_added`, `entry_removed`, `updated`, `rolled_back`), entry, version | Stage 13 |
+| `slot.cleared` | Clear slot | info | - | spool, slot, before_location, after_location, batch | Stage 13 |
+| `usage.undone` | a filament-used entry is undone | info | - | printer, job, spool, grams, entry | Stage 13 |
+| `record.changed` | a Recently added record is revised, or its revision is undone | info | - | record, what (`revised`, `undone`) | Stage 13 |
 
 - **How runout is told from another pause.** Bambu: the printer's stage "Paused: filament runout". Klipper: a filament
   sensor or filament-system object reporting no filament at the moment of the pause (the assumption of EA2). Where
@@ -1980,8 +2005,18 @@ action emits it.
   cancelled."
 - **Which devices are watched.** `device.down` and `device.up` are written only for a Weigh Station, and only when the
   Hub can ask it: its address is set on the Hub and exactly one station is paired (the known limit of 0.6.2). Tag
-  Readers are not covered: the Hub records nothing about when a reader last called, so the kinds stay reserved for
-  them.
+  Readers are not covered. The Hub keeps when a reader last called (the web unit hands it over), but a reader calls
+  only when it is used, so its silence means nothing and no `device.down` is written for it; the kinds stay reserved
+  for them.
+- **Data values are never secrets.** A changed key or code is told by its name and the word that it changed, never by its
+  value.
+- **Every action leaves an event, with who did it.** Stage 13 adds the kinds above and gives each user action the actor
+  of its place: the Hub page, the command line, the installer and automatic jobs (`hub`), a paired device as before,
+  the Weigh Station as its device, the Claude connector. Before Stage 13 the Hub page and the command line were
+  recorded as the Hub.
+- **Before-values are complete** on the spool kinds, so a change can be put back: `before_slot` is filled, `before_grams`
+  and `after_grams` are always filled on a weight event, a tag link adds `before_tag` and `after_tag`, and marking empty
+  adds `before_archived`.
 - First sight of a printer after the Hub starts writes no event (as today's push logic), and slot-mapping jobs write
   none.
 
@@ -2211,27 +2246,27 @@ and how the generated string copies are produced.
 
 **Later work, so that no file is opened twice for the same reason.** The Hub page's Spools section and "the Hub at a
 glance" in the apps read `GET api/spools/low`, `GET api/events` and `GET api/storage-use` as they are; the activity
-log, the health history and the analytics page read the store and add the "later" kinds in the files that own those
-actions (`backup.py`, `apply.py`, `pairing.py`), none of which this stage opens; undo adds one new file that reads the
-before values; running low inside the slicer reads `GET api/spools/low`; the Home Assistant integration is a separate
+log, the health history and the analytics page read the store and add the kinds marked "Stage 13" in the files that own
+those actions (`backup.py`, `apply.py`, `pairing.py`), none of which this stage opens; undo adds one new file that reads
+the before values; running low inside the slicer reads `GET api/spools/low`; the Home Assistant integration is a separate
 integration that reads `GET api/events` with a paired read-only device and needs nothing changed on the Hub but that
 role.
 
-**Out of scope:** the activity log, undo, health history and analytics (the store is ready for them); the Hub page's
+**Out of scope:** the activity log, undo, health history and analytics (Stage 13 builds them on this store); the Hub page's
 Spools section and "the Hub at a glance" in the apps; running low inside the slicer; the Home Assistant integration
-itself; e-mail, chat or other outside notification services; quiet hours; alerts per printer or per filament line.
+itself (Stage 13); e-mail, chat or other outside notification services; quiet hours; alerts per printer or per filament line.
 
 ---
 
 ## 18. Stage 11: Address and first run
 
-A new Hub answers on port 443, so its address has no port; the Weigh Station, the printer-side tag service and a Label
-Reader on another machine serve HTTPS only; the installer's first question lets the Hub page take over the rest of the
-setup (Guided Setup), and that page leads the owner through what is left (Getting started, the guided printer add, the
-Label Reader lead-in). The parts that specify it are 03 4.2, 5.6, 7.3, 9.4, 10.5, 10.7, 10.11 and 15, 06 3.1, 3.2, 9.1,
-9.2, 9.6, 9.19 and 9.20, 02 6.5, and the typed address of 04 1 and 05 4.5. The contract the interface steps build against
-is the rows "`GET start`", "The Hub's port", the three values of the station's hello call, the found Bambu Lab printers
-and the remote reader's HTTPS in 03 section 15.
+A new Hub answers on port 443, so its address has no port; the Weigh Station and the printer-side tag service serve
+HTTPS only, and so does a Label Reader on another machine once its own software can; the installer's first question lets
+the Hub page take over the rest of the setup (Guided Setup), and that page leads the owner through what is left (Getting
+started, the guided printer add, the Label Reader lead-in). The parts that specify it are 03 4.2, 5.6, 7.3, 9.4, 10.5,
+10.7, 10.11 and 15, 06 3.1, 3.2, 9.1, 9.2, 9.6, 9.19 and 9.20, 02 6.5, and the typed address of 04 1 and 05 4.5. The
+contract the interface steps build against is the rows "`GET start`", "The Hub's port", the three values of the
+station's hello call, the found Bambu Lab printers and the remote reader's HTTPS in 03 section 15.
 
 ### The rules of the stage
 
@@ -2249,11 +2284,18 @@ and the remote reader's HTTPS in 03 section 15.
 - **HTTPS on the satellites.** A listener of ours that another machine can reach serves HTTPS only; a listener on
   `127.0.0.1` stays as it is. The Weigh Station makes its own certificate with the Hub's existing `pairing.make_cert`.
   At every start it tells the Hub `fp`, `port` and `version` on `GET /api/station/hello`, over the connection it already
-  has; the Hub then calls it over HTTPS at that port, accepts only that certificate and does not fall back to plain HTTP.
-  A station that has not been updated sends no fingerprint and is called over plain HTTP as before; the Checks show it.
-  The printer-side tag service is pinned the first time the Hub reads its address (trust on first use). Spoolman is not
-  ours: its page stays `http://<host>:7912`. Nothing listens on port 80, so a bare name typed without `https://` shows
-  nothing.
+  has; the Hub then calls it over HTTPS at that port, accepts only that certificate and does not fall back to plain
+  HTTP. A station that has not been updated sends no fingerprint and is called over plain HTTP as before; the Checks
+  show it. The printer-side tag service is pinned the first time the Hub reads its address (trust on first use). A Label
+  Reader on another machine is the exception until its own software can serve HTTPS: an `http://` address of it is
+  accepted and used as today, an `https://` address is pinned at Test, and the Checks show one Note row, "The Label
+  Reader at <address> is not using HTTPS. A later Label Reader version adds it.", with no Fix line. From the release
+  that turns the rule on (only together with a reader version that serves HTTPS; it is not a setting), saving an
+  `http://` address that is not 127.0.0.1 is refused with "A Label Reader on another machine needs an https address."; a
+  stored one keeps working and its row becomes Needs a look: "The Label Reader at <address> is not using HTTPS." with
+  the Fix "Update the Label Reader on that machine, then change its address to https:// in Settings > Label Reader."
+  Spoolman is not ours: its page stays `http://<host>:7912`. Nothing listens on port 80, so a bare name typed without
+  `https://` shows nothing.
 - **Existing satellites keep their ports** (5003 for the Weigh Station, 5002 for the printer-side tag service) and switch
   to HTTPS on update; only new installs take 443. "The printer station" in the code is that tag service, because the
   Printer Station / Tag Reader device itself listens on nothing.
@@ -2324,10 +2366,11 @@ Server builder · Depends on: AF1's `hubport` (free-port test, drop-in)
   `station/server_api.py`, `station/pair_request.py`, `server/filament_kit/station_client.py`,
   `server/filament_kit/pairing.py` (the three values kept with a station's pairing), `server/filament_kit/tagsources.py`,
   `server/filament_kit/local_reader.py`, `printer-pack/lasttag/*`, new tests.
-- **Change:** the station's certificate and HTTPS listener, the three values on its hello call, the Hub's pinned calls to a
-  station, the tag service's HTTPS and its pin on first use, the remote reader's https rule and its pin at Test (03 10.5).
-  The reader's own side (a certificate at the remote install, HTTPS on port 7915) is a request to the reader's repository;
-  until it ships, the Hub accepts the reader's `http://` address as before and shows the Checks row.
+- **Change:** the station's certificate and HTTPS listener, the three values on its hello call, the Hub's pinned calls
+  to a station, the tag service's HTTPS and its pin on first use, the pin of a remote reader's `https://` address at
+  Test and its Checks rows (03 10.5). The reader's own side (a certificate at the remote install, HTTPS on port 7915) is
+  a request to the reader's repository; until it ships, the Hub accepts the reader's `http://` address as before and
+  shows the Note row. The refusal of such an address comes with the release that has a reader version that serves HTTPS.
 - **Keep:** the allow-list of caller addresses; `http://127.0.0.1:5003` for a station on the Hub's own machine.
 - **Other interfaces:** AF5 words the rows this step makes possible.
 - **Check:** prove first (items 5 and 6 of the list below). Then the tests of each listener and of the pin.
@@ -2435,7 +2478,8 @@ Each has a fallback.
    Fallback: the tag service stays on plain HTTP on that host and the Checks row says so; the owner is told in the release
    notes.
 6. **AF2: the remote Label Reader's HTTPS** needs its own repository's change first. Until then the Hub accepts its
-   `http://` address as today and shows the row "The Label Reader at <address> is not using HTTPS."
+   `http://` address as today and shows the Note "The Label Reader at <address> is not using HTTPS. A later Label Reader
+   version adds it."
 
 **Out of scope:** a listener on port 80; Spoolman over HTTPS; a real (publicly trusted) certificate for the home address;
 the satellites' own web pages, their version prompt and a regular check-in (only the stored `version` is added here); the
@@ -2448,13 +2492,13 @@ anything on the Tag Reader firmware.
 
 Every function that one interface has, the others have where they can: the Hub page gets the Spools section and the live
 printer view, every interface gets Clear slot and the waiting state, the Filament Catalog has one form everywhere, the
-apps show the Hub at a glance, the web app and the app add a printer in the guided order, Spoolman and the Hub page
-link to each other, Devices shows kinds, versions and out-of-date devices with the Weigh Station's own page, and the
-command line gets the spool, slot, device and catalog commands. The parts that specify it are 01 section 8, 02 2.6 and
-7.3 to 7.5, 03 3.2, 3.8, 4.2, 5, 7, 10.9 to 10.11, 15 and 16, 04 2, 5, 6, 8, 9, 12 and 14, 05 2, 5, 7 to 9, 12 and 16,
-and 06 3, 6.8, 7, 8.3, 9.2, 9.4, 9.11, 9.21 and 13. In this stage a "kit route" is a route under `/api/` for paired
-devices (`api.py`), a "page route" is a route of the Hub page under `/setup/api/`, and a "twin" is the web app's route
-under `/intake/api/` that passes a kit route on.
+apps show the Hub at a glance, the web app and the app add a printer in the guided order, Spoolman and the Hub page link
+to each other, Devices shows kinds, versions and out-of-date devices with the Weigh Station's detail and a link to its
+own page, and the command line gets the spool, slot, device and catalog commands. The parts that specify it are 01
+section 8, 02 2.6 and 7.3 to 7.5, 03 3.2, 3.8, 4.2, 5, 7, 10.9 to 10.11, 15 and 16, 04 2, 5, 6, 8, 9, 12 and 14, 05 2,
+5, 7 to 9, 12 and 16, and 06 3, 6.8, 7, 8.3, 9.2, 9.4, 9.11, 9.21 and 13. In this stage a "kit route" is a route under
+`/api/` for paired devices (`api.py`), a "page route" is a route of the Hub page under `/setup/api/`, and a "twin" is
+the web app's route under `/intake/api/` that passes a kit route on.
 
 ### The rules of the stage
 
@@ -2463,6 +2507,16 @@ under `/intake/api/` that passes a kit route on.
 - **The page has its own routes.** The Hub page's live view, Spools section, catalog form and Devices call the same
   printer, inventory and catalog code as the kit routes, in the Hub's process. They do not call the web app's routes:
   the page's lock must apply, and the web app may be switched off.
+- **No page of a device is passed through the Hub.** The Hub page draws a device's detail itself, in Devices at
+  `#devices/<id>`, from `GET device/{id}` and `POST device/{id}/settings`; nothing a device sends is served by the Hub
+  as HTML, script or style. What the Hub takes from a station is checked data: JSON only (`application/json`), at most
+  256 KiB, a 5 second limit, any redirect an error, only to the stored host and port of that pairing, over the pinned
+  certificate when the station has one; every text from a station is shown as text, never as markup; a setting's `id`
+  must match `[a-z0-9_.-]{1,40}`, its `kind` is one of `switch`, `choice`, `number`, `text`, a `label` is at most 80
+  characters, at most 60 settings, and anything else is dropped with the line "Some of this station's settings could not
+  be shown."; the photo is taken only as `image/jpeg`, at most 4 MiB. The detail's link **Open this station's page**
+  opens the station's own address in a new tab, never fetched, framed or proxied by the Hub, with a one-time ticket
+  after `#` that the station's page trades for a session cookie of its own (03 7.10).
 - **Clear slot is one rule in four interfaces.** The Hub forgets which spool is in the slot. In this order: a spool
   waiting for the slot is no longer waiting; a spool recorded in the slot goes back where it was before it was loaded
   (exactly as Unload moves it); on a Klipper printer the slot's setting on the printer is cleared when the printer is
@@ -2523,10 +2577,14 @@ entry. The web unit sends a reader's values when its build changes and otherwise
 the Hub does not answer it keeps only the newest value per reader in memory.
 
 **Page routes.** Under `/setup/api/`: the rows of 03 section 15 for the Spools section, the live view, the catalog form,
-Devices and the station's page passed through. Their answers are the kit routes' answers; the lock of each is in 03
-5.10, 7.10, 10.9 and 16. The live view's camera has one more: `POST printers/{id}/camera/ticket` with the setup code,
-answering `{ticket, expires_in: 60}`; on a computer that is not trusted the stream's address takes `?ticket=<ticket>`,
-and a ticket starts one stream within 60 seconds, for that printer only; the stream runs until it is closed.
+Devices. Their answers are the kit routes' answers; the lock of each is in 03 5.10, 7.10, 10.9 and 16. The routes of a
+device's detail: `GET device/{id}` (open) answers `{device, status?, settings?, own_page: <address as text>?, photo:
+bool}`; `GET device/{id}/photo` (open) answers `image/jpeg`; `POST device/{id}/settings` needs the page unlocked; `POST
+device/{id}/open` needs the page unlocked, makes the Hub ask the station for a one-time ticket and answers `{address:
+"<own_page>#ticket=<ticket>"}`. The live view's camera has one more: `POST printers/{id}/camera/ticket` with the setup
+code, answering `{ticket, expires_in: 60}`; on a computer that is not trusted the stream's address takes
+`?ticket=<ticket>`, and a ticket starts one stream within 60 seconds, for that printer only; the stream runs until it is
+closed.
 
 **Twins** (under `/intake/api/`; EV6a and EV6b): `GET hub` (the kit object), `GET library/local`, `POST library/local`
 (the form), `POST library/local/{id}/remove`, `POST printers/scan` and `POST printers/{id}/slots/{label}/clear`. Each
@@ -2536,10 +2594,15 @@ passes the kit route on unchanged, with the guards the neighbouring twins have.
 
 | Route | Answer |
 |---|---|
-| `GET /` | its page (HTML; its own script and stylesheet under `/static/`) |
+| `GET /` | its page (HTML; its own script and stylesheet under `/static/`), served to any address on the home network; without a ticket or a session it says only "Open this page from the Hub: Devices, this station, Open this station's page." |
 | `GET /state` (changed) | as today plus `version` (the station software) and `settings_changed: bool` |
 | `GET /settings` | `{settings: [{id, label, kind, value, choices?, min?, max?}]}` with the ids `beep`, `speech`, `voice`, `volume`, `panel_swap`, and one `lamp.<step>` per step of the intake flow (value: one of the panel's lamps, or `off`) |
-| `POST /settings` | body `{<id>: <value>}`, with the header that carries the proof of 03 7.10; answers the new list; `{reset: true}` removes the station's own values |
+| `POST /settings` | body `{<id>: <value>}`, with the header that carries the proof of 03 7.10 or with a session; answers the new list; `{reset: true}` removes the station's own values |
+| `POST /ticket` | the Hub's proof; answers `{ticket, expires_in: 60}`: a ticket works once, within 60 seconds |
+| `POST /session` | body `{ticket}`; sets the station's session cookie, on its own origin, for 60 minutes; answers `{ok: true}` |
+
+The station's data routes (`/state`, `/settings`, `/photo`, `/last-tag`) answer only its allow-list or a browser with a
+session; its page's own files (HTML, script, stylesheet) are served to any address on the home network.
 
 The station's 5-minute check-in is `GET /api/station/hello` with `fp`, `port` and `version`: nothing new.
 
@@ -2598,10 +2661,11 @@ Server builder · Depends on: none · Beside: every other EV step
 - **Starts after:** AF2 is merged, for the station files.
 - **Files today:** `station/http.py`, `station/state.py`, `station/flow.py`, `station/panel.py`, `station/server_api.py`,
   new `station/page.py`, new `station/settings.py`, new `station/static/*`, `station_client.py`, tests.
-- **Change:** the station's page, its settings file, the lamp mapping, the 5-minute check-in, `version` in `/state`, and
-  the Hub's pass-through client.
-- **Other interfaces:** EV4c reads the pass-through client.
-- **Check:** prove first (items 2 and 3 of the list below).
+- **Change:** the station's page, its settings file, the lamp mapping, the 5-minute check-in, `version` in `/state`,
+  `POST /ticket` and `POST /session`, who its page files and data routes answer, and the Hub's client for the station's
+  checked data.
+- **Other interfaces:** EV4c reads the Hub's client.
+- **Check:** prove first (item 2 of the list below).
 
 ### EV4a Hub page: the Spools section
 Bug-bash 1 · Depends on: none · Beside: every other EV step
@@ -2622,9 +2686,10 @@ Bug-bash 1 · Depends on: none · Beside: every other EV step
 Bug-bash 1 · Depends on: none · Beside: every other EV step
 - **Files today:** `setup_static/setup_devices.js`, new `setup_console/device_tab.py`, `setup_console/station_tab.py`,
   `setup_console/webapp_tab.py` (the Open button's address).
-- **Change:** 03 7.2, 7.4, 7.9 and 7.10: kind, version, out of date, Open, the device detail and the pass-through.
-- **Other interfaces:** reads EV3's pass-through client; EV5 mounts the pass-through path.
-- **Check:** prove first (item 3 of the list below).
+- **Change:** 03 7.2, 7.4, 7.9 and 7.10: kind, version, out of date, Open, the device detail drawn by the Hub with its
+  checks, its photo, and the link to the station's own page with its ticket.
+- **Other interfaces:** reads EV3's client; EV5 mounts the routes of the detail.
+- **Check:** the detail's tests: what a station sends that fails the checks is dropped or shown as text.
 
 ### EV4d Hub page: the catalog form
 Bug-bash 1 · Depends on: none · Beside: every other EV step except for its registry file
@@ -2637,7 +2702,7 @@ Bug-bash 1 · Depends on: none · The last of the Hub page steps
 - **Files today:** registry files only: `setup_page.py`, `setup_static/setup.js`, `setup_static/setup_overview.js`;
   `setup_page.py` and `setup_overview.js` after AF6 is merged, `setup.js` after EA6.
 - **Change:** the Spools section in the navigation, the header's "Open the web app", the routes and scripts of EV4a to
-  EV4d mounted, the Devices tile and the pass-through path.
+  EV4d mounted, the Devices tile and the routes of the device detail.
 
 ### EV6a Web app: the Hub screen, links and the catalog form
 Klipper builder · Depends on: none · Beside: every other EV step
@@ -2668,7 +2733,7 @@ App builder · Depends on: EV7a's row of calls and models · Beside: every other
   `AddProfileViewModel.kt`.
 - **Change:** the guided add, Clear slot, waiting on the Load screen and the swatches of the printers list, Open
   Spoolman, the catalog form and list.
-- **Check:** prove first (item 4 of the list below).
+- **Check:** prove first (item 3 of the list below).
 
 ### EV8 Slicer Sync: the client header
 Klipper builder · Depends on: AF8 merged · Beside: every other EV step
@@ -2679,7 +2744,7 @@ Klipper builder · Depends on: AF8 merged · Beside: every other EV step
 To be assigned · Depends on: none · Beside: every other EV step
 - **Files today:** `reader/src/main.cpp`, `reader/firmware/VERSION` and what a firmware change needs.
 - **Change:** the firmware sends its build as `X-Reader-Build`.
-- **Check:** prove first (item 5 of the list below).
+- **Check:** prove first (item 4 of the list below).
 
 ### EV10 Documents
 Design + docs · Depends on: EV1 to EV9 merged
@@ -2696,8 +2761,8 @@ the CSS files the web app and Hub page steps need beyond those named; `PrinterSc
 `station/PANEL.md` and how many lamps and steps the panel has; the firmware's build and release steps; whether the Android
 Spools list has a menu today.
 
-**Later work, so that no file is opened twice for the same reason.** A later stage's undo, activity log and CSV open
-the Spools section's files again for those functions, and a later stage translates these screens once.
+**Later work, so that no file is opened twice for the same reason.** Stage 13's undo, activity log and CSV open the
+Spools section's files again for those functions, and a later stage translates these screens once.
 
 ### To prove first, in the step that meets it
 
@@ -2709,13 +2774,315 @@ Each has a fallback.
 2. **EV3: a proof for setting changes.** Assumed: the station and the Hub can both derive a secret from the station's
    pairing without sending the token itself. If the Hub keeps nothing it can derive from, the station's pairing gains a
    second secret at its next hello, sent over the pinned channel.
-3. **EV4c with EV3: passing the station's page through the Hub** works with relative addresses only (the station's page
-   uses no absolute paths) and with the page's lock on the Hub's side.
-4. **EV7b: the dashed ring** is drawable with the app's swatch component; else the waiting slot's swatch gets a small
+3. **EV7b: the dashed ring** is drawable with the app's swatch component; else the waiting slot's swatch gets a small
    clock mark.
-5. **EV9: a reader in the field takes the new firmware** only when its owner holds the knob; until then its build is "not
-   known" and nothing breaks.
+4. **EV9: a reader in the field takes the new firmware** only when its owner holds the knob; until then its build is
+   "not known" and nothing breaks.
 
 **Out of scope:** adding spools on the Hub page; quick find and colour-name search (the Spoolman link is the answer); the
 Hub updating a satellite by itself; pages for the Tag Reader and the printer-side tag service (they serve nothing a browser
-can use; the reader has no web server); undo, the activity log, CSV and labels; a camera view on the command line.
+can use; the reader has no web server); labels; a camera view on the command line. Undo, the activity log and CSV are
+Stage 13.
+
+
+---
+
+## 20. Stage 13: History, data and safety, and Home Assistant
+
+Every action leaves an event with who did it; a change to a spool or a slot can be put back; the checks have a history;
+filament used is shown by the month; the Hub's data can be downloaded as CSV files and spools imported from one; backups
+can be encrypted with the owner's password; one button collects a report for a problem; and Home Assistant can read the
+Hub. The parts that specify it are 01 section 8, 02 7.11, 7.12 and 8.7, 03 2.9, 2.10, 3.2, 4.2, 5.10, 7, 10.6, 10.11, 13,
+15, 16 and 17, 04 3.9, 5.4, 5.6, 6.5, 6.6, 7.1, 9.3 and 14, 05 3.1, 7, 9.10, 10.1, 12.8 and 16, 06 3, 6.8, 7, 9.1, 9.4,
+9.10, 9.22 to 9.26 and 13, and 07 COL-9 and TIM-7. The words "kit route", "page route" and "twin" are used as Stage 12 uses
+them. It reads the event store of Stage 10 as built: events with `id, at, kind, severity, actor, subject, data,
+condition`, served with `title`, `text` and `action`, kept 400 days in month files and read with `GET /api/events`.
+
+### The rules of the stage
+
+- **All steps start at once**, each against the contracts below and in 03 section 15, 04 section 14, 05 section 16 and 06
+  section 13. A registry file waits for the merge of the step named for it, and nothing else waits. New kit routes live
+  in new modules that give their routes as a list; one step, HD1, mounts them in `api.py`, so `api.py` has one holder.
+- **Every action leaves an event, with who did it.** The kinds, their data and the actor rule are in Stage 10's catalogue
+  and event store. A data value is never a secret: a changed key says that it changed, never its value. A spool change
+  carries complete before-values so that it can be put back.
+- **Undo is one rule.** What can be undone: update weight, move, mark empty, link a tag, load, unload, clear a slot (the
+  kinds `spool.weighed`, `spool.moved`, `spool.emptied`, `spool.opened`, `spool.loaded`, `spool.unloaded` and
+  `slot.cleared`) and a filament-used entry (as before, Bambu Lab printers only). A Recently added revision keeps its own
+  Undo. Nothing else: removing a printer, a key, a pairing or a location still asks first and has no undo. An event can
+  be undone once, for 7 days (the limit the filament-used undo has), and only while nothing changed since: the spool's
+  present values equal the event's after-values and no later undoable event exists for that spool or slot. Undo puts
+  back exactly the before-values and writes a new event of the same kind with `undo_of`; the first event is then served
+  with `undone: true`. Undoing a load or an unload puts the Hub's record back; the printer's own slot setting is not
+  changed back, and the answer says so ("The printer still shows what it was set to."). The person sees a toast with
+  **Undo** for 10 seconds; the toast stays until dismissed for a person who asked for no time limits (07 TIM-7).
+- **Activity** is the events that are something done: every kind that Stage 10's catalogue marks Stage 13, the `spool.*` kinds except
+  `spool.low` and `spool.ok`, `usage.recorded` and `location.renamed`. Conditions (offline, low, check rows) are health,
+  not activity. It is kept as long as the store keeps events (400 days by default) and reading it needs nothing: it holds
+  no addresses, serials or secrets.
+- **Health history** comes from the conditions the store already records every 5 minutes: check rows (`check.failed` and
+  `check.ok`), printers offline and online, devices down and up, storage low and ok. Nothing new is measured. History
+  starts when the store started; before that the strip is empty and says "No history before <date>." The apps show the
+  table only.
+- **Analytics** is a twelfth section of the Hub page, last 12 months. The numbers come from the printers' filament-used
+  logs, all printers, undone entries left out. The logs did not hold the material, the printer's name or whether the print
+  finished, so each new entry of both printer families also stores `material`, `vendor`, `name`, `color_hex`,
+  `printer_name` and `outcome` (`finished`, `failed`, `cancelled`, `unknown`). Older entries get the material from
+  Spoolman while the spool still exists and "Unknown material" otherwise; a removed printer's older entries are "A
+  removed printer". Entries the Hub logged without taking filament off a spool are counted and the page says so; entries
+  without a weight are counted as prints and named. Klipper printers kept only their newest 2000 entries; the limit is
+  raised so that 13 months are kept for any printer, by time and not by count.
+- **CSV.** Spoolman's own export is passed on through the Hub, not rebuilt (`/api/v1/export/spools?fmt=csv` and
+  `.../filaments?fmt=csv`). The Hub's own data is offered as `usage.csv`, `locations.csv`, `recent.csv`, `activity.csv`,
+  `printers.csv` (no address, serial or code) and `lines.csv`. Import adds spools only, and adds and changes storage
+  locations after a preview; it never removes anything. The file is UTF-8 with commas, a header row, ISO dates, numbers
+  with a dot and grams without a unit; a cell that starts with `=`, `+`, `-` or `@` gets a leading `'`.
+- **The backup password.** The owner sets it on the Hub page or with `sudo spoolwarden backup password` (typed twice, at
+  least 10 characters). It is kept in `/etc/filament-kit/backup_password`, owned by root and readable by root only, as the
+  setup code's file is. Both backup makers and the restore run as root, so the Hub's own process never needs the
+  password and cannot read it. The file is left out of every backup: a backup must not carry its own key. From the
+  moment it is set every backup is encrypted: the nightly one, **Back up now** and the copy made before a restore. A
+  backup keeps its content (the zip, or the nightly archive) and is wrapped whole: a short header (a format mark, the
+  salt and the cost of the key derivation), then the content in authenticated pieces (scrypt for the key, AES-256-GCM
+  per piece with a counter, so a cut or swapped piece is noticed). The name ends in `.enc`. It is built with the
+  `cryptography` library the Hub already has, and the nightly shell script calls the Hub's Python for it. New backups use
+  a changed password and older files keep the one they were made with; removing it makes new backups plain again and
+  leaves encrypted files as they are. Restore tries the stored password first; when it does not open the file the
+  password is asked (the page: a field; the command line: a hidden prompt, or `--password-file`). A wrong password says
+  "Wrong password, or the file is damaged. Nothing was changed." After a restore from an encrypted backup the password
+  that opened it becomes the Hub's backup password if none is set. A download from the Hub page gives the encrypted file
+  as it is, and the checks before a restore (the manifest, every file's hash) run on the opened content as before. The
+  password can be shown again only with `sudo spoolwarden backup password --show`; the Hub page never shows it. A second
+  place for backups is not part of this stage.
+- **The Hub report** is one button, **Collect a Hub report** in Logs, and `sudo spoolwarden report`: one text file with the
+  versions, the features on, the Checks rows with their fix lines, the printers (kind and model), the devices by kind,
+  the storage use, the last update's log, the last 200 events and the last 500 lines of each service's log. Addresses,
+  host names, serials, tokens, keys, codes, e-mail addresses and the user's folder name are replaced by placeholders with
+  the rules the job log already uses (`redact.py`), and every printer's, device's, location's and the Hub's own name
+  becomes `printer-1`, `device-2`, `location-3` and `hub`. The newest three reports are kept beside the backups.
+- **Home Assistant** is a custom integration, domain `spoolwarden`, in a repository of its own (the form Home Assistant's
+  community store needs). It talks only to the routes of the viewer role below, with a pairing made by **Link Home
+  Assistant** or `sudo spoolwarden pair --home-assistant`, and pins the Hub's certificate by its fingerprint. It is read-only
+  in its first version: it changes nothing on the Hub and controls no printer. It is found on the network by the Hub's
+  advert (`_spoolwarden._tcp`) or by address; the person types the 6-digit pairing code and compares the fingerprint it
+  shows. It gives Home Assistant: the Hub as a device (an update entity that only informs, a problem sensor that is on
+  when a check needs a look with the rows as attributes, storage used in percent and free space, spools running low as a
+  count with the list as attributes, filament used this month); each printer as a device (state, job, progress, minutes
+  left, layer, a paused sensor, a problem sensor, nozzle and bed temperature, the camera where the printer has one, and per
+  slot a sensor with the spool's name and grams left); and every alert of the Hub as a Home Assistant event
+  `spoolwarden_alert` with the alert's key, title, text and subject, so an automation can act on "filament ran out". It
+  reads with one long wait on `GET /api/events?wait=55` for changes, printers every 10 seconds while a print runs and every
+  60 otherwise, and the Hub's summary every 5 minutes. No spool becomes an entity of its own. Translations, a logo and a
+  place in the community store's default list come after its first working version.
+- **Texts.** Only HD2 opens the string catalogue. Every other step sends HD2 its keys and English texts before it files.
+- **No file is opened by two HD steps.** A step that finds it needs another step's file stops and says so.
+
+### The contracts
+
+All JSON. A field marked `?` may be absent. Times are ISO 8601 with offset.
+
+**Events (changed; owner HD1).** `GET /api/events` gains the query values `activity=1` (only the kinds of the Activity
+list), `subject=<type>:<id>` (for example `spool:212`) and `actor=<type>` or `actor=<type>:<id>`. Each served event
+gains `undo: {possible: bool, until?: <time>, why_not?: "changed_since" | "too_old" | "already_undone" |
+"not_undoable"}`, `undone: bool` and `undo_of?: <id>`. `POST /api/events/{id}/undo` answers 200 `{undone: true, event:
+<the new event>, note?: <text>}`, 409 `{error: <one of the why_not values>, text}` or 404. A web token may call it. The
+routes that make an undoable change (`PATCH /api/spools/{id}`, `POST /api/spools/{id}/link`, the slot `load`, `unload`
+and `clear` routes, and their page routes and web twins) answer with `event_id: <id>` beside what they answer today,
+absent on a dry run. A client uses it for the toast's Undo; where an answer has none, it asks the subject's newest
+event.
+
+**New kit routes.**
+
+| Route | Query / body | Answer | Owner |
+|---|---|---|---|
+| `GET /api/health` | `days=7\|30` | `{from, to, since?: <when history starts>, checks: [{key, group, text, now: "ok"\|"look"\|"bad", spans: [{from, to, state: "look"\|"bad"}]}], changes: [{at, key, text, from, to}]}` | HD1 |
+| `GET /api/analytics` | `months=12` (1 to 13), `printer?=<id>` | `{months: [{month: "2026-11", grams, prints, unfinished_prints, unfinished_grams, logged_only_grams, no_weight_prints, by_printer: [{id, name, grams, prints}], by_material: [{material, grams}], top_material?}], insights: [{key: "total"\|"favourite_material"\|"busiest_printer"\|"unfinished"\|"biggest_print"\|"spools_finished", text}], notes: [<text>]}` | HD3 |
+| `GET /api/export/{set}.csv` | set = `usage` (`days`, `printer`), `locations`, `recent`, `activity` (`days`), `printers`, `lines`, `spoolman-spools`, `spoolman-filaments` | the file, `text/csv; charset=utf-8`, as a download | HD5 |
+| `POST /api/import/spools` | the file as the body (`text/csv`), `?dry_run=1` (default 1) | `{rows: [{n, ok: bool, problems: [{column, text}], line: <what would be added, in words>}], add: <number>, dry: bool, spool_ids?: [...]}` | HD5 |
+| `POST /api/import/locations` | the same | `{rows: [{n, ok, problems, line}], add: <number>, change: <number>, dry: bool}` | HD5 |
+
+A web token may call the `GET /api/export/...` routes, `GET /api/health` and `GET /api/analytics`; not the imports.
+
+**Filament-used entries (owner HD3).** New entries of both printer families carry `material`, `vendor`, `name`,
+`color_hex`, `printer_name` and `outcome`. `GET /api/printers/{id}/usage` serves them and takes `by=month` (answer
+`{months: [{month, grams, prints, unfinished_prints, top_material?}]}`).
+
+**The viewer role (owner HD1 for the Hub side).** A pairing can have the role `viewer`: it may call only these routes,
+all GET: `/api/info`, `/api/hub`, `/api/events`, `/api/alerts`, `/api/printers`, `/api/printers/{id}`,
+`/api/printers/{id}/usage`, `/api/printers/{id}/camera.mjpeg`, `/api/printers/{id}/camera/{name}`, `/api/spools`,
+`/api/spools/{id}`, `/api/spools/low`, `/api/storage`, `/api/storage-use`, `/api/health` and `/api/analytics`. Everything
+else answers 403. It is made with `sudo spoolwarden pair --home-assistant` and Devices > **Link Home Assistant** (kind
+"Home Assistant" in Devices; client header `X-Spoolwarden-Client: home-assistant/<version>`). The pairing link and code
+are the ones every pairing uses.
+
+**Page routes** (under `/setup/api/`): the rows of 03 section 15 for activity, undo, health, analytics, export, import, the
+backup password, the restore password and the report. HD6 builds them, except `GET analytics` (HD7b) and the backup
+password and restore routes (HD4). **Twins** (under `/intake/api/`; HD8): `GET activity` (passes `GET
+/api/events?activity=1&...`), `POST events/{id}/undo`, `GET health`, `GET analytics` and `GET export/{set}.csv` for
+`usage`, `recent` and `spoolman-spools`, each passing the kit route on unchanged. **The command line** (HD2): `spoolwarden
+activity [--spool <n>] [--who <name>] [--days 7]`; `spoolwarden undo [<event id>] [-y]`; `spoolwarden status --history
+[--days 7]`; `spoolwarden usage [--by month] [--printer <name>]`; `spoolwarden export <usage|locations|recent|activity|
+printers|lines|spoolman-spools|spoolman-filaments> [--out <file>] [--days n] [--printer <name>]`; `spoolwarden import
+<spools|locations> <file> [-y]`; `sudo spoolwarden backup password [--remove|--show]`; `spoolwarden restore <file>
+[--password-file <file>]`; `sudo spoolwarden report [--out <file>]`; each with `--json` where it has an object.
+
+### Which files the stage shares with the stages before it
+
+Each registry file below is opened by exactly one HD step, and that step starts only after the step that has the file
+open is merged. A step whose only wait is a registry file builds everything else first and adds its registry lines last.
+
+| Registry file | Opened by | Opened before by | Merge first |
+|---|---|---|---|
+| `api.py` | HD1 | EA3, AF5, then EV1 | EV1 |
+| `cli.py`, `status.py`, the string catalogue and its copies | HD2 | EA3, AF5, then EV2 | EV2 |
+| `setup_page.py`, `setup_static/setup_overview.js` | HD7e | EA6, AF6, then EV5 | EV5 |
+| `setup_static/setup.js` | HD7e | EA6, then EV5 | EV5 |
+| `shared_static/components.js`, `shared_static/components.css` | HD7e | EA5 | EA5 |
+
+`setup_static/setup_settings.js` is not opened in this stage.
+
+### HD0 Design text
+Design + docs · Depends on: none · Beside: every other HD step
+- **Files today:** `docs/design/*.md`.
+- **Change:** the design text of this stage: 01 (twelve sections), 02, 03, 04, 05, 06, 07 and 09 (this stage).
+- **Keep:** every other part.
+- **Other interfaces:** every HD step reads it.
+- **Check:** the design's own tests.
+
+### HD1 Hub: events, undo, health and the viewer role
+Server builder · Depends on: none · Beside: every other HD step except for its registry file
+- **Files today:** `event_kinds.py`, `events.py`, `alerts_api.py`, `event_sink.py`, `inventory.py`, `bridge/loading.py`,
+  `bridge/registry.py`, `pairing.py`, `library.py`, `intake_history.py`, new `undo.py`, new `health.py`, tests. Registry
+  file: `api.py`, after EV1 is merged.
+- **Change:** events for every action, with who did it and complete before-values; the undo rule and route; the activity
+  filters of `GET /api/events`; `event_id` in the answers of the routes that make an undoable change; `GET /api/health`;
+  the viewer role; the mounts of HD3's and HD5's routes.
+- **Other interfaces:** every other HD step builds against these routes with stubs.
+- **Check:** prove first (item 3 of the list below). Then the route and event tests.
+
+### HD2 Hub: the command line and the texts
+Server builder · Depends on: none · Beside: every other HD step except for its registry files
+- **Files today:** `alerts_cli.py`, new `history_cli.py`, tests. Registry files: `cli.py`, `status.py` and the string
+  catalogue, after EV2 is merged.
+- **Change:** the command line of the contracts above, the events of command-line changes, and ALL catalogue texts of this
+  stage.
+- **Other interfaces:** every other HD step names its keys to this one before it files.
+- **Check:** the command tests; the catalogue and wording tests (08 test 7).
+
+### HD3 Hub: analytics and the richer filament-used entries
+Server builder · Depends on: none · Beside: every other HD step
+- **Files today:** new `analytics.py`, `bridge/usage.py`, `bridge/klipper/usage.py`, tests.
+- **Change:** `GET /api/analytics`, the new fields of every new entry, `usage.undone`, `by=month`, and Klipper's 13 months
+  kept by time.
+- **Check:** prove first (item 1 of the list below).
+
+### HD4 Hub: backup encryption, the password and restore
+Server builder · Depends on: none · Beside: every other HD step
+- **Files today:** `backup.py`, new `backup_crypt.py`, `install/backup.sh`, `install/install.sh`, `updates.py`,
+  `setup_console/backup_tab.py`, `setup_helper.py`, tests.
+- **Change:** backup encryption and the password, restore with a password, the backup, restore and update events; in the
+  root helper the password operations, the report job's entry (it calls HD6's `report.py`) and `settings.changed` for
+  every save that goes through the helper.
+- **Check:** prove first (item 2 of the list below).
+
+### HD5 Hub: CSV export and import
+Server builder · Depends on: none · Beside: every other HD step
+- **Files today:** new `csv_io.py`, tests.
+- **Change:** the export and import routes of the contracts.
+- **Check:** prove first (item 5 of the list below).
+
+### HD6 Hub: the Hub report and the page routes
+Server builder · Depends on: none · Beside: every other HD step
+- **Files today:** new `report.py`, `redact.py`, `setup_console/logs_tab.py`, new `setup_console/history_tab.py`, tests.
+- **Change:** the Hub report; the page routes of activity, undo, health, export, import and report; the page's "who". Its
+  routes are mounted by HD7e.
+
+### HD7a Hub page: Logs with Activity
+Bug-bash 1 · Depends on: none · Beside: every other HD step
+- **Files today:** `setup_static/setup_logs.js` and its CSS.
+- **Change:** 03 13: Logs with Activity, Undo in its rows, **Collect a Hub report**.
+- **Other interfaces:** HD7e mounts it.
+
+### HD7b Hub page: the Analytics section
+Bug-bash 1 · Depends on: none · Beside: every other HD step
+- **Files today:** new `setup_console/analytics_tab.py`, new `setup_static/setup_analytics.js`, new
+  `setup_static/setup_analytics.css`.
+- **Change:** 03 17.
+- **Other interfaces:** HD7e mounts it.
+
+### HD7c Hub page: the backup password
+Bug-bash 1 · Depends on: none · Beside: every other HD step
+- **Files today:** `setup_static/setup_backup.js`.
+- **Change:** 03 10.6 and 10.11: the backup password, "Encrypted" in the list, the restore password.
+
+### HD7d Hub page: Undo, a spool's last events and CSV
+Bug-bash 1 · Depends on: none · Beside: every other HD step
+- **Files today:** `setup_static/setup_spools.js`, `setup_printer_live.js`, `setup_intake.js`, `setup_storage.js`,
+  `setup_presets.js`, `setup_printers.js`.
+- **Change:** 03 2.9, 2.10, 5.10 and 16: the Undo toasts, a spool's last ten events, the CSV menus and the imports.
+- **Other interfaces:** HD7e mounts the Undo button of the toast.
+
+### HD7e Hub page: the registry
+Bug-bash 1 · Depends on: none · The last of the Hub page steps
+- **Files today:** new `setup_static/setup_history.js`. Registry files: `setup_page.py`, `setup_static/setup.js` and
+  `setup_static/setup_overview.js`, after EV5 is merged; `shared_static/components.js` and `shared_static/components.css`,
+  after EA5 is merged.
+- **Change:** Analytics in the navigation, the health strips and "Filament used this month" on Overview, the toast's
+  Undo button, the mounts of the routes and scripts of HD6 and HD7a to HD7d.
+- **Check:** prove first (item 4 of the list below).
+
+### HD8 Web app: Undo, last events, By month and downloads
+Klipper builder · Depends on: none · Beside: every other HD step
+- **Starts after:** EV6a and EV6b are merged: they have these files open in Stage 12.
+- **Files today:** `web/static/app.js`, `web/static/printers.js`, `web/intake_app.py`, `web/printers_app.py`.
+- **Change:** 04: Undo toasts, a spool's last ten events, By month, the downloads and the health table; their twins.
+
+### HD9 App: Undo, last events, By month and downloads
+App builder · Depends on: none · Beside: every other HD step
+- **Starts after:** EV7a and EV7b are merged: they have these files open in Stage 12.
+- **Files today:** `net/Api.kt`, `net/Models.kt`, `ui/spool/SpoolScreen.kt`, `SpoolViewModel.kt`,
+  `ui/printers/PrinterScreen.kt`, `PrinterViewModel.kt`, `ui/hub/*`, the toast component.
+- **Change:** 05: the same five things as HD8.
+
+### HD10 Home Assistant integration
+To be assigned · Depends on: none · Beside: every other HD step
+- **Files today:** a new repository.
+- **Change:** the integration of the rules above. It needs only the viewer role of the contracts.
+- **Check:** prove first (item 6 of the list below).
+
+### HD11 Documents
+Design + docs · Depends on: HD1 to HD10 merged
+- **Files today:** `docs/*.md`, `README.md`, `release-notes/next.md`.
+- **Change:** the user documents and the release notes.
+- **Keep:** the wording of the other sections.
+
+**Order.** HD0 to HD10 now. HD11 last, after the batch. Registry files, one after the other, per file: `api.py`: EA3 > AF5 >
+EV1 > HD1. `cli.py`, `status.py` and the string catalogue: EA3 > AF5 > EV2 > HD2. `setup_page.py` and
+`setup_overview.js`: EA6 > AF6 > EV5 > HD7e. `setup.js`: EA6 > EV5 > HD7e. `shared_static/components.js` and
+`components.css`: EA5 > HD7e.
+
+**How far the map is checked.** From three reads of the code. Not looked at: where the command line's changes enter
+(`cli.py` is HD2's, so its events are HD2's), how the toast component is built and whether it can carry a button, the
+Android toast, `menu_ui.py`'s own undo, the CSS files.
+
+### To prove first, in the step that meets it
+
+Each has a fallback.
+
+1. **HD3: whether a Bambu Lab print that stopped was cancelled or failed** cannot be told today. Until a recorded printer
+   answer shows it, a Bambu Lab entry's outcome is `finished` or `unknown` for a stopped print, and "did not finish"
+   counts `failed`, `cancelled` and `unknown` stops together.
+2. **HD4: the encryption's exact form** (the piece size, the header) is the builder's, inside the rule above. It must be
+   shown that a cut file, a changed byte and a wrong password each fail before anything is replaced, and that a 2 GiB
+   backup encrypts without holding it in memory.
+3. **HD1: undo of a tag link** can restore the tag the spool had before. If Spoolman's record cannot be put back
+   exactly, tag links are not undoable and the toast has no Undo for them.
+4. **HD7e: the toast can carry a button** in all four themes. Else Undo appears as a line under the action's result.
+5. **HD5: Spoolman's export answers at that address** on the installed Spoolman. If not, the two pass-through sets are
+   not offered and the page says "Spoolman's own export is not available in this Spoolman version."
+6. **HD10: Home Assistant accepts a pinned self-signed certificate** from an integration's own HTTP session (assumed;
+   many local integrations do this).
+
+**Out of scope:** a second place for backups; a restore drill; quiet hours; undo for settings; charts beyond the monthly
+bars; controlling a printer from Home Assistant; importing filament-used history, events or preset lines; exporting
+secrets in any form.

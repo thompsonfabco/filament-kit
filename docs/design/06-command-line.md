@@ -80,8 +80,11 @@ Everyday
   spools           Find spools; spools running low
   spool            One spool: show, weigh, move, empty
   events           What happened on the Hub: show, follow
+  activity         What was done on the Hub: who, what, when
+  undo             Put back the last change made here
+  usage            Filament used: this month, by month
   devices          Paired devices: kind, version, show, set
-  pair             Pair a phone, the Slicer Sync or a Weigh Station
+  pair             Pair a phone, the Slicer Sync, a Weigh Station or Home Assistant
   weigh-station    Weigh Station: pair it, flash its display
   tag-reader       Tag Readers: tokens, flash one over USB
   presets          Slicer presets: build, status, parents, updates
@@ -90,10 +93,12 @@ System
   features         Switch features on and off; choose the setup
   config           Settings menu; also config show, set and theme
   locations        Storage locations: the list, add, edit, move, remove
+  export           Download Spoolwarden's data as CSV files
+  import           Add spools or locations from a CSV file
   alerts           What Spoolwarden warns you about: switches, limits, test
   label-reader     Label Reader: status, test, corrections to share
   catalog          Filament Catalog: status, update, roll back, add, your own entries
-  backup           Make or list backups
+  backup           Make or list backups; the backup password
   restore          Restore this Hub from a backup
   web              Access from outside the home, and Claude's connector
   remote           Remote access: certificate and firewall rules
@@ -104,6 +109,7 @@ System
   update           Check, install or roll back Spoolwarden
   uninstall        Remove Spoolwarden from this machine
   logs             The end of a service's log
+  report           Collect a Hub report for a problem
 
 Every command: -h  --json  -q/--quiet  -y/--yes  --color auto|always|never
                --plain  --no-progress
@@ -117,6 +123,7 @@ parts. The last column names the place on the Hub page that does the same thing,
 | Command | What it does | Hub page place |
 |---|---|---|
 | `status` | Checks everything and prints one row per check (9.1) | Overview |
+| `status --history [--days 7\|30]` | The changes of the checks over the last 7 or 30 days, as a table (9.1) | Overview, Show history |
 | `printer list` | All printers, set up and found (9.2) | Printers |
 | `printer show <printer> [--watch]` | One printer: details and slots; `--watch` shows state, job, progress and temperatures too, redrawn every 2 s (9.2) | Printers, expanded row, live view |
 | `printer test <printer>` | Test connection | Test connection |
@@ -154,11 +161,14 @@ parts. The last column names the place on the Hub page that does the same thing,
 | `spool move <n> <location \| auto>` | Move a spool (previews, asks) | Move |
 | `spool empty <n>` | Mark a spool empty (asks) | Mark empty |
 | `events [--since ID\|TIME] [--kind PREFIX] [--follow]` | The Hub's events, newest last; `--follow` keeps printing new ones (9.16) | Settings > Alerts > Recent alerts (alerts only) |
+| `activity [--spool <n>] [--who <name>] [--days 7]` | What was done: time, who, what, newest first (9.22) | Logs > Activity |
+| `undo [<event id>] [-y]` | Put back the last change made from the command line, or the named event (shows it, asks) (9.23) | Undo in the toast and in Logs > Activity |
+| `usage [--by month] [--printer <name>]` | Filament used this month in sentences, or by month (9.24) | Analytics |
 | `devices` (same as `devices list`) | Paired devices with kind, version and the out-of-date sentence (9.4) | Devices |
 | `devices show <device>` | One device's detail; for a Weigh Station its status and settings | Devices, Open |
-| `devices set <device> <setting> <value>` | Change a Weigh Station setting through the Hub (previews, asks) | Devices, the Weigh Station's page |
+| `devices set <device> <setting> <value>` | Change a Weigh Station setting through the Hub (previews, asks) | Devices, the Weigh Station's detail |
 | `devices forget <device>` | Unpair a device | Revoke |
-| `pair [--slicer-sync \| --weigh-station] [--text] [--no-wait]` | Pairing code, QR and fingerprint | Pair a phone / Link for the Slicer Sync / Link for the Weigh Station |
+| `pair [--slicer-sync \| --weigh-station \| --home-assistant] [--text] [--no-wait]` | Pairing code, QR and fingerprint | Pair a phone / Link for the Slicer Sync / Link for the Weigh Station / Link Home Assistant |
 | `weigh-station pair [--local]` | Run on the Weigh Station: pair it with the Hub | Pair the Weigh Station on this machine |
 | `weigh-station flash-display` | Write the Weigh Station display firmware over USB | Flash a device |
 | `weigh-station pairing-state` | Paired, not paired or not checked yet | (none) |
@@ -190,6 +200,8 @@ parts. The last column names the place on the Hub page that does the same thing,
 | `locations remove <name>` | Remove a location (asks) | Remove |
 | `locations default-overflow <name>` | Make it the default overflow (a Bulk storage location that is not overflow becomes overflow as well) | Make default overflow |
 | `locations sealed <name>` | Sealed spools go here | Sealed spools go here |
+| `export <usage\|locations\|recent\|activity\|printers\|lines\|spoolman-spools\|spoolman-filaments> [--out <file>] [--days N] [--printer <name>]` | Write one set as a CSV file (9.25) | Download as CSV |
+| `import <spools\|locations> <file> [-y]` | Add spools, or add and change storage locations, from a CSV file (checks first, asks) (9.25) | Import from CSV |
 | `alerts` (same as `alerts list`) | The alert switches and thresholds (9.17) | Settings > Alerts |
 | `alerts set <type> on\|off` | Switch one alert type | The type's switch |
 | `alerts set running-low <grams>` | Running low under | Running low under |
@@ -213,7 +225,8 @@ parts. The last column names the place on the Hub page that does the same thing,
 | `backup create [--out DIR]` | Back up now | Back up now |
 | `backup list` | Backups on this Hub | Show the backups |
 | `backup keep <days>` | Keep nightly backups for N days | Keep nightly backups for N days |
-| `restore <zip> \| --uploaded` | Restore (asks for the typed word) | Restore |
+| `backup password [--remove \| --show]` | Set or change the backup password; remove it; show it (9.10) | Settings > Backups and restore, Set a backup password |
+| `restore <zip or .enc> [--password-file <file>] \| --uploaded` | Restore (asks for the typed word; an encrypted backup also needs its password) | Restore |
 | `web status` | Access from outside: rows as in `status` | Settings > Network and addresses |
 | `web passphrase` | Set or replace the web passphrase | Web passphrase |
 | `remote firewall` | Print the firewall rules (changes nothing) | Show the firewall rules |
@@ -226,6 +239,7 @@ parts. The last column names the place on the Hub page that does the same thing,
 | `update [--check \| --rollback] [--scheduled]` | Updates | Updates |
 | `uninstall [--purge]` | Remove Spoolwarden (asks) | Updates, footer line |
 | `logs [<service>] [--lines 50\|100\|200]` | The end of a service's log | Logs |
+| `report [--out <file>]` | Collect a Hub report and print where it is (9.26) | Logs > Collect a Hub report |
 | `add` | Prints where spools are added (section 10) | (none) |
 | `spool` | Prints the four spool commands and where tags are linked and spools are added (section 10) | (none) |
 | `help [<command> \| aliases \| --markdown]` | Help; `--markdown` prints the command table for the user guide | (none) |
@@ -560,8 +574,8 @@ Any step that can take longer than 2 seconds shows a progress line once 2 second
 | `printer reports` | `{reports: [{name, size, at}], never}`, the reply of `printers/<serial>/reports` |
 | `recent` | `GET /setup/api/intake/history`: `{keep, photo_bytes, ai, count, records: [...]}` |
 | `recent show` | `GET /setup/api/intake/history/<id>` |
-| `devices` | the answer of `GET /setup/api/devices`: `{devices: [{id, name, kind: "phone", "pc", "station", "web", "reader" or "builtin", version?, newest?, out_of_date, advice?, paired?, last_seen?, reachable?, built_in, page}]}` |
-| `devices show` | the answer of `GET /setup/api/device/<id>`: `{device, status?, settings?: [{id, label, kind: "switch", "choice", "number" or "text", value, choices?, min?, max?}]}` |
+| `devices` | the answer of `GET /setup/api/devices`: `{devices: [{id, name, kind: "phone", "pc", "station", "web", "reader", "home-assistant" or "builtin", version?, newest?, out_of_date, advice?, paired?, last_seen?, reachable?, built_in, page}]}` |
+| `devices show` | the answer of `GET /setup/api/device/<id>`: `{device, status?, settings?: [{id, label, kind: "switch", "choice", "number" or "text", value, choices?, min?, max?}], own_page?, photo}` |
 | `devices set` (needs `--yes`) | `{settings: [...]}`, the new list |
 | `tag-reader list` | `state.readers.list`: `[{id, name, created}]` |
 | `presets status` | `GET /setup/api/presets` |
@@ -581,7 +595,15 @@ Any step that can take longer than 2 seconds shows a progress line once 2 second
 | `events` | the answer of `GET api/events`: `{events: [{id, at, kind, severity, subject: {type, id, name}, actor: {type, id, name}, data: {}, condition: {key, state} or null, alert, title, text, action: {place, id}}], next, oldest, gap, test, conditions: [...]}`; with `--follow`, one event object per line (9.16) |
 | `alerts` | the answer of `GET api/alerts`: `{types: [{key, title, on}], last_spool_only, running_low_g, storage_warn_percent, storage_bad_percent}` |
 | `catalog status` | `GET /setup/api/library` |
-| `backup list` | `{backups: [{name, at, kind, size}], keep_days, folder}` |
+| `backup list` | `{backups: [{name, at, kind, size, encrypted}], keep_days, folder, password_set}` |
+| `backup password`, `backup password --remove` | `{"ok": true, "set": true}` or `{"ok": true, "set": false}`; `--show` has no JSON form (a stored secret is `{"set": true}`) |
+| `status --history` | the answer of `GET api/health`: `{from, to, since?, checks: [{key, group, text, now, spans: [{from, to, state}]}], changes: [{at, key, text, from, to}]}` |
+| `activity` | the answer of `GET api/events` with `activity=1` (as `events`, each event also with `undo: {possible, until?, why_not?}`, `undone` and `undo_of?`) |
+| `undo` (needs `--yes`) | `{"ok": true, "undone": true, "event": <the new event>, "note"?: <text>}`, or the refusal `{"ok": false, "error": <changed_since, too_old, already_undone or not_undoable>, "text": ...}` |
+| `usage` | the answer of `GET api/analytics`: `{months: [{month, grams, prints, unfinished_prints, unfinished_grams, logged_only_grams, no_weight_prints, by_printer, by_material, top_material?}], insights: [{key, text}], notes: [text]}` |
+| `export` (with `--out`) | `{"ok": true, "set", "file", "rows"}` |
+| `import spools` (needs `--yes`) | `{rows: [{n, ok, problems: [{column, text}], line}], add, dry, spool_ids?}`; `import locations`: `{rows, add, change, dry}` |
+| `report` | `{"ok": true, "file"}` |
 | `update --check` | `GET /setup/api/updates` |
 | `logs` | `{unit, text, truncated}` |
 | `weigh-station pairing-state` | `{"state": "paired" \| "unpaired" \| "unchecked", "address": ...}` |
@@ -682,6 +704,10 @@ Every question, word for word (names are examples):
 | `features off label-reader-local` while corrections wait | `Also delete 12 corrections waiting to be shared? The reader keeps them, so they go with it.` (no stops the command: `Nothing changed.`) | the plan includes it |
 | `weigh-station flash-display` | `Write the Weigh Station display firmware to /dev/ttyACM0?` (one per board found) | the write runs |
 | `tag-reader flash` | `Write the Tag Reader firmware to /dev/ttyACM0? What is on the board now is replaced.` | the write runs |
+| `undo` | the change in one line, for example `2026-11-12 14:11 · Moved spool 214 to Shelf B.`, then `Undo it?` | `Put back.` (after a load or an unload also `The printer still shows what it was set to.`) |
+| `backup password --remove` | `Remove the backup password? New backups are plain again. Backups already made stay encrypted and need the password they were made with.` | `Removed the backup password.` |
+| `import spools` | the table of what was read, then `Add 2 spools?` | `Added 2 spools: 215, 216.` |
+| `import locations` | the table of what was read, then `Add 1 location and change 1?` | `Added 1 location and changed 1.` |
 | `restore` | the backup's summary (9.10), then `Type restore to go on: ` | the restore runs |
 | `uninstall` | `Remove Spoolwarden from this machine? Its data stays unless you add --purge.` | the removal runs |
 | `uninstall --purge` | `This also deletes everything Spoolwarden keeps on this machine. Type purge to go on: ` | the removal runs |
@@ -691,7 +717,7 @@ Every question, word for word (names are examples):
 Commands that change something but do not ask, because nothing is lost: `printer rename`, `printer address`,
 `printer access-code`, `printer lane-data`, `printer use`, `recent edit`, `locations add`, `locations edit`, `locations move`, `locations default-overflow`, `locations sealed`, `recent undo` (the revision is kept,
 marked undone, and can be revised again), `backup create`, `presets build`, `catalog update`, `config set`,
-`config theme`.
+`config theme`, `backup password` (setting or changing it: it is typed twice), `export`, `report`.
 
 ## 8. Interactive screens
 
@@ -1099,6 +1125,8 @@ Nothing is sent unless you choose to. [y/N]
 | `weigh-station flash-display` | one confirmation per blank board found (section 7) | Stops and restarts the Weigh Station service around the write, saying so |
 | `tag-reader flash` | `Wi-Fi network the Tag Reader joins: ` · `Its Wi-Fi password: ` (secret) · `The password again: ` (secret) · `Buzzer: h for high, l for low [h]: ` | `--ssid` and `--buzzer high\|low` skip their prompts; `--password -` reads the password from standard input. The other options of today's `reader setup` keep their names and meaning (9.7). |
 | `web passphrase` | `New passphrase, at least 12 characters: ` · `New passphrase again: ` (both secret) | Mismatch: `Error: the two passphrases do not match.` |
+| `backup password` | `New backup password, at least 10 characters: ` · `New backup password again: ` (both secret) | Mismatch: `Error: the two passwords do not match.` Too short: `Error: use at least 10 characters.` After it is set, the Hub page's sentence is printed: `Write this password down. Without it these backups cannot be restored, and Spoolwarden cannot recover it.` |
+| `restore` of an encrypted backup the stored password does not open | `Password of this backup: ` (secret) | `--password-file <file>` reads it from a file instead; a wrong one: `Error: wrong password, or the file is damaged. Nothing was changed.` |
 | `catalog token` | `Catalog token (GitHub token): ` (secret) | The one place to set or remove the token: the Hub page and the `config` menu have no token field. A stored token keeps working and an update never deletes it |
 | `catalog add --ask` | `Brand: ` · `Name: ` · `Material (number, or Other): ` (the numbered list of the materials the catalog knows, with Other last; Other asks `Type the material: `) · `More values (optional)? [y/N]` and, after yes, `Nozzle temperature from (°C): ` · `to (°C): ` · `Bed temperature from (°C): ` · `to (°C): ` · `Density (g/cm³): ` · `Maximum volumetric speed (mm³/s): ` · `Bambu Studio parent: ` · `Notes: ` | The Hub page's form, field for field and in its order; an empty answer to a required field asks again, to an optional one skips it. The command sends the values and the Hub builds the entry |
 | `restore`, `uninstall --purge` | the typed word (section 7) | |
@@ -1185,7 +1213,8 @@ Filament Catalog
 | Label Reader | note `Reads used today: N of M` (needs a look when N = M: `No reads left today (M of M)`) | `raise Reads per day in sudo spoolwarden config, or wait until tomorrow` |
 | Label Reader | `On this Hub: answering at <url> (tier: <tier>)` / `On this Hub: not answering at <url>` (only when installed) | `sudo spoolwarden label-reader status` |
 | Label Reader | needs a look `The Label Reader is switched on but not installed.` (only while Label Reader: On this Hub is on and the reader is not installed; no row otherwise) | the command that installs the reader, the one `Next:` names after switching it on (9.6) |
-| Label Reader | needs a look `The Label Reader at <address> is not using HTTPS.` (a reader on another machine whose side does not serve HTTPS yet) | (none) |
+| Label Reader | note `The Label Reader at <address> is not using HTTPS. A later Label Reader version adds it.` (a reader on another machine at an `http://` address, until the reader's own software can serve HTTPS) | (none) |
+| Label Reader | needs a look `The Label Reader at <address> is not using HTTPS.` (from the release that turns the rule on, a stored `http://` address of a reader on another machine) | `Update the Label Reader on that machine, then change its address to https:// in Settings > Label Reader.` |
 | Label Reader | note `Share corrections: on, 12 waiting` (only while it is on, or while corrections still wait: `Share corrections: off, 12 still waiting`) | `spoolwarden label-reader corrections` |
 | Weigh Station | `Answering at <url>`, `Tag reader seen`, `Scale seen`, `Paired with <address>` / `… not seen`, `Not paired` | per row: check the cable; `sudo spoolwarden pair --weigh-station` |
 | Devices | note `Paired devices: N` | (none) |
@@ -1215,6 +1244,20 @@ Filament Catalog
 - `--quiet` prints only the rows that need a look (with their group heading and Fix). Exit code 1 when any row
   needs a look (section 6.7). `--json`: section 6.8.
 - `web status` and `label-reader status` print the rows of their own group in the same form.
+- `status --history [--days 7|30]` prints the changes of the checks instead of the rows, the table of the Hub page's
+  Show history (`03-hub-page.md` 4.2), newest first; `--days` takes 7 (the default) or 30. The exit code is 0.
+
+  ```
+  $ spoolwarden status --history
+  TIME              CHECK                 FROM          TO
+  2026-11-12 06:45  Workshop X1 offline   needs a look  OK
+  2026-11-11 23:10  Workshop X1 offline   OK            needs a look
+  2 changes in the last 7 days. No history before 2026-11-08.
+  ```
+
+  `FROM` and `TO` are `OK`, `needs a look` and, for a check at its worst, `needs a look now`. With no change: `No
+  changes in the last 7 days.` The last sentence appears only when the history starts inside the range; with no
+  history at all: `No history before <date>.` alone. `--json`: the answer of `GET api/health` (6.8).
 - `status --json` carries the numbers of the Storage row: `storage` is the answer of `GET api/storage-use`
   (`{filesystems: [{path_label, total, free, percent_used, state}], items: [{key, title, bytes}]}`), and
   `running_low` the number of spools running low, and `getting_started` the object of `GET start`
@@ -1512,11 +1555,11 @@ Bench scale  Weigh Station  0.5.0  last seen 2026-11-12 14:03
 ```
 
 A Tag Reader prints its name, build and last seen, and `Its settings are changed in Flash a device (spoolwarden
-tag-reader flash).` A phone, Slicer Sync PC or Web app prints kind, version, paired and last seen.
+tag-reader flash).` A phone, Slicer Sync PC, Web app or Home Assistant prints kind, version, paired and last seen.
 
-**`devices set <device> <setting> <value>`** changes one setting of a Weigh Station through the same pass-through. It
-shows what would change, asks (section 7) and takes `-y`; the setting's name is the one `devices show` prints, and a
-value the setting does not take stops with exit code 2 and the values it takes in the Fix line.
+**`devices set <device> <setting> <value>`** changes one setting of a Weigh Station through the Hub, as the detail on
+the Hub page does. It shows what would change, asks (section 7) and takes `-y`; the setting's name is the one `devices
+show` prints, and a value the setting does not take stops with exit code 2 and the values it takes in the Fix line.
 
 ```
 $ sudo spoolwarden devices set "Bench scale" volume 40
@@ -1546,6 +1589,7 @@ Paired: Shop phone.
   `--weigh-station`: `On the Weigh Station run: sudo spoolwarden weigh-station pair, then paste this link:`.
 - No QR possible: none; the Hub draws the QR code itself (section 13), so no note is needed.
 - `--text` prints the link and code without the QR code.
+- `--home-assistant`: `In Home Assistant, add the Spoolwarden integration and type this pairing code when it asks. It can read the Hub and change nothing.` then the Hub's address alone on its line, the six-digit code, the fingerprint and the expiry (no QR code). The pairing is read-only (the viewer role) and shows in `devices` with the kind `home-assistant`.
 - `--no-wait` prints everything and ends without waiting for the device; its last line is
   `The code works until 14:20.` It is listed in `pair -h` like any option (no hidden switches). The install and
   `features apply` show the pairing code this way, so they never hang on a phone.
@@ -1812,21 +1856,34 @@ other command.
 $ sudo spoolwarden backup list
 Nightly backups are kept 14 days.
 
-MADE              KIND       SIZE       NAME
-2026-11-12 03:00  nightly    4,812 KiB  backup-2026-11-12-0300.zip
-2026-11-11 03:00  nightly    4,790 KiB  backup-2026-11-11-0300.zip
-2026-11-10 16:32  made here  4,771 KiB  backup-2026-11-10-1632.zip
+MADE              KIND       SIZE       NAME                            ENCRYPTED
+2026-11-12 03:00  nightly    4,812 KiB  backup-2026-11-12-0300.zip.enc  yes
+2026-11-11 03:00  nightly    4,790 KiB  backup-2026-11-11-0300.zip      -
+2026-11-10 16:32  made here  4,771 KiB  backup-2026-11-10-1632.zip      -
 
 Folder: <backup folder on this Hub>
 ```
 
 - `KIND` uses the Hub page's words: `nightly`, `made here`, `before a restore`.
 - Empty: `No backups in <folder> yet.` then `Back up now: sudo spoolwarden backup create`.
-- `backup create`: `◐ Backing up…` then `Backup written: <path>` and the Hub page's warning on one line:
-  `Note: the zip is not encrypted and holds the setup secrets: store it somewhere safe.`
+- `backup create`: `◐ Backing up…` then `Backup written: <path>` and, while no backup password is set, the Hub page's warning on one
+  line: `Note: the zip is not encrypted and holds the setup secrets: store it somewhere safe.` With a password set it
+  writes `Backup written (encrypted): <path>` and no note.
+- `backup password` sets the backup password, asking twice (8.7); from then on every backup is encrypted: the nightly one,
+  `backup create` and the copy made before a restore. It prints `Write this password down. Without it these backups
+  cannot be restored, and Spoolwarden cannot recover it.` and `Backup password set. Every backup is now encrypted.`
+  Run again it changes the password: new backups use it and older files keep the one they were made with.
+  `backup password --remove` asks (section 7), then new backups are plain again and encrypted files stay as they are.
+  `backup password --show` prints the password on the terminal and is the only way to read it again: the Hub page never
+  shows it. It is kept in `/etc/filament-kit/backup_password`, readable by root only, and left out of every backup. All
+  three need sudo.
 - `backup keep 14`: `Backups are kept for 14 days.`
 - `restore <zip>` (or `--uploaded` for a zip uploaded on the Hub page) prints the Hub page's summary, then asks
-  for the typed word (section 7):
+  for the typed word (section 7). A backup that ends `.enc` is opened with the stored backup password first; when that does
+  not open it, the command asks `Password of this backup: ` (hidden), or reads it from `--password-file <file>`. A wrong
+  password stops with exit code 1: `Error: wrong password, or the file is damaged. Nothing was changed.` The checks before
+  the restore (the manifest, every file's hash) run on the opened content. After a restore from an encrypted backup the
+  password that opened it becomes this Hub's backup password if none is set (a line before the question says so):
 
   ```
   Backup of Workshop hub made 2026-11-12 03:00 by Spoolwarden 0.5.2:
@@ -2258,6 +2315,127 @@ Marked empty.
 `spool` with no word prints these four commands and the line of section 10 for what still needs a phone: a tag is linked
 by tapping it, and spools are added from photos or by hand.
 
+### 9.22 `activity`
+
+`spoolwarden activity` lists what was done on the Hub, as Logs > Activity does (`03-hub-page.md` 13.4): newest first,
+the events that are something done (not the conditions of `events`). Reading needs no sudo. Options: `--spool <n>`
+(only that spool's events), `--who <name>` (a paired device's name, `Hub page`, `command line`, `Claude connector`
+or `The Hub`; an unknown name stops with exit code 2 and its Fix line lists the names) and `--days 7` (how far back,
+7 by default).
+
+```
+$ spoolwarden activity --days 7
+ID    TIME              WHO            WHAT
+1431  2026-11-12 14:11  command line   Moved spool 214 to Shelf B.                       undo
+1429  2026-11-12 14:09  Kitchen phone  Moved Bambu Lab PETG HF Orange (212) to Shelf B.  undo
+1426  2026-11-12 03:00  The Hub        Backup finished (4,812 KiB, encrypted).
+
+3 events in the last 7 days.
+```
+
+- `WHAT` is the text the Hub built for the event; the word `undo` ends a row that can still be undone (`spoolwarden undo
+  <ID>`, 9.23); an undone row ends `(undone)`.
+- Nothing in the range: `Nothing has been done in the last 7 days.` More than 200 rows: the newest 200 and the line
+  `Showing the newest 200. Narrow it with --days, --who or --spool.`
+- `--json`: the answer of `GET api/events` with `activity=1` (6.8).
+
+### 9.23 `undo`
+
+`spoolwarden undo` puts back the last change made from the command line: it shows that change, asks `Undo it? [y/N]`
+(section 7) and asks the Hub. `spoolwarden undo <event id>` puts back a named one (the ID column of `activity`). It
+needs sudo and takes `-y`. The rule is the Hub's (`03-hub-page.md` 2.9): an event is undone once, for 7 days, and only
+while nothing changed since.
+
+```
+$ sudo spoolwarden undo
+2026-11-12 14:11 · Moved spool 214 to Shelf B.
+Undo it? [y/N] y
+Put back.
+
+$ sudo spoolwarden undo 1429
+2026-11-12 14:09 · Moved Bambu Lab PETG HF Orange (212) to Shelf B.
+Error: This changed again since, so it cannot be undone.
+```
+
+- A refusal prints the Hub's text after `Error:` and exits with code 1. No change made from the command line in the last 7
+  days: `Nothing has been changed from the command line in the last 7 days.` (exit code 0). An event number the Hub does
+  not know: `Error: there is no event 1429.` (exit code 2).
+- After a load or an unload the answer adds `The printer still shows what it was set to.`
+- `--json` needs `--yes` (6.8) and prints the answer of `POST api/events/<id>/undo`.
+
+### 9.24 `usage`
+
+`spoolwarden usage` shows the filament used by all printers, from the filament-used logs, undone entries left out
+(`03-hub-page.md` 17). Reading needs no sudo. Without options it prints this month's sentences; `--by month` prints the
+last 12 months as a table; `--printer <name>` limits either to one printer (a name, serial or unique start of a name, as
+section 5 gives).
+
+```
+$ spoolwarden usage
+Filament used this month: 1.84 kg (last month 1.52 kg).
+Your favourite material this month was PA6 (640 g).
+Workshop X1 did the most work this month (1.1 kg, 23 prints).
+2 of 25 prints did not finish this month (96 g).
+The biggest print this month was bracket_v4.3mf (212 g).
+You finished 3 spools this month.
+Includes 38 g the Hub logged but took off no spool. 2 prints have no weight.
+
+$ spoolwarden usage --by month --printer "Workshop X1"
+MONTH    GRAMS   PRINTS  DID NOT FINISH  MOST USED MATERIAL
+2026-11  1,100       23               2  PETG
+2026-10    920       19               1  PLA
+```
+
+- Each sentence is printed only when its numbers exist, in the order of the Hub page; the last line is the honesty notes
+  of the Hub. With no filament used this month: `No filament used this month.` With none in 12 months: `No filament used
+  yet.`
+- `--json`: the answer of `GET api/analytics` (6.8), with `printer` when `--printer` is given.
+
+### 9.25 `export` and `import`
+
+**`export <set>`** writes one set as a CSV file (`03-hub-page.md` 2.10): `usage` (`--days N`, `--printer <name>`),
+`locations`, `recent`, `activity` (`--days N`), `printers`, `lines`, `spoolman-spools` and `spoolman-filaments` (what
+Spoolman's own export gives, passed on through the Hub). With `--out <file>` the file is written there and the command
+prints `Wrote 214 rows to usage.csv.`; without it the CSV goes to standard output and nothing else is printed. It needs
+sudo, because a file leaves the Hub. Where Spoolman gives no export: `Error: Spoolman's own export is not available in
+this Spoolman version.`
+
+**`import <spools|locations> <file>`** reads a CSV file, checks it with the Hub's dry run (the same as Add spools),
+prints what it read, asks and adds. It needs sudo and takes `-y`. It only adds: it never changes or removes a spool;
+storage locations are added and same-named ones changed, never removed.
+
+```
+$ sudo spoolwarden import spools new-spools.csv
+Checked 3 rows: 2 can be added, 1 has problems.
+ROW  WHAT                                                               PROBLEMS
+  1  Add 2 × Polymaker PolyTerra PLA Charcoal Black (PLA, 1000 g)
+  2  Add 1 × Bambu Lab PETG HF Orange (PETG, 1000 g, Shelf B)
+  3  left out                                                            net: Enter grams above 0.
+Add 3 spools? [y/N] y
+Added 3 spools: 215, 216, 217.
+```
+
+- The number in the question counts the spools to add; rows with a problem are left out and say so. Nothing can be
+  added: `Nothing to add.` (exit code 1). A file that is not a CSV file Spoolwarden can read: `Error: this is not a CSV file
+  that Spoolwarden can read.`
+- The columns are those of `03-hub-page.md` 2.10; `spoolwarden export` has no sample file, the Hub page offers it.
+- `--json` on `import` needs `--yes` and prints the Hub's answer (6.8).
+
+### 9.26 `report`
+
+`sudo spoolwarden report` collects a Hub report, the file the Hub page's **Collect a Hub report** makes
+(`03-hub-page.md` 13.5), and prints where it is; `--out <file>` also copies it there.
+
+```
+$ sudo spoolwarden report
+◐ Collecting a Hub report…
+Hub report written: <backup folder>/hub-report-2026-11-12-1415.txt
+It holds no address, host name, serial, token, key, code or e-mail address. Printers, devices and locations
+are named printer-1, device-2 and location-3, and the Hub hub.
+```
+
+- The newest three reports are kept beside the backups. `--json`: `{"ok": true, "file": "<path>"}`.
+
 ## 10. What the command line cannot do
 
 Some features need a camera, NFC or a screen for photos. Where a person might look for them on the command line,
@@ -2334,7 +2512,7 @@ this design.
 | Collect a printer report | Y | Y | Y | Y | Y | none |
 | Saved printer reports | unknown | Y | unknown | N | Y (`printer reports`) | **closed** |
 | Load or unload a spool in a slot; clear a slot | Y | new | Y | N | Y (`printer load`, `unload`, `clear`) | none for the command line |
-| Filament used, with undo | Y | new | Y | N | P (`printer usage` lists it) | remains: the undo is on the Hub page, the web app and the app |
+| Filament used, with undo | Y | new | Y | N | P (`printer usage` lists it; `usage` totals it) | remains: a filament-used entry's undo is on the Hub page, the web app and the app |
 | Features on and off | N | Y | N | Y | Y, needs shown before switching | none for the command line |
 | Choose the setup | N | Y | N | Y | Y (`features setup`) | none for the command line |
 | Backups: make, list, download | N | Y | N | Y | Y | none for the command line |
@@ -2348,7 +2526,7 @@ this design.
 | Trusted computers: list, rename, revoke one | N | Y | N | N | N | remains: Hub page only |
 | Weigh Station: pair, flash the display | N | Y | N | Y | Y | none for the command line |
 | Devices: kind, version, out of date | new | new | N | N | new (`devices`) | web app: remains |
-| A Weigh Station's own page: status, sounds, lamps | N | new | N | N | new (`devices show`, `devices set`) | app, web app: remain |
+| A Weigh Station's detail: status, sounds, lamps | N | new | N | N | new (`devices show`, `devices set`) | app, web app: remain |
 | Weigh Stations asking to pair | N | Y | N | N | N | remains: Hub page only |
 | Tag Reader tokens | N | Y | N | Y | Y | none for the command line |
 | Flash a Tag Reader | N | new (Flash a device) | N | Y | Y (`tag-reader flash`) | none for the command line |
@@ -2372,6 +2550,15 @@ this design.
 | Add a printer, guided (found list, test, slots) | N | new | N | N | new (`printer add` in the guided order) | app, web app: the guided order comes later |
 | The Hub's port: show, change | N | new | N | N | new (`port`) | app, web app: remain on purpose (Hub settings are on the Hub page) |
 | Installer: the first question (Guided Setup), the port | N | N | N | Y (the installer's own questions) | new (9.20) | command line only, by design |
+| Undo the last change (weight, move, empty, tag, load, unload, clear slot) | new | new | new | N | new (`undo`) | none |
+| Activity: who did what | N (a spool's last ten events) | new | N (a spool's last ten events) | N | new (`activity`) | app, web app: the spool's last ten events only |
+| Health history of the checks | N (the table) | new | N (the table) | N | new (`status --history`) | app, web app: the table only |
+| Analytics: filament used per month | new (By month) | new | new (By month) | N | new (`usage`) | none |
+| Export as CSV | new (spools, filament used, Recently added) | new | new (spools, filament used, Recently added) | N | new (`export`) | app, web app: three sets only |
+| Import spools and locations from CSV | N | new | N | N | new (`import`) | remains: Hub page and command line only |
+| Backup password: set, change, remove; restore with it | N | new | N | N | new (`backup password`, `restore`) | remains: Hub page and command line only; showing it again: command line only |
+| Hub report for a problem | N ("Collect a Hub report on the Hub page.") | new | N (the same sentence) | N | new (`report`) | app, web app: remain |
+| Home Assistant: link it | N | new | N | N | new (`pair --home-assistant`) | remains: Hub page and command line only |
 
 Gaps marked "remains" outside the command-line column are specified in the documents of those interfaces.
 
@@ -2418,3 +2605,9 @@ The command line calls the same code as the Hub page's routes (`/setup/api/...`)
     `GET /setup/api/devices`, `GET /setup/api/device/<id>` and `POST /setup/api/device/<id>/settings`
     (`03-hub-page.md` section 15). Until they exist, the commands that need one say `Error: this Hub does not offer
     that yet.` with the Fix `sudo spoolwarden update`.
+11. **History and data.** The kit routes `GET api/events` with `activity`, `subject` and `actor` and its `undo`,
+    `undone` and `undo_of` fields, `event_id` in the answers of the routes that make an undoable change, `POST
+    api/events/<id>/undo`, `GET api/health`, `GET api/analytics`, `GET api/export/<set>.csv`, `POST api/import/spools`
+    and `POST api/import/locations`, the backup password and the encrypted backups, the Hub report, and the pairing kind
+    `home-assistant` (`03-hub-page.md` section 15). Until they exist the commands that need one say `Error: this Hub
+    does not offer that yet.` with the Fix `sudo spoolwarden update`.

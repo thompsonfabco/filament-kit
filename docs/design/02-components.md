@@ -141,7 +141,7 @@ section 12, rule 7):
 
 | File pair | Holds | Loaded by |
 |---|---|---|
-| `components.css`, `components.js` (the core) | Shell and navigation, lock, appearance control, buttons, menu, every field (without the photos variant of the file field), form group and saving, collection, detail region, status, confidence, swatch and slot strip, spinner, step progress and bar, inline result, toast, banner (with the alert banner), alerts list, dialogs, sheet, page states, code block, key-value list, change list, revision list, tooltip | Every page |
+| `components.css`, `components.js` (the core) | Shell and navigation, lock, appearance control, buttons, menu, every field (without the photos variant of the file field), form group and saving, collection, detail region, status, confidence, swatch and slot strip, history strip, monthly bars, spinner, step progress and bar, inline result, toast, banner (with the alert banner), alerts list, dialogs, sheet, page states, code block, key-value list, change list, revision list, tooltip | Every page |
 | `components-jobs.css`, `components-jobs.js` | Background-job strip (8.4), the Hub is restarting (8.5) | The Hub page (the web app starts no jobs) |
 | `components-media.css`, `components-media.js` | The photos variant of the file field (5.9), photo thumbnail and viewer (7.6), QR block with its expiry (7.8) | Pages that show photos or a pairing code |
 
@@ -448,7 +448,7 @@ section list (2.3). `collection`, `detail`: no change.
 
 ### 2.5 More sheet
 
-**Purpose.** On phones, the seven sections that do not fit the bottom bar, each with a live one-line summary, one tap
+**Purpose.** On phones, the eight sections that do not fit the bottom bar, each with a live one-line summary, one tap
 away.
 
 **Anatomy.** A bottom sheet (9.2) titled "More sections", holding a `nav` with two lists, one under the Everyday
@@ -2639,6 +2639,126 @@ deleted."), and focus moves to the list's heading.
 </section>
 ```
 
+### 7.11 History strip
+
+**Purpose.** Show how one check did over the last days at a glance: fine all the time, or needing a look and when. The
+strip is a picture of a table; the table that lists the same changes is the full account, so the strip never carries a
+meaning that the table does not.
+
+**Anatomy.** A thin horizontal track from the oldest moment (left) to now (right), one stretch per state: plain where
+the check was fine; marked where it needed a look (`look`) or was bad (`bad`). A marked stretch is taller than the
+plain track, filled with a diagonal hatch and closed by a small vertical tick at its start, so it is told by height and
+pattern as well as by colour. Under or beside the track a caption in `--muted`: "Last 7 days" or "Last 30 days". Where
+the history does not reach back to the start of the range, the track is a dashed line there and the quiet sentence "No
+history before <date>." stands beside the strip; with no history at all the whole track is dashed and the sentence is
+all there is.
+
+**Sizes and tokens.** Plain track `--s2` high in `--surface-3`; a `look` stretch `calc(var(--s2) * 2)` high in
+`--warn`, a `bad` stretch the same height in `--bad`, each with a hatch of `--surface` lines and a tick of 1 px
+`--border-strong` at its start; a stretch is never narrower than `--s1`, so a short one stays visible. The dashed part
+is a 1 px dashed `--border-strong` line. The strip fills its cell, at least 8rem wide. Caption and sentence `--fs-xs`.
+Not inverted in dark.
+
+**States.**
+- Default: as above.
+- Hover: the tooltip (4.3) of the marked stretch under the pointer, after 500 ms, with its sentence.
+- Focus: the strip is one tab stop with the ring of the buttons; the tooltip shows the newest marked stretch at once.
+- Pressed: a long press on a touch screen shows the same tooltip (the one place a tooltip has a touch trigger, 4.3);
+  tapping elsewhere hides it.
+- Disabled: not applicable.
+- Loading: a skeleton track (10.3).
+- Error: the strip is left out and the table beside it stays; the card says "Could not read the history. <Hub's text>"
+  with **Try again** (`03-hub-page.md` section 2.4).
+
+**Behaviour and keyboard.** The sentence of a marked stretch is "<check text> <from> to <to>", with times as
+`2026-11-11 23:10` in `--mono` and "now" where the stretch still lasts: "Workshop X1 offline 2026-11-11 23:10 to
+2026-11-12 06:45". Left and Right Arrow move the tooltip to the previous or next marked stretch and announce its
+sentence (`announce()`); Escape hides it without moving focus. The range (7 or 30 days) belongs to the card that holds
+the strips, not to a strip.
+
+**Accessibility.** `role="img"` on a focusable wrapper (`tabindex="0"`), with `aria-label` "History of <check>, last 7
+days: needed a look 2 times. Newest: <sentence>." or "History of <check>, last 7 days: fine." and `aria-describedby`
+the tooltip. The drawn track is `aria-hidden`. Every change of the strip is a row of the history table (time, check,
+from, to), which is what a screen reader user reads.
+
+**Theme profiles.** No change.
+
+**Android.** Not used: the app shows the history table only (`05-android-app.md` section 12.8). Where it is ever drawn:
+a `Canvas` with `semantics { contentDescription = … }` carrying the same label.
+
+**HTML.**
+```html
+<span class="history-strip" role="img" tabindex="0" aria-describedby="tip-h1"
+      aria-label="History of Workshop X1 offline, last 7 days: needed a look 1 time. Newest: Workshop X1 offline 2026-11-11 23:10 to 2026-11-12 06:45.">
+  <svg class="history-strip__track" aria-hidden="true" viewBox="0 0 168 16">
+    <rect class="history-strip__plain" x="0" y="4" width="168" height="8"/>
+    <rect class="history-strip__span" data-state="look" x="42" y="0" width="12" height="16"/>
+  </svg>
+  <span class="history-strip__caption muted">Last 7 days</span>
+</span>
+<span class="tooltip" role="tooltip" id="tip-h1" hidden>Workshop X1 offline 2026-11-11 23:10 to 2026-11-12 06:45</span>
+```
+
+### 7.12 Monthly bars
+
+**Purpose.** Show one number per month over a year, here the filament used, as bars, with the value in words above each
+bar, and the same numbers as a table one tap away.
+
+**Anatomy.** A figure with: an inline SVG drawn by the page in the accent colour (no chart library), one bar per month,
+oldest on the left; above each bar the value in words in `mono` ("1.84 kg", "640 g", "0 g"); under each bar the month's
+short name ("Nov"), with the year on the first bar and on each January; a baseline at zero and nothing else (no grid
+lines and no axis numbers, because the value stands above each bar). The current month's label ends "so far". A caption
+sentence under the chart, and a ghost button **Show as table** that opens the table of the same numbers under the chart
+and then reads **Hide the table**.
+
+**Sizes and tokens.** Bars `--accent`, hover `--accent-hover`; the baseline 1 px `--border-strong`; a month with nothing
+is a flat tick and "0 g". The chart is `calc(var(--s7) * 3)` high at tablet and desktop width and as wide as its card;
+bars are as wide as the room allows less a `--s1` gap. Value labels `--fs-s`, month labels `--fs-xs` in `--muted`.
+Heights are scaled to the largest month with zero at the baseline. At phone width (up to 600 px) 12 values do not fit
+above 12 bars, so the bars lie flat: one row per month, newest on top, the month's name, a bar and its value at the end
+of the bar.
+
+**States.**
+- Default: as above.
+- Hover: the bar takes `--accent-hover`; nothing else moves (the value is already written).
+- Focus: the bars are not focusable; the button and the table are.
+- Pressed: as the button.
+- Disabled: not applicable.
+- Loading: skeleton bars (10.3).
+- Error: the figure is replaced by the error state (10.2); the page that holds it gives the text.
+
+**Behaviour and keyboard.** Nothing in the chart is interactive. The table is the accessible form and the exact one:
+the page gives its columns. Which printer is shown is the page's own choice (a segmented choice or a select above the
+figure), not part of the component; changing it redraws the figure and the table.
+
+**Accessibility.** The SVG is `role="img"` with `aria-labelledby` the caption, which names what it shows and the biggest
+month ("Filament used per month, last 12 months. The most was in November: 1.84 kg."); the value labels are
+`aria-hidden`. **Show as table** has `aria-expanded` and `aria-controls`.
+
+**Theme profiles.** No change.
+
+**Android.** A `Canvas` drawing bars in `colorScheme.primary` with `drawText` labels, only at tablet width and up, with
+`semantics { contentDescription = <the caption> }`; below that the table (a `Column` of rows) alone. **Show as table**
+is a `TextButton`.
+
+**HTML.**
+```html
+<figure class="month-bars">
+  <svg class="month-bars__chart" viewBox="0 0 360 160" role="img" aria-labelledby="mb-cap">
+    <g class="month-bars__bar" aria-hidden="true">
+      <text class="mono" x="326" y="24">1.84 kg</text>
+      <rect x="316" y="30" width="22" height="110"/>
+      <text x="326" y="156">Nov</text>
+    </g>
+    …
+    <line class="month-bars__base" x1="0" y1="140" x2="360" y2="140"/>
+  </svg>
+  <figcaption id="mb-cap">Filament used per month, last 12 months. The most was in November: 1.84 kg.</figcaption>
+  <button class="btn btn--ghost" type="button" aria-expanded="false" aria-controls="mb-table">Show as table</button>
+  <div id="mb-table" hidden>…</div>
+</figure>
+```
+
 ---
 
 ## 8. Progress and feedback
@@ -2996,7 +3116,9 @@ instead of under the row.
 that happened away from where the person is (unlock, lock, the end of a job).
 
 **Anatomy.** A small floating message: status shape, one sentence, optionally one action ("Undo", "Show"), and a
-close button when it has an action.
+close button when it has an action. A toast carries one button and no more. After an action that can be undone
+(`03-hub-page.md` section 2.9) the sentence says what happened and the button is **Undo**: "Moved Bambu Lab PETG HF
+Orange (212) to Shelf B." with **Undo**.
 
 **Sizes and tokens.** Width `min(25rem, 100vw - 2 * var(--s4))`; `--surface`, 1 px `--border-strong`, `--r`, `--e2`;
 padding `var(--s3) var(--s4)`, gap `--s2`, `--fs-m`. Wide screens: stacked at the top
@@ -3004,7 +3126,9 @@ right below the top bar (newest on top); phones: above the bottom bar and the jo
 gutters (newest at the bottom). Arrives over `--t` (fade and a `--s1` slide; fade only with reduced motion).
 
 **States.**
-- Default: visible for 5 s (10 s with an action), then leaves.
+- Default: visible for 5 s (10 s with an action, so an Undo stays for 10 s), then leaves. For a person who asked for
+  no time limits a toast with an action stays until it is dismissed or its action is pressed (`07-accessibility.md`
+  TIM-7).
 - Hover: the timer pauses while the pointer is over it.
 - Focus: the timer pauses while its action has focus.
 - Pressed: action as 4.1.
@@ -3014,8 +3138,11 @@ gutters (newest at the bottom). Arrives over `--t` (fade and a `--s1` slide; fad
   need action are inline results or banners, never only a toast.
 
 **Behaviour and keyboard.** At most three at once; a fourth replaces the oldest. A toast never takes focus. Every
-toast action is also available in the page (Undo of a usage entry is in its list; Show opens the job strip from the
-chip), so nothing depends on catching a toast in time.
+toast action is also available in the page (Undo of a usage entry is in its list; Undo of a spool change or a slot
+action is in Logs > Activity, `03-hub-page.md` section 13; Show opens the job strip from the chip), so nothing depends
+on catching a toast in time. **Undo** asks the Hub to undo the event; the toast's sentence is then replaced by the
+answer, "Put back." or the Hub's refusal ("This changed again since, so it cannot be undone."), and the toast stays 5 s
+more. After a load or an unload the answer adds "The printer still shows what it was set to." (03 section 2.9).
 
 An alert that arrives while the Hub page, the web app or the Android app is open also shows a toast with the alert's
 title and the action "Show" (8.8, the alert banner); the toast is only the arrival, the banner and the Alerts list
@@ -3028,7 +3155,8 @@ is a real button with a full name ("Undo: put 12 g back on spool 214").
 
 **Android.** `Snackbar` through `SnackbarHostState` with `SnackbarDuration.Indefinite`, dismissed by the host's own
 timer after 5 s (10 s with an `actionLabel`), the same times as the web; the timer pauses while TalkBack focus is on
-it.
+it. A Snackbar with an action takes its time from `AccessibilityManager.getRecommendedTimeoutMillis` and, with
+TalkBack on, stays until it is dismissed (`withDismissAction = true`), as TIM-7 says.
 
 **HTML.**
 ```html
@@ -3506,3 +3634,6 @@ here applies.
 | `offset` (or a page number) on spool and filament searches (`GET find`, `GET filaments?q=`) that today stop at a fixed count and report `truncated` | Collection paging (6.1) | The first page is shown with "Showing the first 60. Narrow the search to see others." |
 | Error replies that name the field they concern (a `field` key beside `error`) | Field errors from the Hub (5.1) | The error is shown in the form's result area |
 | Every refusal reply carries `message`, one sentence for people that says what was refused and what to do; for a printer that refuses a command, the Hub turns the printer's answer into that sentence, so every interface shows the same words | Inline result (8.6), the printer controls of `04-web-app.md` 6.4 and `05-android-app.md` 9.4, errors of `06-command-line.md` 6.5 | Each interface shows the reply's `error` text, or its own sentence for that action (8.6); never the raw reply |
+| `GET api/health` answering the checks with their stretches and the changes (`03-hub-page.md` section 15) | History strip (7.11) | The strips are left out and the Checks show as they did |
+| `GET api/analytics` answering the months and the insights (`03-hub-page.md` section 15) | Monthly bars (7.12) | The Analytics section shows the error state "Could not read the usage. <Hub's text>" with **Try again** |
+| `POST api/events/{id}/undo` and the `undo` field of every served event | Toast with Undo (8.7) | The toast carries no button |
