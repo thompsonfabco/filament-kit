@@ -3,6 +3,7 @@ package com.thompsonfabco.filamentkit.ui.printers
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.thompsonfabco.filamentkit.R
+import com.thompsonfabco.filamentkit.net.ActivityEvent
 import com.thompsonfabco.filamentkit.net.AmsSlot
 import com.thompsonfabco.filamentkit.net.AmsUnit
 import com.thompsonfabco.filamentkit.net.Api
@@ -17,6 +18,11 @@ import com.thompsonfabco.filamentkit.net.PrinterStatus
 import com.thompsonfabco.filamentkit.net.PrinterSummary
 import com.thompsonfabco.filamentkit.net.SlotSpool
 import com.thompsonfabco.filamentkit.net.UnloadResult
+import com.thompsonfabco.filamentkit.ui.history.ActivityBackend
+import com.thompsonfabco.filamentkit.ui.history.UndoFlow
+import com.thompsonfabco.filamentkit.ui.history.UndoKinds
+import com.thompsonfabco.filamentkit.ui.history.UndoOffer
+import com.thompsonfabco.filamentkit.ui.history.UndoOutcome
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -34,7 +40,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
 
 /** The printer calls the view models need; [ApiPrinterBackend] adapts [Api], tests pass a fake. */
-interface PrinterBackend {
+interface PrinterBackend : ActivityBackend {
     suspend fun printers(): List<Printer>
     suspend fun addPrinter(serial: String, accessCode: String, name: String?): Printer
     suspend fun addKlipperPrinter(host: String, port: Int, name: String?): Printer
@@ -68,6 +74,8 @@ class ApiPrinterBackend(private val current: () -> Api) : PrinterBackend, Printe
     override suspend fun command(id: String, action: String) = api.command(id, action)
     override suspend fun unload(id: String, label: String, dryRun: Boolean) = api.unload(id, label, dryRun)
     override suspend fun clearSlot(id: String, label: String, dryRun: Boolean) = api.clearSlot(id, label, dryRun)
+    override suspend fun activity(subject: String, limit: Int) = api.activity(subject, limit)
+    override suspend fun undoEvent(id: Long) = api.undoEvent(id)
     override suspend fun startMap(id: String) = api.startMap(id)
     override suspend fun mapStatus(id: String) = api.mapStatus(id)
     override suspend fun report(id: String) = api.printerReport(id)
@@ -276,6 +284,8 @@ data class PrinterUiState(
     val clearAsk: ClearAsk? = null,
     /** The clear itself is being written: the question stays open and cannot be left. */
     val clearing: Boolean = false,
+    /** What the last unload or clear offers to undo on the Hub (R84 3.3); the screen shows its toast and calls [PrinterViewModel.offerShown]. */
+    val undoOffer: UndoOffer? = null,
 ) {
     val loaded: Boolean get() = printer != null
     val paused: Boolean get() = status?.gcodeState == "PAUSE"
@@ -307,6 +317,8 @@ class PrinterViewModel(
     val printerId: String get() = id
 
     private var poll: Job? = null
+    private val undoFlow = UndoFlow(backend)
+    private var offers = 0L
 
     fun start() {
         if (poll?.isActive == true) return
@@ -395,6 +407,7 @@ class PrinterViewModel(
                     )
                 }
                 done = true
+                offerUndo(listOfNotNull(ask.spoolId?.let { "spool:$it" }), UndoKinds.UNLOADED)
             }
             _state.update { it.copy(unloading = false, unloadAsk = null) }
             if (done) refresh() // the slot now shows no spool
@@ -441,10 +454,35 @@ class PrinterViewModel(
                 val text = PrinterTexts.clearDone(ask.label, ask.spool, r.movedBack ?: ask.place, r.waitingEnded, r.printerCleared, note)
                 _state.update { it.copy(slotNote = Note(Say.FromHub(text))) }
                 done = true
+                // the event may name the spool or the printer: both are looked in
+                offerUndo(listOfNotNull(r.spool?.get("id")?.let { (it as? JsonPrimitive)?.contentOrNull }?.let { "spool:$it" }, "printer:$id"), UndoKinds.SLOT_CLEARED)
             }
             _state.update { it.copy(clearing = false, clearAsk = null) }
             if (done) refresh() // the slot now shows no spool
         }
+    }
+
+    // --- Undo on the Hub (R84 3) ---
+
+    private fun offerUndo(subjects: List<String>, kind: String) {
+        if (subjects.isEmpty()) return
+        _state.update { it.copy(undoOffer = UndoOffer(subjects, setOf(kind), ++offers)) }
+    }
+
+    /** The screen took the offer (it shows the toast or has nothing to show). */
+    fun offerShown() = _state.update { it.copy(undoOffer = null) }
+
+    /** The event the offer's action wrote and the Hub lets be undone; null on an older Hub or when there is none. */
+    suspend fun findUndo(offer: UndoOffer): ActivityEvent? = undoFlow.find(offer)
+
+    /** Undo on the Hub; when it is done the printer is read again (its slots changed back). */
+    suspend fun undoOnHub(event: ActivityEvent): UndoOutcome {
+        val outcome = undoFlow.undo(event)
+        if (outcome is UndoOutcome.Done) {
+            _state.update { it.copy(slotNote = null, slotAlso = null) }
+            refresh()
+        }
+        return outcome
     }
 
     private fun send(action: String) {

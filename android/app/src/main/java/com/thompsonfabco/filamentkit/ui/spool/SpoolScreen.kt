@@ -65,6 +65,9 @@ import com.thompsonfabco.filamentkit.ui.components.SwMenuItem
 import com.thompsonfabco.filamentkit.ui.components.SwProgress
 import com.thompsonfabco.filamentkit.ui.components.SwSheet
 import com.thompsonfabco.filamentkit.ui.components.SwSkeletonRows
+import com.thompsonfabco.filamentkit.ui.history.showUndoable
+import com.thompsonfabco.filamentkit.ui.history.spoolResultToastText
+import com.thompsonfabco.filamentkit.ui.history.undoHoldMs
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -88,16 +91,25 @@ fun SpoolScreen(
     val space = SpoolwardenTheme.space
     val toast = LocalToast.current
     val scope = rememberCoroutineScope()
-    val moved = ui.moveToast
+    val offer = ui.undoOffer
     val undo = stringResource(R.string.common_undo)
-    val movedText = moved?.let { stringResource(R.string.spool_result_moved, it.location) }
-    // the result of a move is a notice line and, because the sheet has gone, a toast with Undo
-    LaunchedEffect(moved) {
-        if (moved == null || movedText == null) return@LaunchedEffect
+    val context = LocalContext.current
+    val offerText = ui.result?.let { spoolResultToastText(it) }
+    // an action the Hub may undo: a toast says what happened, with Undo for 10 seconds (R84 3.3); an older Hub has no
+    // Undo, so a move keeps its own (back to where it was)
+    LaunchedEffect(offer) {
+        if (offer == null || offerText == null) return@LaunchedEffect
+        val moved = ui.moveToast
+        vm.offerShown()
         vm.toastShown()
         scope.launch {
-            val answer = toast?.show(movedText, if (moved.previous != null) undo else null)
-            if (answer == androidx.compose.material3.SnackbarResult.ActionPerformed && moved.previous != null) vm.undoMove(moved.previous)
+            val event = vm.findUndo(offer)
+            if (event != null || moved == null) {
+                toast?.showUndoable(offerText, undo, event, undoHoldMs(context), vm::undoOnHub)
+            } else {
+                val answer = toast?.show(offerText, if (moved.previous != null) undo else null)
+                if (answer == androidx.compose.material3.SnackbarResult.ActionPerformed && moved.previous != null) vm.undoMove(moved.previous)
+            }
         }
     }
 

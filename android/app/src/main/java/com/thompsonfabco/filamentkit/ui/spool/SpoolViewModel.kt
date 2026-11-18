@@ -3,7 +3,12 @@ package com.thompsonfabco.filamentkit.ui.spool
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.thompsonfabco.filamentkit.net.ActivityEvent
 import com.thompsonfabco.filamentkit.net.StorageAnswer
+import com.thompsonfabco.filamentkit.ui.history.UndoFlow
+import com.thompsonfabco.filamentkit.ui.history.UndoOffer
+import com.thompsonfabco.filamentkit.ui.history.UndoOutcome
+import com.thompsonfabco.filamentkit.ui.history.undoOfferFor
 import com.thompsonfabco.filamentkit.ui.parseWeight
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -83,6 +88,8 @@ data class SpoolUi(
     val confirmEmpty: Boolean = false,
     val emptying: Boolean = false,
     val moveToast: MoveToast? = null,
+    /** What the last action offers to undo on the Hub (R84 3.3); the screen shows its toast and calls [SpoolViewModel.offerShown]. */
+    val undoOffer: UndoOffer? = null,
 ) {
     /** A write is in flight: Back, the scrim and Cancel wait for its answer. */
     val writing: Boolean get() = weight?.saving == true || move?.movingTo != null || emptying
@@ -109,6 +116,8 @@ class SpoolViewModel(
     val state: StateFlow<SpoolUi> = _state.asStateFlow()
     private var previewJob: Job? = null
     private var refreshing: Job? = null
+    private val undoFlow = UndoFlow(backend, now)
+    private var offers = 0L
 
     init {
         // a result the screen that was open over this one ended with (a load) is put into this entry's saved state
@@ -120,10 +129,12 @@ class SpoolViewModel(
                 _state.update {
                     it.copy(result = result, spool = SpoolCache.get(id) ?: it.spool, loadedAt = now(), failure = it.failure.afterSuccess())
                 }
+                offerUndo(result)
             }
         }
         restoredWeight?.let { if (parseWeight(it.text) != null) startPreview(it.text) }
         if (initial == null) refresh()
+        startResult?.let { offerUndo(it) }
     }
 
     private fun shown(spool: SpoolSummary) = spool.also(SpoolCache::put)
@@ -207,6 +218,7 @@ class SpoolViewModel(
                     failure = it.failure.afterSuccess(),
                 )
             }
+            offerUndo(SpoolResult.WeightUpdated(updated.remaining))
         }
     }
 
@@ -311,6 +323,7 @@ class SpoolViewModel(
                     moveToast = if (fromSheet) MoveToast(location, previous) else null, failure = it.failure.afterSuccess(),
                 )
             }
+            if (fromSheet) offerUndo(SpoolResult.Moved(location))
         }
     }
 
@@ -347,7 +360,34 @@ class SpoolViewModel(
                     result = SpoolResult.MarkedEmpty, failure = it.failure.afterSuccess(),
                 )
             }
+            offerUndo(SpoolResult.MarkedEmpty)
         }
+    }
+
+    // --- Undo on the Hub (R84 3) ---
+
+    /** An action that the Hub can undo was written: the screen shows its toast. */
+    private fun offerUndo(result: SpoolResult) {
+        val offer = undoOfferFor(id, result, ++offers) ?: return
+        _state.update { it.copy(undoOffer = offer) }
+    }
+
+    /** The screen took the offer (it shows the toast or has nothing to show). */
+    fun offerShown() {
+        _state.update { it.copy(undoOffer = null) }
+    }
+
+    /** The event the offer's action wrote and the Hub lets be undone; null on an older Hub or when there is none. */
+    suspend fun findUndo(offer: UndoOffer): ActivityEvent? = undoFlow.find(offer)
+
+    /** Undo on the Hub; when it is done the spool is read again and the result line, which is no longer true, goes. */
+    suspend fun undoOnHub(event: ActivityEvent): UndoOutcome {
+        val outcome = undoFlow.undo(event)
+        if (outcome is UndoOutcome.Done) {
+            _state.update { it.copy(result = null) }
+            refresh()
+        }
+        return outcome
     }
 
     // --- plumbing ---

@@ -28,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -53,7 +54,11 @@ import com.thompsonfabco.filamentkit.net.PrinterStatus
 import com.thompsonfabco.filamentkit.net.SlotSpool
 import com.thompsonfabco.filamentkit.net.Temp
 import com.thompsonfabco.filamentkit.ui.ColorSwatch
+import com.thompsonfabco.filamentkit.ui.components.LocalToast
 import com.thompsonfabco.filamentkit.ui.components.NoticeCard
+import com.thompsonfabco.filamentkit.ui.history.showUndoable
+import com.thompsonfabco.filamentkit.ui.history.undoHoldMs
+import kotlinx.coroutines.launch
 import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 import com.thompsonfabco.filamentkit.ui.components.ScreenState
 import com.thompsonfabco.filamentkit.ui.components.ScreenTopBarActions
@@ -157,6 +162,21 @@ fun PrinterScreen(
                     ShareOutcome.NotWritten -> Say.Words(R.string.common_hub_answer_unknown)
                 },
             )
+        }
+    }
+    // an unload or a clear the Hub may undo: a toast says what happened, with Undo for 10 seconds (R84 3.3)
+    val toast = LocalToast.current
+    val toastScope = rememberCoroutineScope()
+    val undoLabel = stringResource(R.string.common_undo)
+    val offer = state.undoOffer
+    val offerText = state.slotNote?.say?.let { sayText(it) }
+    LaunchedEffect(offer) {
+        if (offer == null || offerText == null) return@LaunchedEffect
+        viewModel.offerShown()
+        // its own scope: the offer going away must not cut the toast short
+        toastScope.launch {
+            val event = viewModel.findUndo(offer)
+            toast?.showUndoable(offerText, undoLabel, event, undoHoldMs(context), viewModel::undoOnHub)
         }
     }
     // the slot sheet closes when the unload or clear question opens

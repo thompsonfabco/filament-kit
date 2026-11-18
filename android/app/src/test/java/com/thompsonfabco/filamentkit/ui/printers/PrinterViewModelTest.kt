@@ -4,7 +4,12 @@ import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.AmsSlot
 import com.thompsonfabco.filamentkit.net.AmsUnit
 import com.thompsonfabco.filamentkit.net.ClearResult
+import com.thompsonfabco.filamentkit.net.ActivityEvent
 import com.thompsonfabco.filamentkit.net.ApiError
+import com.thompsonfabco.filamentkit.net.UndoAnswer
+import com.thompsonfabco.filamentkit.net.UndoState
+import com.thompsonfabco.filamentkit.ui.history.UndoKinds
+import com.thompsonfabco.filamentkit.ui.history.UndoOutcome
 import com.thompsonfabco.filamentkit.net.CommandResult
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
 import com.thompsonfabco.filamentkit.net.Printer
@@ -111,6 +116,13 @@ class PrinterViewModelTest {
             clears += label to dryRun
             clearError?.let { throw it }
             return clearResult.copy(slot = label, dryRun = dryRun)
+        }
+        var events: List<ActivityEvent> = emptyList()
+        override suspend fun activity(subject: String, limit: Int): List<ActivityEvent> = events.filter { it.subject == subject }
+        val undone = mutableListOf<Long>()
+        override suspend fun undoEvent(id: Long): UndoAnswer {
+            undone += id
+            return UndoAnswer(true, id + 1, "The printer still shows what it was set to.")
         }
         val unloads = mutableListOf<Pair<String, Boolean>>()
         var unloadError: Exception? = null
@@ -739,6 +751,58 @@ class PrinterViewModelTest {
         assertEquals(UnloadAsk("Ext-L", "Acme PETG Green", 5, "Sealed stock"), vm.state.value.unloadAsk)
         vm.confirmUnload(); runCurrent()
         assertEquals(Note(Say.Words(R.string.printer_unload_done, listOf("Ext-L", 5, "Sealed stock"))), vm.state.value.slotNote)
+        vm.stop()
+    }
+
+    // --- Undo on the Hub (R84 3) ---
+
+    private fun event(id: Long, kind: String, subject: String) =
+        ActivityEvent(id, "2026-11-17T04:00:00Z", null, kind, "Pixel", "x", subject, UndoState(true, null, null), false, null)
+
+    @Test fun anUnloadOffersUndoLookedForOnTheSpoolsEvents() = runTest(dispatcher) {
+        withSlots()
+        backend.events = listOf(event(31, "spool.unloaded", "spool:7"))
+        val vm = vm()
+        vm.start(); runCurrent()
+        vm.askUnload(a1); runCurrent()
+        assertNull(vm.state.value.undoOffer)
+        vm.confirmUnload(); runCurrent()
+        val offer = vm.state.value.undoOffer!!
+        assertEquals(listOf("spool:7"), offer.subjects)
+        assertEquals(setOf(UndoKinds.UNLOADED), offer.kinds)
+        vm.offerShown()
+        assertNull(vm.state.value.undoOffer)
+        val calls = backend.printerCalls
+        val outcome = vm.undoOnHub(event(31, "spool.unloaded", "spool:7"))
+        assertEquals(UndoOutcome.Done("Put back. The printer still shows what it was set to."), outcome)
+        assertEquals(listOf(31L), backend.undone)
+        assertNull("the result line no longer holds", vm.state.value.slotNote)
+        runCurrent()
+        assertTrue("the printer is read again", backend.printerCalls > calls)
+        vm.stop()
+    }
+
+    @Test fun aClearOffersUndoOnTheSpoolAndThePrinter() = runTest(dispatcher) {
+        withSlots(family = "klipper")
+        backend.clearResult = backend.clearResult.copy(spool = recorded, movedBack = "Shelf 2", printerCleared = true)
+        val vm = vm()
+        vm.start(); runCurrent()
+        vm.askClear(a1); runCurrent()
+        vm.confirmClear(); runCurrent()
+        val offer = vm.state.value.undoOffer!!
+        assertEquals(listOf("spool:7", "printer:0948AB"), offer.subjects)
+        assertEquals(setOf(UndoKinds.SLOT_CLEARED), offer.kinds)
+        vm.stop()
+    }
+
+    @Test fun aFailedUnloadOffersNoUndo() = runTest(dispatcher) {
+        withSlots()
+        val vm = vm()
+        vm.start(); runCurrent()
+        vm.askUnload(a1); runCurrent()
+        backend.unloadError = ApiError(409, "printer_busy", "busy")
+        vm.confirmUnload(); runCurrent()
+        assertNull(vm.state.value.undoOffer)
         vm.stop()
     }
 
