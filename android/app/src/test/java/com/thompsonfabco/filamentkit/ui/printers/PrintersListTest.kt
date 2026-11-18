@@ -11,6 +11,8 @@ import com.thompsonfabco.filamentkit.net.Printer
 import com.thompsonfabco.filamentkit.net.PrinterDetail
 import com.thompsonfabco.filamentkit.net.PrinterStatus
 import com.thompsonfabco.filamentkit.net.PrinterSummary
+import com.thompsonfabco.filamentkit.net.SlotPending
+import com.thompsonfabco.filamentkit.net.SlotSpool
 import com.thompsonfabco.filamentkit.net.UnloadResult
 import com.thompsonfabco.filamentkit.ui.components.StatusKind
 import kotlinx.coroutines.CompletableDeferred
@@ -171,6 +173,23 @@ class PrintersListTest {
         vm.refresh(); runCurrent()
         assertEquals(listOf("A"), backend.detailCalls)
         assertEquals(listOf(SlotLook("2B2B2E", false), SlotLook("", true)), vm.state.value.swatches["A"])
+    }
+
+    @Test fun aWaitingSlotKeepsItsColourAndIsMarked() = runTest(dispatcher) {
+        val up = printer("A")
+        backend.list = listOf(up)
+        backend.details["A"] = detail(
+            up, AmsSlot(0, "A1", "", "", present = false, pending = SlotPending(7)),
+            AmsSlot(1, "A2", "", "", present = false, spool = SlotSpool(id = 7, colorHex = "E0A030"), pending = SlotPending(7)),
+        )
+        val vm = PrintersViewModel(backend)
+        vm.refresh(); runCurrent()
+        val looks = vm.state.value.swatches["A"].orEmpty()
+        assertEquals(listOf(true, true), looks.map { it.waiting })
+        assertEquals("no colour known: the dashed ring stays", true, looks[0].drawnEmpty)
+        assertEquals("colour known: drawn in it", false, looks[1].drawnEmpty)
+        assertEquals("E0A030", looks[1].hex)
+        assertEquals(true, SlotLook("", true).drawnEmpty)
     }
 
     @Test fun aPrinterThatDoesNotAnswerHasNoSwatchesAndTheListStays() = runTest(dispatcher) {

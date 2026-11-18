@@ -6,6 +6,7 @@ import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
 import com.thompsonfabco.filamentkit.net.KlipperFound
 import com.thompsonfabco.filamentkit.net.Printer
+import com.thompsonfabco.filamentkit.ui.swatchColor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -50,8 +51,14 @@ internal fun problemOf(e: ApiError): Problem = when (e.code) {
     else -> Problem.HubSaid(e.message)
 }
 
-/** One slot of a printer as the list's swatch row draws it. */
-data class SlotLook(val hex: String, val empty: Boolean)
+/**
+ * One slot of a printer as the list's swatch row draws it. A [waiting] slot has a spool assigned that has not loaded yet
+ * (R83 section 3.5): it shows the spool's colour when it is known, with a clock mark beside it.
+ */
+data class SlotLook(val hex: String, val empty: Boolean, val waiting: Boolean = false) {
+    /** True when the swatch is the dashed ring of a free slot: empty, and not a waiting one whose colour is known. */
+    val drawnEmpty: Boolean get() = empty && !(waiting && swatchColor(hex) != null)
+}
 
 /** "Add Bambu Lab <model>": the form for a printer the Hub found. */
 data class AddDialog(
@@ -148,7 +155,7 @@ class PrintersViewModel(
             async {
                 try {
                     val slots = backend.printer(p.id).status?.ams.orEmpty().flatMap { it.slots }
-                    p.id to slots.map { SlotLook(it.colorHex, PrinterHelp.slotEmpty(it)) }
+                    p.id to slots.map { SlotLook(it.colorHex.ifBlank { it.spool?.colorHex.orEmpty() }, PrinterHelp.slotEmpty(it), PrinterHelp.slotWaiting(it)) }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: FingerprintMismatch) {

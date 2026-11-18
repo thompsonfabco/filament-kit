@@ -170,6 +170,9 @@ sealed interface SpoolResult {
     /** The printer accepted the load but has not shown the change yet: a warn line. */
     data class LoadedUnconfirmed(val printer: String, val slot: String) : SpoolResult
 
+    /** The Hub assigned the spool to the slot and it waits for the slot to load (`pending: true`, R83 section 3.5). */
+    data class Waiting(val printer: String, val slot: String) : SpoolResult
+
     /** The result as one text, to hand it to the spool screen through its saved state or its route. */
     fun encode(): String = when (this) {
         is WeightUpdated -> listOf(WEIGHT, left?.toString().orEmpty())
@@ -179,6 +182,7 @@ sealed interface SpoolResult {
         TagMoved -> listOf(TAG_MOVED)
         is Loaded -> listOf(LOADED, printer, slot)
         is LoadedUnconfirmed -> listOf(UNCONFIRMED, printer, slot)
+        is Waiting -> listOf(WAITING, printer, slot)
     }.joinToString(SEPARATOR)
 
     companion object {
@@ -190,6 +194,7 @@ sealed interface SpoolResult {
         private const val TAG_MOVED = "5"
         private const val LOADED = "6"
         private const val UNCONFIRMED = "7"
+        private const val WAITING = "8"
 
         /** The result [encode] made; null for anything else. */
         fun decode(text: String): SpoolResult? {
@@ -202,6 +207,7 @@ sealed interface SpoolResult {
                 p[0] == TAG_MOVED -> TagMoved
                 p[0] == LOADED && p.size == 3 -> Loaded(p[1], p[2])
                 p[0] == UNCONFIRMED && p.size == 3 -> LoadedUnconfirmed(p[1], p[2])
+                p[0] == WAITING && p.size == 3 -> Waiting(p[1], p[2])
                 else -> null
             }
         }

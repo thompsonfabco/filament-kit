@@ -51,6 +51,13 @@ class LoadGate {
     }
 }
 
+/** What a finished load says: waiting when the Hub assigned it to a slot that has not loaded yet, else confirmed or not. */
+internal fun loadResult(r: LoadResult, printer: String, label: String): SpoolResult = when {
+    r.pending -> SpoolResult.Waiting(printer, label)
+    r.confirmed -> SpoolResult.Loaded(printer, label)
+    else -> SpoolResult.LoadedUnconfirmed(printer, label)
+}
+
 /** The printers that can take a load now: set up and connected (05 7.6). */
 internal fun canTakeLoad(p: Printer): Boolean = p.configured && p.state == Printer.STATE_CONNECTED
 
@@ -189,7 +196,7 @@ class LoadPreviewViewModel(
         viewModelScope.launch {
             try {
                 val r = backend.load(printerId, label, spool.id, dryRun = false)
-                val result = if (r.confirmed) SpoolResult.Loaded(printer.name, label) else SpoolResult.LoadedUnconfirmed(printer.name, label)
+                val result = loadResult(r, printer.name, label)
                 // the spool as the Hub has it now, for the spool screen that is shown next
                 r.spool.asSummary()?.let(SpoolCache::put)
                 _state.update { it.copy(writing = false, finished = result) }
