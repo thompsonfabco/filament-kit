@@ -13,8 +13,8 @@ from filament_kit import config, setup_helper, storage
 from test_hub_page_audit import _run, hub_app, hub_change  # noqa: F401
 from test_hub_presets_ui import _drive, T, hub  # noqa: F401
 
-GROUPS = ["appearance", "general", "storage", "label-reader", "backups", "network", "passphrase", "catalog", "voice"]
-NAMES = ["Appearance", "General", "Storage locations", "Label Reader", "Backups and restore", "Network and addresses",
+GROUPS = ["appearance", "general", "storage", "alerts", "label-reader", "backups", "network", "passphrase", "catalog", "voice"]
+NAMES = ["Appearance", "General", "Storage locations", "Alerts", "Label Reader", "Backups and restore", "Network and addresses",
          "Web passphrase", "Filament Catalog", "Weigh Station voice"]
 
 PRELUDE = """const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -205,7 +205,7 @@ def test_the_audit_passes_on_every_group_at_320_and_1280_px_in_light_and_dark(hu
 WAIT_GROUPS = """const waitGroups = async () => {
   location.hash = "#settings";
   const until = async (f) => { for (let i = 0; i < 300 && !f(); i++) await new Promise((r) => setTimeout(r, 100)); };
-  await until(() => document.querySelectorAll(".settings__group").length === 9 && !document.querySelector('main [aria-busy="true"]:not(button)')
+  await until(() => document.querySelectorAll(".settings__group").length === 10 && !document.querySelector('main [aria-busy="true"]:not(button)')
     && document.querySelector('.settings__group[data-id="voice"] .group'));
 };
 """
