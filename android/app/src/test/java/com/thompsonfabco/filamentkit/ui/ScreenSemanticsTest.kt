@@ -754,7 +754,7 @@ open class ScreenSemanticsTest {
         // the lines and "Change parent" moved to the Slicer presets screen (S4.14)
         rule.onNodeWithText("Existing lines").assertDoesNotExist()
         rule.onNodeWithText("Change parent").assertDoesNotExist()
-        auditAllFour("Save to the catalog", CATALOG_SECTIONS)
+        auditAllFour("Add", CATALOG_SECTIONS)
     }
 
     @Test fun catalogLineWhileSavingBlocksBack() {
@@ -822,9 +822,9 @@ open class ScreenSemanticsTest {
         fillCatalog(vm)
         rule.waitForIdle()
         rule.onNodeWithText("This phone is no longer paired with the Hub.").assertExists()
-        rule.onNodeWithText("Save to the catalog").assertIsNotEnabled()
+        rule.onNodeWithText("Add").assertIsNotEnabled()
         rule.onNodeWithText("Example Filaments").assertExists()
-        auditAllFour("Save to the catalog", CATALOG_SECTIONS)
+        auditAllFour("Add", CATALOG_SECTIONS)
     }
 
     private fun fillCatalog(vm: AddProfileViewModel) {
@@ -843,7 +843,7 @@ open class ScreenSemanticsTest {
         rule.onNodeWithText("The Hub could not use these values:").assertExists()
         // the notice lists the problem and the Density field carries it again under itself
         assertEquals(2, rule.onAllNodesWithText(DENSITY_PROBLEM, substring = true).fetchSemanticsNodes().size)
-        auditAllFour("Save to the catalog", CATALOG_SECTIONS)
+        auditAllFour("Add", CATALOG_SECTIONS)
     }
 
     // ---- Add spools (S4.7): every step and its states, drawn under the top bar "Add spools" ----
@@ -1656,6 +1656,6 @@ open class ScreenSemanticsTest {
 
     private companion object {
         const val DENSITY_PROBLEM = "fields.filament_density '9' is outside 0.5-3.0 g/cm3"
-        val CATALOG_SECTIONS = listOf("Line", "Temperatures", "Material", "Slicer", "Notes")
+        val CATALOG_SECTIONS = listOf("Line") // the other groups sit under the closed "More (optional)"
     }
 }

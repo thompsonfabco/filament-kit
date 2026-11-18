@@ -1,0 +1,1 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/profile/AddProfileScreen.kt | ${} $line | text of the EV7b screens; moves to the string catalogue with EV2, its proposed key is in the EV7b report
