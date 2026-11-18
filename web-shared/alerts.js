@@ -300,7 +300,14 @@ async function poll() {
       const before = state.cursor, lim = `&limit=${opts.limit}`;
       const from = state.cursor == null ? `since_at=${new Date(clock() - WEEK).toISOString().replace(/\.\d+Z$/, "Z")}${lim}` : `since=${state.cursor}${state.first ? lim : ""}`;
       const q = `${from}&alert=1&wait=0&client=${encodeURIComponent(clientId())}`;
-      ingest(await (opts.api || SW.api)("events?" + q));
+      const res = await (opts.api || SW.api)("events?" + q);
+      // the Hub's ids went back (restored from a backup, or reinstalled): our cursor is from another store, so start over as the first call does
+      if (state.cursor != null && res && res.next != null && Number(res.next) < state.cursor) {
+        Object.assign(state, { cursor: null, events: new Map(), first: true });
+        more = true;
+        continue;
+      }
+      ingest(res);
       more = state.first && state.cursor !== before;
       if (state.first && !more) state.first = false;          // a full answer that moved nothing: stop paging
     }

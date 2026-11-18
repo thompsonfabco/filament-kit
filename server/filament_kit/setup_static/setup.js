@@ -446,5 +446,6 @@ document.addEventListener("DOMContentLoaded", () => {
     window.scrollTo(0, 0);
     if (S) render(); else pageTitle.textContent = SW.t(TABS[tabNow()][0]);
   } });
+  if (typeof mountAlerts === "function") mountAlerts(main);     // setup_alertbar.js: the alert banners above the page header (03 2.8)
   loadTrust().then(refresh);
 });
