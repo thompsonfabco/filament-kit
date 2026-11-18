@@ -177,6 +177,19 @@ const SCENARIOS = {
     await A.poll(); out.testToasts = toasts().filter((x) => x === "Test alert"); await A.poll(); out.testOnce = toasts().filter((x) => x === "Test alert").length;
     return out;
   },
+  async hub_restored() {    // the Hub came back from a backup: its ids are lower than our cursor; the poller starts over, no replay
+    await window.__ready;
+    await fresh();
+    const out = {};
+    raise("print.paused", "warn", "print-paused:p-3", { data: { job: "a.3mf", percent: 5, reason: "user" } });
+    add(ev({ kind: "print.failed", severity: "bad", data: { job: "z.3mf", percent: 2 } }));
+    await A.poll(); out.before = banners().length; out.toastsBefore = toasts().length; const high = A.state().cursor;
+    hub.events = []; hub.conditions = [];              // restored: an empty store, ids start again
+    const e = ev({ kind: "storage.low", severity: "warn", condition: { key: "storage-low", state: "raised" }, subject: { type: "hub", id: "hub", name: "Hub" }, data: { free: 5e9, total: 64e9, percent: 90 }, action: { place: "storage-use" } });
+    e.id = 1; add(e);
+    await A.poll(); out.after = banners().map((b) => b.title); out.cursorLower = A.state().cursor < high; out.toastsAfter = toasts().length;
+    return out;
+  },
   async late_roles() {    // present at open: plain; arrived later: announced
     await window.__ready;
     const atOpen = banners().map((b) => b.role);

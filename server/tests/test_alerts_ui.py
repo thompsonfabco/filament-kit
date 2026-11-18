@@ -160,6 +160,13 @@ def test_gap_resyncs_and_test_alert_arrives_once(site, tmp_path):
     assert out["testToasts"] == ["Test alert"] and out["testOnce"] == 1
 
 
+def test_a_restored_hub_with_lower_ids_resets_the_cursor(site, tmp_path):
+    out = _drive(site, "hub_restored", tmp_path)
+    assert out["before"] == 2 and out["cursorLower"] is True
+    assert out["after"] == ["Storage on the Hub is almost full"]       # the old banners left; nothing was replayed as a toast
+    assert out["toastsAfter"] == out["toastsBefore"]
+
+
 def test_late_banners_are_announced_and_early_ones_are_plain(site, tmp_path):
     out = _drive(site, "late_roles", tmp_path, "scenario=blank")
     assert out["atOpen"] == []
