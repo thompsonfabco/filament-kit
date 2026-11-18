@@ -49,7 +49,7 @@ def test_scenario_i_is_registered_and_needs_a_clean_host(e2e):
     assert e2e.NEEDS["i"] == "clean"
 
 
-def test_the_run_holds_443_and_scenario_i_lets_go(e2e):
+def test_the_run_holds_443_and_scenario_i_lets_go(e2e, monkeypatch):
     held = []
 
     class FakeSocket:
@@ -68,7 +68,7 @@ def test_the_run_holds_443_and_scenario_i_lets_go(e2e):
         def close(self):
             self.closed = True
 
-    e2e.socket.socket = FakeSocket                       # the module's own reference; the test module is thrown away
+    monkeypatch.setattr(e2e.socket, "socket", FakeSocket)      # restored after the test
     run = e2e.E2E.__new__(e2e.E2E)
     run._port443 = None
     run.hold443()
