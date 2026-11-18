@@ -274,14 +274,14 @@ def test_unknown_module_fails(applied, capsys):
 
 
 def _features(monkeypatch, script, *args):
-    """`config --numbered` with `script`: 11 opens the Features checklist."""
+    """`config --numbered` with `script`: 12 opens the Features checklist."""
     _stdin(monkeypatch, script)
     return cli.main(["config", "--numbered", *args])
 
 
 def test_config_menu_toggle_printers_then_apply(applied, monkeypatch):
-    # 11 Features, 4 = printers (server mode has it on), s applies the checklist, q leaves config
-    assert _features(monkeypatch, "11\n4\ns\nq\n") == 0
+    # 12 Features, 4 = printers (server mode has it on), s applies the checklist, q leaves config
+    assert _features(monkeypatch, "12\n4\ns\nq\n") == 0
     assert config.load()["modules"]["printers"] is False
     assert set(config.load()["modules"]) == set(modules.MODULES) - set(modules.NEWER)
     assert applied[0]["modules"]["printers"] is False
@@ -289,7 +289,7 @@ def test_config_menu_toggle_printers_then_apply(applied, monkeypatch):
 
 
 def test_config_menu_no_module_change_does_not_apply(applied, monkeypatch):
-    assert _features(monkeypatch, "11\nq\nq\n") == 0
+    assert _features(monkeypatch, "12\nq\nq\n") == 0
     assert applied == []
     assert "modules" not in config.load()
 
@@ -302,7 +302,7 @@ def test_config_menu_station_on_asks_address_and_refuses_range(applied, monkeypa
     cfg["modules"]["backup"] = True
     config.save(cfg)
     # 8 = station: s applies; the Hub's address: a range is refused, then a single address accepted
-    assert _features(monkeypatch, "11\n8\ns\n192.168.1.0/24\n192.168.1.5\nq\n") == 0
+    assert _features(monkeypatch, "12\n8\ns\n192.168.1.0/24\n192.168.1.5\nq\n") == 0
     cap = capsys.readouterr()
     assert "Weigh Station only needs the Hub's address." in cap.out
     assert "Error: enter one address or name, not a range or wildcard." in cap.err
@@ -312,7 +312,7 @@ def test_config_menu_station_on_asks_address_and_refuses_range(applied, monkeypa
 
 
 def test_config_menu_choose_mode(applied, monkeypatch):
-    assert _features(monkeypatch, "11\nb\ns\nq\n") == 0      # b = Hub with Weigh Station (all-in-one)
+    assert _features(monkeypatch, "12\nb\ns\nq\n") == 0      # b = Hub with Weigh Station (all-in-one)
     assert config.load()["modules"] == {n: n not in modules.OPT_IN or n in ("ai_intake", "library") for n in modules.MODULES
                               if n not in modules.NEWER}  # legacy cfg: AI kept; klipper never named stays out
     assert config.load()["station"]["url"] == "http://127.0.0.1:5003"
@@ -338,7 +338,7 @@ def test_config_menu_turning_on_remote_pulls_web_and_says_so(applied, monkeypatc
     cfg["web"] = {"public_url": "https://mcp.example.com/filament", "lan": ["192.168.1.0/24"]}
     config.save(cfg)
     n = list(modules.MODULES).index("remote") + 1
-    assert _features(monkeypatch, f"11\n{n}\ns\nq\n") == 0
+    assert _features(monkeypatch, f"12\n{n}\ns\nq\n") == 0
     out = " ".join(capsys.readouterr().out.split())
     assert "now on too" in out and "Turns on: Web access (Remote access needs it), Remote access." in out
     assert config.load()["modules"]["web"] is True and config.load()["modules"]["remote"] is True
@@ -400,7 +400,7 @@ def test_disable_station_after_all_in_one_drops_local_url(applied):
 
 def test_config_menu_mode_server_after_all_in_one_drops_local_url(applied, monkeypatch):
     config.save(modules.set_mode(config.load(), "all-in-one"))
-    assert _features(monkeypatch, "11\nh\ns\nq\n") == 0      # h = Hub setup
+    assert _features(monkeypatch, "12\nh\ns\nq\n") == 0      # h = Hub setup
     assert config.load()["station"].get("url") is None
 
 
@@ -449,7 +449,7 @@ def test_config_menu_refused_by_plan_leaves_config_untouched(monkeypatch, capsys
     config.save(config.load())
     before = (config.paths().etc / "config.json").read_bytes()
     ran = _real_plan_fake_apply(monkeypatch)
-    assert _features(monkeypatch, "11\nw\ns\nbadname\nq\n") == 1     # w = Weigh Station only, the Hub's address
+    assert _features(monkeypatch, "12\nw\ns\nbadname\nq\n") == 1     # w = Weigh Station only, the Hub's address
     assert "fix:" in capsys.readouterr().err
     assert (config.paths().etc / "config.json").read_bytes() == before and ran == []
 
@@ -492,7 +492,7 @@ def test_raw_menu_blank_setting_returns_to_checklist(monkeypatch, capsys):
 
 
 def test_config_menu_web_and_orders_ask_settings_and_store_them(applied, monkeypatch):
-    assert _features(monkeypatch, f"11\n{_n('web')} {_n('orders')}\ns\nhttps://mcp.example.com/filament\n"
+    assert _features(monkeypatch, f"12\n{_n('web')} {_n('orders')}\ns\nhttps://mcp.example.com/filament\n"
                                   "/srv/orders.json\nq\n") == 0
     cfg = config.load()
     assert cfg["modules"]["web"] and cfg["modules"]["orders"]

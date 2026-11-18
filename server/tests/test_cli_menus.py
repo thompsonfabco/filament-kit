@@ -52,17 +52,17 @@ def all_features(**extra):
 def test_the_main_list_has_the_hub_pages_groups_in_order_then_printers_and_features(capsys, monkeypatch):
     assert run(monkeypatch, "q\n") == 0
     out = capsys.readouterr().out
-    names = ["Appearance", "General", "Storage locations", "Label Reader", "Backups and restore",
+    names = ["Appearance", "General", "Storage locations", "Alerts", "Label Reader", "Backups and restore",
              "Network and addresses", "Web passphrase", "Filament Catalog", "Weigh Station voice", "Printers", "Features"]
     rows = [ln for ln in out.splitlines() if ln[:4].strip().isdigit()]
-    assert [r.split("  ")[2].strip() for r in rows] == names and [int(r[:4]) for r in rows] == list(range(1, 12))
+    assert [r.split("  ")[2].strip() for r in rows] == names and [int(r[:4]) for r in rows] == list(range(1, 13))
     assert "These open their own screens; changes there apply at once:" in out
     assert out.splitlines()[0].startswith("Settings") and out.rstrip().endswith("Number:")
     assert "  s save   q leave   ? help" in out
 
 
 def test_a_group_screen_is_headed_by_its_place_and_ends_with_the_actions_that_are_commands_elsewhere(capsys, monkeypatch):
-    assert run(monkeypatch, "5\nq\n6\nq\n8\nq\nq\n") == 0
+    assert run(monkeypatch, "6\nq\n7\nq\n9\nq\nq\n") == 0
     out = say(capsys.readouterr().out)
     assert "Settings > Backups and restore" in out and "Back up now: sudo spoolwarden backup create" in out
     assert "Restore: sudo spoolwarden restore <zip>" in out
@@ -72,7 +72,7 @@ def test_a_group_screen_is_headed_by_its_place_and_ends_with_the_actions_that_ar
 
 def test_a_staged_change_is_saved_with_s_and_the_group_shows_what_is_stored(capsys, monkeypatch):
     # 2 General, 1 display name; q back; 5 Backups and restore, 1 keep nightly backups for; q back; s saves both; q leaves
-    assert run(monkeypatch, "2\n1\nShelf Z\nq\n5\n1\n30\nq\ns\nq\n") == 0
+    assert run(monkeypatch, "2\n1\nShelf Z\nq\n6\n1\n30\nq\ns\nq\n") == 0
     cfg = stored()
     assert cfg["server_name"] == "Shelf Z" and cfg["backup"]["keep_days"] == 30
     out = capsys.readouterr().out
@@ -105,7 +105,7 @@ def test_q_with_nothing_staged_just_leaves_and_an_empty_answer_to_the_question_i
 def test_the_end_of_input_ends_with_5_and_says_how_many_changes_were_lost(capsys, monkeypatch):
     assert run(monkeypatch, "2\n1\nShelf Z\n") == 5
     assert capsys.readouterr().out.rstrip().endswith("Input ended: 1 change not saved.")
-    assert run(monkeypatch, "2\n1\nA\nq\n5\n1\n30\n") == 5
+    assert run(monkeypatch, "2\n1\nA\nq\n6\n1\n30\n") == 5
     assert "Input ended: 2 changes not saved." in capsys.readouterr().out
     assert run(monkeypatch, "") == 0 and "Input ended" not in capsys.readouterr().out      # nothing staged
 
@@ -129,9 +129,9 @@ def test_ctrl_c_leaves_at_once_without_asking_with_130(capsys, monkeypatch):
 
 
 def test_unknown_input_and_a_wrong_number_are_errors_on_standard_error(capsys, monkeypatch):
-    assert run(monkeypatch, "x\n0\n12\n3\nz\nq\nq\n") == 0
+    assert run(monkeypatch, "x\n0\n13\n3\nz\nq\nq\n") == 0
     err = capsys.readouterr().err
-    for token in ("x", "0", "12", "z"):
+    for token in ("x", "0", "13", "z"):
         assert f'Error: "{token}" is not a number or letter on this screen.' in err
 
 
@@ -139,13 +139,13 @@ def test_question_mark_lists_every_key_and_a_checklist_adds_its_setup_letters(ca
     assert run(monkeypatch, "?\nq\n") == 0
     out = capsys.readouterr().out
     assert "Keys on this screen:" in out and "Ctrl-C" in out and "leave at once, saving nothing" in out
-    assert run(monkeypatch, "11\n?\nq\nq\n") == 0
+    assert run(monkeypatch, "12\n?\nq\nq\n") == 0
     out = capsys.readouterr().out
     assert "Hub setup" in out and "Weigh Station only" in out and "Enter never applies" in out
 
 
 def test_a_wrong_value_prints_the_error_and_asks_again_and_earlier_changes_stay(capsys, monkeypatch):
-    assert run(monkeypatch, "2\n1\nShelf Z\nq\n5\n1\ntwo\n-1\n\nq\nq\nn\ns\nq\n") == 0
+    assert run(monkeypatch, "2\n1\nShelf Z\nq\n6\n1\ntwo\n-1\n\nq\nq\nn\ns\nq\n") == 0
     cap = capsys.readouterr()
     assert cap.err.count("Error: the keep nightly backups for is a whole number, 1 to 365.") == 2
     assert "Keep nightly backups for [14]: Keep nightly backups for [14]: Keep nightly backups for [14]: Unchanged." in cap.out
@@ -170,7 +170,7 @@ def test_choices_are_numbered_with_the_current_one_marked_and_an_empty_answer_ke
 
 def test_the_label_reader_screen_numbers_straight_through_under_its_sub_headings(capsys, monkeypatch):
     all_features(local_intake=True)
-    assert run(monkeypatch, "4\nq\nq\n") == 0
+    assert run(monkeypatch, "5\nq\nq\n") == 0
     screen = capsys.readouterr().out.split("Settings > Label Reader")[1].split("  c check the key")[0]
     for heading in ("Cloud (Claude)", "On this Hub", "Recently added"):
         assert f"\n  {heading}\n" in screen
@@ -181,25 +181,25 @@ def test_the_label_reader_screen_numbers_straight_through_under_its_sub_headings
 
 
 def test_with_one_engine_on_the_engine_row_says_so_and_cannot_be_opened(capsys, monkeypatch):
-    assert run(monkeypatch, "4\n1\nq\nq\n") == 0
+    assert run(monkeypatch, "5\n1\nq\nq\n") == 0
     out = say(capsys.readouterr().out)
-    assert out.count("Engine: Cloud (Claude). Switch on the other one in Features (11) to use both.") == 2
+    assert out.count("Engine: Cloud (Claude). Switch on the other one in Features (12) to use both.") == 2
     assert "Address" not in out.split("Settings > Label Reader")[1]
 
 
 def test_switched_off_features_say_so_and_stay_on_the_main_list(capsys, monkeypatch):
-    assert run(monkeypatch, "9\nq\n") == 0                                    # a Hub without the Weigh Station
+    assert run(monkeypatch, "10\nq\n") == 0                                    # a Hub without the Weigh Station
     out = say(capsys.readouterr().out)
-    assert "off: switch it on in Features (11)" in out
-    assert "Weigh Station is off on this Hub. Switch it on in Features (11) first." in out
+    assert "off: switch it on in Features (12)" in out
+    assert "Weigh Station is off on this Hub. Switch it on in Features (12) first." in out
     assert "Settings > Weigh Station voice" not in out
     cfg = config.load()
     cfg["modules"] = {n: n in ("spoolman", "server") for n in modules.MODULES}
     config.save(cfg)
-    assert run(monkeypatch, "8\nq\nq\n") == 0
+    assert run(monkeypatch, "9\nq\nq\n") == 0
     out = say(capsys.readouterr().out)
     assert "off: only Catalog token" in out
-    assert "The Filament Catalog is switched off. Switch it on in Features (11)." in out
+    assert "The Filament Catalog is switched off. Switch it on in Features (12)." in out
     assert "Catalog token not set" in out.split("Settings > Filament Catalog")[1]
 
 
@@ -210,7 +210,7 @@ def test_a_save_that_fails_keeps_every_staged_change_and_says_what_to_change(cap
     monkeypatch.setattr(cli, "_plan_error", lambda cfg: "the web public address must start with https://")
     monkeypatch.setattr(cli, "_run_apply", lambda pairing=True: pytest.fail("nothing was saved"))
     # 6 Network: 1 Public address; 9 Weigh Station voice: 1 Voice, 2; s; the error; the changes are still there
-    assert run(monkeypatch, "6\n1\nhttps://hub.example/filament\nq\n9\n1\n2\nq\ns\nq\nn\nq\ny\n") == 5
+    assert run(monkeypatch, "7\n1\nhttps://hub.example/filament\nq\n10\n1\n2\nq\ns\nq\nn\nq\ny\n") == 5
     cap = capsys.readouterr()
     assert ("Error: nothing was saved: the web public address must start with https://. Your changes are still here."
             in say(cap.err))
@@ -260,7 +260,7 @@ def test_a_change_that_needs_the_hub_to_restart_says_so_while_staged_and_restart
     monkeypatch.setattr(cli.os, "geteuid", lambda: 0, raising=False)
     monkeypatch.setattr(cli, "_restart_service", lambda: restarted.append(1))
     monkeypatch.setattr(cli, "_run_apply", lambda pairing=True: pytest.fail("a model change applies nothing"))
-    assert run(monkeypatch, "4\n3\nclaude-x\nq\n4\nq\ns\nq\n") == 0           # 3 = Claude model, then look again
+    assert run(monkeypatch, "5\n3\nclaude-x\nq\n5\nq\ns\nq\n") == 0           # 3 = Claude model, then look again
     out = capsys.readouterr().out
     assert "Claude model claude-x (not saved; restarts the Hub)" in say(out)
     assert "The Hub is restarting" in out and "The Hub is back." in out and restarted == [1]
@@ -279,7 +279,7 @@ def test_the_voice_applies_once_after_the_save(monkeypatch, capsys):
     applied = []
     monkeypatch.setattr(cli, "_plan_error", lambda cfg: None)
     monkeypatch.setattr(cli, "_run_apply", lambda pairing=True: applied.append(pairing) or 0)
-    assert run(monkeypatch, "9\n1\n2\nq\ns\nq\n") == 0
+    assert run(monkeypatch, "10\n1\n2\nq\ns\nq\n") == 0
     assert applied == [False] and stored()["station"]["tts"] == "espeak"
 
 
@@ -287,22 +287,22 @@ def test_an_apply_that_fails_ends_with_its_code_after_the_save(monkeypatch):
     all_features()
     monkeypatch.setattr(cli, "_plan_error", lambda cfg: None)
     monkeypatch.setattr(cli, "_run_apply", lambda pairing=True: 1)
-    assert run(monkeypatch, "9\n1\n2\nq\ns\nq\n") == 1
+    assert run(monkeypatch, "10\n1\n2\nq\ns\nq\n") == 1
 
 
 def test_the_public_address_and_the_station_address_are_checked_and_cleared_with_a_dash(capsys, monkeypatch):
     all_features(orders=False)
     monkeypatch.setattr(cli, "_plan_error", lambda cfg: None)
     monkeypatch.setattr(cli, "_run_apply", lambda pairing=True: 0)
-    assert run(monkeypatch, "6\n1\nhttp://plain\nhttps://hub.example/filament\n2\nhttp://station.example:5003\nq\nq\ny\n") == 5
+    assert run(monkeypatch, "7\n1\nhttp://plain\nhttps://hub.example/filament\n2\nhttp://station.example:5003\nq\nq\ny\n") == 5
     err = say(capsys.readouterr().err)
     assert "Error: the public address must start with https://, e.g. https://hub.example/filament." in err
-    assert run(monkeypatch, "6\n1\nhttps://hub.example/filament\n2\nhttp://station.example:5003\n3\nhub.example "
+    assert run(monkeypatch, "7\n1\nhttps://hub.example/filament\n2\nhttp://station.example:5003\n3\nhub.example "
                             "alt.example\nq\ns\nq\n") == 0
     cfg = stored()
     assert cfg["web"]["public_url"] == "https://hub.example/filament" and cfg["station"]["url"] == "http://station.example:5003"
     assert cfg["setup"]["hosts"] == ["hub.example", "alt.example"]
-    assert run(monkeypatch, "6\n2\n-\nq\ns\nq\n") == 0                        # `-` clears it
+    assert run(monkeypatch, "7\n2\n-\nq\ns\nq\n") == 0                        # `-` clears it
     assert stored()["station"]["url"] is None
 
 
@@ -310,7 +310,7 @@ def test_allow_printer_changes_is_switched_by_its_number_and_only_shown_with_web
     assert "Allow printer changes" not in say(_after(monkeypatch, capsys, "6\nq\nq\n"))
     all_features()
     monkeypatch.setattr(cli, "_plan_error", lambda cfg: None)
-    assert run(monkeypatch, "6\n4\nq\ns\nq\n") == 0
+    assert run(monkeypatch, "7\n4\nq\ns\nq\n") == 0
     assert stored()["web"]["printer_changes"] is True
 
 
@@ -320,7 +320,7 @@ def _after(monkeypatch, capsys, script):
 
 
 def test_backups_keep_days_is_checked_from_1_to_365(capsys, monkeypatch):
-    assert run(monkeypatch, "5\n1\n0\n400\n30\nq\ns\nq\n") == 0
+    assert run(monkeypatch, "6\n1\n0\n400\n30\nq\ns\nq\n") == 0
     assert capsys.readouterr().err.count("Error: the keep nightly backups for is a whole number, 1 to 365.") == 2
     assert stored()["backup"]["keep_days"] == 30
 
@@ -365,7 +365,7 @@ def secrets(monkeypatch, secret_terminal):
 def test_a_secret_is_asked_hidden_never_shown_back_and_its_row_says_set_or_not_set(secrets, monkeypatch, capsys):
     asked, given = secrets
     given += ["sk-ant-TOPSECRET"]
-    assert run(monkeypatch, "4\n2\nq\n4\nq\ns\nq\n") == 0               # set it, look at the group again, save
+    assert run(monkeypatch, "5\n2\nq\n5\nq\ns\nq\n") == 0               # set it, look at the group again, save
     cap = capsys.readouterr()
     assert asked == ["Anthropic API key (Enter keeps it): "]
     assert "sk-ant-TOPSECRET" not in cap.out + cap.err
@@ -376,7 +376,7 @@ def test_a_secret_is_asked_hidden_never_shown_back_and_its_row_says_set_or_not_s
 def test_with_plain_nothing_is_echoed_and_the_prompt_says_so(secrets, monkeypatch, capsys):
     asked, given = secrets
     given += ["sk-ant-TOPSECRET"]
-    assert run(monkeypatch, "4\n2\nq\ns\nq\n", "--plain") == 0
+    assert run(monkeypatch, "5\n2\nq\ns\nq\n", "--plain") == 0
     assert asked == ["Anthropic API key (Enter keeps it) (typing is not shown): "]
     cap = capsys.readouterr()
     assert "sk-ant-TOPSECRET" not in cap.out + cap.err
@@ -406,7 +406,7 @@ def test_the_passphrase_is_asked_twice_a_mismatch_asks_both_again_and_a_short_on
     given += ["short", "a long example passphrase", "another long passphrase", "a long example passphrase",
               "a long example passphrase"]
     all_features()
-    assert run(monkeypatch, "7\n1\nq\ns\nq\n") == 0
+    assert run(monkeypatch, "8\n1\nq\ns\nq\n") == 0
     err = say(capsys.readouterr().err)
     assert "Error: use at least 12 characters. This one has 5." in err
     assert "Error: the two passphrases do not match. Type them again." in err
@@ -418,14 +418,14 @@ def test_the_anthropic_key_and_the_catalog_token_are_removed_after_a_question_an
     all_features()
     (config.paths().etc / "anthropic_key").write_text("sk-ant-x\n")
     (config.paths().etc / "github_token").write_text("ghp_x\n")
-    assert run(monkeypatch, "4\nx\nn\nq\nq\n") == 0                           # a no: nothing staged
+    assert run(monkeypatch, "5\nx\nn\nq\nq\n") == 0                           # a no: nothing staged
     assert (config.paths().etc / "anthropic_key").exists()
-    assert run(monkeypatch, "4\nx\ny\nq\n4\nq\nq\nn\ns\nq\n") == 0
+    assert run(monkeypatch, "5\nx\ny\nq\n5\nq\nq\nn\ns\nq\n") == 0
     out = say(capsys.readouterr().out)
     assert ("Remove the Anthropic API key? Label Reader: Cloud (Claude) stops reading labels until a new key is set. "
             "[y/N]") in out and "(will be removed)" in out
     assert not (config.paths().etc / "anthropic_key").exists()
-    assert run(monkeypatch, "8\nx\ny\nq\ns\nq\n") == 0
+    assert run(monkeypatch, "9\nx\ny\nq\ns\nq\n") == 0
     assert "Remove the Catalog token? The Filament Catalog can then download only from public sources." in say(
         capsys.readouterr().out)
     assert not (config.paths().etc / "github_token").exists()
@@ -445,7 +445,7 @@ def test_piped_input_without_numbered_is_refused_with_exit_2_and_a_fix(capsys, m
 def test_plain_implies_numbered_and_its_output_has_no_escape_or_carriage_return(capsys, monkeypatch):
     all_features()
     monkeypatch.setenv("TERM", "xterm")
-    monkeypatch.setattr(sys, "stdin", io.StringIO("2\n1\nShelf Z\nq\n10\nq\n11\n?\nq\nq\nq\ny\n"))
+    monkeypatch.setattr(sys, "stdin", io.StringIO("2\n1\nShelf Z\nq\n11\nq\n12\n?\nq\nq\nq\ny\n"))
     assert cli.main(["config", "--plain"]) == 5
     cap = capsys.readouterr()
     assert "\x1b" not in cap.out + cap.err and "\r" not in cap.out + cap.err
@@ -488,9 +488,9 @@ def test_every_setting_the_old_menu_had_is_reachable_and_saved(capsys, monkeypat
     script = "\n".join([
         "2", "1", "my-kit", "q",                                                   # display name
         "3", "q",                                                                  # the storage list opens and closes
-        "4", "1", "2", "2", "3", "claude-x", "4", "30", "5", "http://gpu-box.example:7915", "6", "3", "7", "99", "q",
-        "9", "1", "2", "q",                                                        # station voice: espeak-ng
-        "10", "q", "11", "q",                                                      # Printers and Features open
+        "5", "1", "2", "2", "3", "claude-x", "4", "30", "5", "http://gpu-box.example:7915", "6", "3", "7", "99", "q",
+        "10", "1", "2", "q",                                                       # station voice: espeak-ng
+        "11", "q", "12", "q",                                                      # Printers and Features open
         "s", "q", ""])
     assert run(monkeypatch, script) == 0
     cfg = stored()
@@ -528,7 +528,7 @@ def _printers():
 def test_the_printers_screen_lists_them_with_a_kind_an_address_and_a_state_word(capsys, monkeypatch):
     _printers()
     monkeypatch.setattr(cli, "_printer_states", lambda: {"01S00C111111111": "connected", SER: "offline"})
-    assert run(monkeypatch, "10\nq\nq\n") == 0
+    assert run(monkeypatch, "11\nq\nq\n") == 0
     out = capsys.readouterr().out
     assert "Printers - 3 set up - 1 found" in out
     assert any(ln.endswith("Bambu    192.0.2.40  + connected") and "Workshop X1" in ln for ln in out.splitlines())
@@ -545,7 +545,7 @@ def _idx(name: str) -> int:
 
 def _screen(monkeypatch, capsys, name, states=None):
     monkeypatch.setattr(cli, "_printer_states", lambda: states or {})
-    assert run(monkeypatch, f"10\n{_idx(name)}\nq\nq\nq\n") == 0
+    assert run(monkeypatch, f"11\n{_idx(name)}\nq\nq\nq\n") == 0
     return capsys.readouterr().out
 
 
@@ -572,7 +572,7 @@ def test_a_printer_actions_run_the_commands_that_exist_today(capsys, monkeypatch
     monkeypatch.setattr(cli, "cmd_printer_map", lambda serial, mf, manual=False, yes=False: seen.append(
         ("by loading" if manual else "map", serial)) or 0)
     monkeypatch.setattr(cli, "cmd_printer_unpin", lambda serial, yes=False: seen.append(("unpin", serial)) or 0)
-    assert run(monkeypatch, f"10\n{_idx('Workshop X1')}\nc\nm\nb\nu\nq\nq\nq\n") == 0
+    assert run(monkeypatch, f"11\n{_idx('Workshop X1')}\nc\nm\nb\nu\nq\nq\nq\n") == 0
     assert seen == [("report", "01S00C111111111"), ("map", "01S00C111111111"), ("by loading", "01S00C111111111"),
                     ("unpin", "01S00C111111111")]
 
@@ -581,15 +581,15 @@ def test_a_found_printer_is_dismissed_after_a_question_and_a_klipper_one_clears_
     _printers()
     monkeypatch.setattr(cli, "_printer_states", lambda: {})
     found = _idx("mainsailos")
-    assert run(monkeypatch, f"10\n{found}\nf\nn\nq\nq\nq\n") == 0
+    assert run(monkeypatch, f"11\n{found}\nf\nn\nq\nq\nq\n") == 0
     out = say(capsys.readouterr().out)
     assert "Dismiss mainsailos? It leaves this list. A new scan may find it again. [y/N]" in out and "Nothing changed." in out
-    assert run(monkeypatch, f"10\n{found}\nf\ny\nq\nq\n") == 0
+    assert run(monkeypatch, f"11\n{found}\nf\ny\nq\nq\n") == 0
     assert "Dismissed mainsailos." in capsys.readouterr().out
     assert "0948ZZ0A0000009" not in registry.load()
     voron = next(p for p in registry.load().values() if p.family == "klipper")
     registry.set_api_key(voron.serial, "secretkey")
-    assert run(monkeypatch, f"10\n{_idx('Garage Voron')}\nx\ny\nq\nq\nq\n") == 0
+    assert run(monkeypatch, f"11\n{_idx('Garage Voron')}\nx\ny\nq\nq\nq\n") == 0
     assert registry.load()[voron.serial].api_key == "" and "Cleared the API key of Garage Voron." in capsys.readouterr().out
 
 
@@ -599,10 +599,10 @@ def test_a_new_address_keeps_the_pin_and_a_new_access_code_clears_it_both_asked_
     given += ["33334444", "11112222"]
     monkeypatch.setattr(cli, "_printer_states", lambda: {})
     study = _idx("Study A1 mini")
-    assert run(monkeypatch, f"10\n{study}\ne\n192.0.2.99\nq\nq\nq\n") == 0
+    assert run(monkeypatch, f"11\n{study}\ne\n192.0.2.99\nq\nq\nq\n") == 0
     p = registry.load()[SER]
     assert p.access_code == "33334444" and p.ip == "192.0.2.99" and p.cert_fp == "ab" * 32       # the pin is the printer's
-    assert run(monkeypatch, f"10\n{study}\nk\nq\nq\nq\n") == 0
+    assert run(monkeypatch, f"11\n{study}\nk\nq\nq\nq\n") == 0
     p = registry.load()[SER]
     assert p.access_code == "11112222" and p.cert_fp == ""                  # as adding it again: the next one is pinned
     assert asked == ["Access Code of Study A1 mini (on the printer: Settings > Network/LAN): ",
@@ -616,7 +616,7 @@ def test_an_empty_access_code_changes_nothing_and_says_so(secrets, capsys, monke
     asked, given = secrets
     given += ["", ""]
     monkeypatch.setattr(cli, "_printer_states", lambda: {})
-    assert run(monkeypatch, f"10\n{_idx('Study A1 mini')}\nk\ne\n192.0.2.99\nq\nq\nq\n") == 0
+    assert run(monkeypatch, f"11\n{_idx('Study A1 mini')}\nk\ne\n192.0.2.99\nq\nq\nq\n") == 0
     out = capsys.readouterr().out
     assert "Unchanged." in out and "No Access Code entered; nothing changed." in out
     assert registry.load()[SER].access_code == "87654321" and registry.load()[SER].ip == "192.0.2.41"
@@ -624,7 +624,7 @@ def test_an_empty_access_code_changes_nothing_and_says_so(secrets, capsys, monke
 
 def test_look_again_reads_the_list_again(capsys, monkeypatch):
     monkeypatch.setattr(cli, "_printer_states", lambda: {})
-    assert run(monkeypatch, "10\nl\nq\nq\n") == 0
+    assert run(monkeypatch, "11\nl\nq\nq\n") == 0
     assert capsys.readouterr().out.count("Printers - 0 set up - 0 found") == 2
 
 
@@ -632,7 +632,7 @@ def test_adding_a_klipper_printer_asks_address_port_name_and_an_optional_key(sec
     asked, given = secrets
     given += ["moonkey"]
     monkeypatch.setattr(cli, "_printer_states", lambda: {})
-    assert run(monkeypatch, "10\na\nk\nvoron.example\n\nGarage Voron\nq\nq\n") == 0
+    assert run(monkeypatch, "11\na\nk\nvoron.example\n\nGarage Voron\nq\nq\n") == 0
     p = next(iter(registry.load().values()))
     assert (p.family, p.host, p.port, p.api_key, p.name) == ("klipper", "voron.example", 7125, "moonkey", "Garage Voron")
     assert asked == ["Moonraker API key (optional): "]
@@ -642,7 +642,7 @@ def test_adding_a_klipper_printer_asks_address_port_name_and_an_optional_key(sec
 # ---------- the Features checklist (8.5) ----------
 
 def test_the_checklist_lists_every_feature_with_its_needs_before_anything_is_switched(capsys, monkeypatch):
-    assert run(monkeypatch, "11\nq\nq\n") == 0
+    assert run(monkeypatch, "12\nq\nq\n") == 0
     out = say(capsys.readouterr().out)
     assert "Features - Hub" in out and "1 [x] Spoolman" in out and "3 [x] Label Reader: Cloud (Claude)" in out
     assert "14 [ ] Label Reader: On this Hub" in out and "needs: Hub service, the local reader service" in out
@@ -683,7 +683,7 @@ def test_leaving_the_checklist_with_switched_rows_asks_and_a_yes_prints_nothing_
 
 def test_leaving_the_checklist_inside_config_goes_back_to_config(capsys, monkeypatch):
     # the features screen says Nothing applied.; config goes on and q leaves it (nothing staged there)
-    assert run(monkeypatch, "11\n7\nq\ny\nq\n") == 0
+    assert run(monkeypatch, "12\n7\nq\ny\nq\n") == 0
     out = capsys.readouterr().out
     assert "Nothing applied." in out and out.count("Settings - workshop") == 2
 
@@ -769,7 +769,7 @@ def test_a_saved_spoolman_address_is_applied_like_the_hubs(monkeypatch):
 
 def test_a_secret_prompt_reads_the_next_piped_line_and_never_calls_getpass(monkeypatch, capsys):
     monkeypatch.setattr("getpass.getpass", lambda prompt="": pytest.fail("getpass reads the terminal, not the pipe"))
-    assert run(monkeypatch, "4\n2\nsk-ant-PIPED\nq\n4\n3\nclaude-x\nq\ns\nq\n") == 0     # the lines after it stay in step
+    assert run(monkeypatch, "5\n2\nsk-ant-PIPED\nq\n5\n3\nclaude-x\nq\ns\nq\n") == 0     # the lines after it stay in step
     cap = capsys.readouterr()
     assert (config.paths().etc / "anthropic_key").read_text().strip() == "sk-ant-PIPED"
     assert stored()["model"] == "claude-x" and "sk-ant-PIPED" not in cap.out + cap.err
@@ -782,7 +782,7 @@ def test_a_save_that_fails_leaves_every_secret_unchanged(monkeypatch, capsys):
     def boom(cfg):
         raise ValueError("the disk is full")
     monkeypatch.setattr(config, "save", boom)
-    assert run(monkeypatch, "4\n2\nsk-ant-NEW\nq\n8\n1\nghp_new\nq\ns\nq\ny\n") == 5
+    assert run(monkeypatch, "5\n2\nsk-ant-NEW\nq\n9\n1\nghp_new\nq\ns\nq\ny\n") == 5
     err = say(capsys.readouterr().err)
     assert "Error: nothing was saved: the disk is full. Your changes are still here." in err
     assert not (config.paths().etc / "anthropic_key").exists()
@@ -796,7 +796,7 @@ def test_a_secret_that_cannot_be_written_puts_the_settings_back(monkeypatch, cap
         raise ValueError("no group")
     monkeypatch.setattr(cli, "write_key", boom)
     before = stored()["server_name"]
-    assert run(monkeypatch, "2\n1\nMine\nq\n4\n2\nsk-ant-NEW\nq\ns\nq\ny\n") == 5
+    assert run(monkeypatch, "2\n1\nMine\nq\n5\n2\nsk-ant-NEW\nq\ns\nq\ny\n") == 5
     assert stored()["server_name"] == before
     assert "not everything was saved: no group. The settings are as before. Your changes are still here." in say(
         capsys.readouterr().err)
@@ -804,7 +804,7 @@ def test_a_secret_that_cannot_be_written_puts_the_settings_back(monkeypatch, cap
 
 def test_a_bad_catalog_token_asks_again(monkeypatch, capsys):
     all_features()
-    assert run(monkeypatch, "8\n1\nnot a token\nghp_good\nq\ns\nq\n") == 0
+    assert run(monkeypatch, "9\n1\nnot a token\nghp_good\nq\ns\nq\n") == 0
     assert "Error: a GitHub token is one word of printable characters." in capsys.readouterr().err
     assert (config.paths().etc / "github_token").read_text().strip() == "ghp_good"
 
@@ -822,7 +822,7 @@ def test_features_opened_inside_config_apply_on_settings_read_when_s_is_pressed(
         return real(*a, **k)
     monkeypatch.setattr(cli, "_features_checklist", checklist)
     monkeypatch.setattr(cli, "_apply_features", lambda ui, cfg, *a: seen.append(cfg["server_name"]) or (False, 0))
-    assert run(monkeypatch, "11\ns\nq\nq\n") == 0
+    assert run(monkeypatch, "12\ns\nq\nq\n") == 0
     assert seen == ["Changed elsewhere"]
 
 
@@ -852,7 +852,7 @@ def test_an_empty_serial_is_read_from_the_printers_certificate(secrets, cert, mo
     box, seen = cert
     box[0] = "0948ZZ0A0000009"
     monkeypatch.setattr(cli, "_printer_states", lambda: {})
-    assert run(monkeypatch, "10\na\n\n192.0.2.57\nMine\n\n\nq\nq\n") == 0
+    assert run(monkeypatch, "11\na\n\n192.0.2.57\nMine\n\n\nq\nq\n") == 0
     assert seen == ["192.0.2.57"] and registry.load()["0948ZZ0A0000009"].name == "Mine"
     assert "Added Mine." in capsys.readouterr().out
 
@@ -863,7 +863,7 @@ def test_an_empty_serial_is_never_taken_from_a_saved_printer_at_that_address(sec
     registry.add_bambu("0948ZZ0A0000001", "Workshop", "H2D", "192.0.2.57", "OLDCODE1")
     registry.upsert(registry.Printer("0948ZZ0A0000001", "Workshop", "H2D", "192.0.2.57", "OLDCODE1", True, cert_fp="ab" * 32))
     monkeypatch.setattr(cli, "_printer_states", lambda: {})
-    assert run(monkeypatch, "10\na\n\n192.0.2.57\nNew printer\n\n\nq\nq\n") == 0
+    assert run(monkeypatch, "11\na\n\n192.0.2.57\nNew printer\n\n\nq\nq\n") == 0
     cap = capsys.readouterr()
     assert "Error: the printer at 192.0.2.57 did not answer (OSError), so it cannot be read. Fix: give the serial" in say(cap.err)
     p = registry.load()
@@ -877,7 +877,7 @@ def test_a_typed_serial_that_the_certificate_contradicts_is_refused(secrets, cer
     box, _ = cert
     box[0] = "0948ZZ0A0000009"
     monkeypatch.setattr(cli, "_printer_states", lambda: {})
-    assert run(monkeypatch, "10\na\n\n192.0.2.57\nMine\n0948ZZ0A0000001\n\nq\nq\n") == 0
+    assert run(monkeypatch, "11\na\n\n192.0.2.57\nMine\n0948ZZ0A0000001\n\nq\nq\n") == 0
     err = say(capsys.readouterr().err)
     assert "names itself 0948ZZ0A0000009, not 0948ZZ0A0000001" in err and registry.load() == {}
 
@@ -886,7 +886,7 @@ def test_a_typed_serial_is_used_when_the_printer_does_not_answer(secrets, monkey
     asked, given = secrets
     given += ["12345678"]
     monkeypatch.setattr(cli, "_printer_states", lambda: {})
-    assert run(monkeypatch, "10\na\n\n192.0.2.57\nMine\n0948ZZ0A0000001\n\nq\nq\n") == 0
+    assert run(monkeypatch, "11\na\n\n192.0.2.57\nMine\n0948ZZ0A0000001\n\nq\nq\n") == 0
     assert registry.load()["0948ZZ0A0000001"].name == "Mine"
 
 
@@ -895,14 +895,14 @@ def test_an_empty_serial_with_a_certificate_without_one_is_an_error_with_a_fix(s
     given += ["12345678"]
     cert[0][0] = None
     monkeypatch.setattr(cli, "_printer_states", lambda: {})
-    assert run(monkeypatch, "10\na\n\n192.0.2.57\nMine\n\n\nq\nq\n") == 0
+    assert run(monkeypatch, "11\na\n\n192.0.2.57\nMine\n\n\nq\nq\n") == 0
     assert "did not name its serial" in say(capsys.readouterr().err) and registry.load() == {}
 
 
 def test_the_end_of_input_at_a_secret_prompt_of_the_add_ends_the_session_with_5(secrets, monkeypatch, capsys):
     monkeypatch.setattr(cli, "_printer_states", lambda: {})
     monkeypatch.setattr(secret_input, "ask", lambda prompt: (_ for _ in ()).throw(EOFError()))
-    assert run(monkeypatch, "2\n1\nShelf Z\nq\n10\na\n\n192.0.2.57\n") == 5
+    assert run(monkeypatch, "2\n1\nShelf Z\nq\n11\na\n\n192.0.2.57\n") == 5
     out = capsys.readouterr().out
     assert out.rstrip().endswith("Input ended: 1 change not saved.") and registry.load() == {}
 
@@ -919,7 +919,7 @@ def test_a_klipper_port_that_is_not_a_number_is_a_plain_error(secrets, monkeypat
     asked, given = secrets
     given += [""]
     monkeypatch.setattr(cli, "_printer_states", lambda: {})
-    assert run(monkeypatch, "10\na\nk\nvoron.example\nabc\n\nq\nq\n") == 0
+    assert run(monkeypatch, "11\na\nk\nvoron.example\nabc\n\nq\nq\n") == 0
     err = say(capsys.readouterr().err)
     assert "Error: the port is a number. Fix: give the port as digits, for example 7125." in err and "invalid literal" not in err
     assert registry.load() == {}

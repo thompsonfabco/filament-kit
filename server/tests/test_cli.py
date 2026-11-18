@@ -127,8 +127,8 @@ def _menu(monkeypatch, script, *flags):
 
 
 def test_config_menu_server_name_and_model(monkeypatch):
-    # 2 General: 1 display name; 4 Label Reader (Cloud only: 1 engine note, 2 key, 3 model, 4 reads)
-    assert _menu(monkeypatch, "2\n1\nmy-kit\nq\n4\n3\nclaude-x\n4\n30\nq\ns\nq\n") == 0
+    # 2 General: 1 display name; 5 Label Reader (Cloud only: 1 engine note, 2 key, 3 model, 4 reads)
+    assert _menu(monkeypatch, "2\n1\nmy-kit\nq\n5\n3\nclaude-x\n4\n30\nq\ns\nq\n") == 0
     cfg = config.load()
     assert cfg["server_name"] == "my-kit"
     assert cfg["model"] == "claude-x"
@@ -137,7 +137,7 @@ def test_config_menu_server_name_and_model(monkeypatch):
 
 def test_key_never_printed(monkeypatch, capsys, secret_terminal):
     monkeypatch.setattr("getpass.getpass", lambda prompt="": "sk-ant-TOPSECRET")
-    assert _menu(monkeypatch, "4\n2\nq\ns\nq\n") == 0               # 2 = Anthropic API key
+    assert _menu(monkeypatch, "5\n2\nq\ns\nq\n") == 0               # 2 = Anthropic API key
     cap = capsys.readouterr()
     assert "sk-ant-TOPSECRET" not in cap.out + cap.err
     assert (config.paths().etc / "anthropic_key").read_text().strip() == "sk-ant-TOPSECRET"
@@ -290,22 +290,22 @@ ADD = "a\nb\n"           # the Printers screen's add, a Bambu Lab printer
 
 def test_printers_add_rename_remove(capsys, monkeypatch):
     from filament_kit.bridge import registry
-    # 10 Printers; a add, b Bambu: address, (Access Code), name, serial, model
-    assert _printers_session(monkeypatch, "10\n" + ADD + "10.0.0.5\nOffice\nSER1\n\nq\nq\n") == 0
+    # 11 Printers; a add, b Bambu: address, (Access Code), name, serial, model
+    assert _printers_session(monkeypatch, "11\n" + ADD + "10.0.0.5\nOffice\nSER1\n\nq\nq\n") == 0
     p = registry.load()["SER1"]
     assert (p.name, p.ip, p.access_code, p.configured) == ("Office", "10.0.0.5", "ACCESS1234", True)
     out = capsys.readouterr().out
     assert "ACCESS1234" not in out and "Added Office." in out
 
-    assert _printers_session(monkeypatch, "10\n1\nr\nShed\nq\nq\nq\n") == 0
+    assert _printers_session(monkeypatch, "11\n1\nr\nShed\nq\nq\nq\n") == 0
     assert "Renamed Office to Shed." in capsys.readouterr().out
     assert registry.load()["SER1"].name == "Shed"
     assert registry.load()["SER1"].access_code == "ACCESS1234"
 
-    assert _printers_session(monkeypatch, "10\n1\nf\n\nq\nq\nq\n") == 0      # a bare Enter is a no
+    assert _printers_session(monkeypatch, "11\n1\nf\n\nq\nq\nq\n") == 0      # a bare Enter is a no
     assert "SER1" in registry.load()
     assert "Nothing changed." in capsys.readouterr().out
-    assert _printers_session(monkeypatch, "10\n1\nf\ny\nq\nq\n") == 0        # forgotten: back on the list
+    assert _printers_session(monkeypatch, "11\n1\nf\ny\nq\nq\n") == 0        # forgotten: back on the list
     assert registry.load() == {}
     out = capsys.readouterr().out
     assert "Forgot Shed." in out and "ACCESS1234" not in out
@@ -313,9 +313,9 @@ def test_printers_add_rename_remove(capsys, monkeypatch):
 
 def test_printers_add_under_a_taken_name_gets_a_free_one(capsys, monkeypatch):
     from filament_kit.bridge import registry
-    assert _printers_session(monkeypatch, "10\n" + ADD + "10.0.0.5\nOffice\nSER1\n\nq\nq\n") == 0
-    assert _printers_session(monkeypatch, "10\n" + ADD + "10.0.0.6\nOffice\nSER2\n\nq\nq\n") == 0
-    assert _printers_session(monkeypatch, "10\n" + ADD + "10.0.0.5\nOffice\nSER1\n\nq\nq\n") == 0   # SER1 again
+    assert _printers_session(monkeypatch, "11\n" + ADD + "10.0.0.5\nOffice\nSER1\n\nq\nq\n") == 0
+    assert _printers_session(monkeypatch, "11\n" + ADD + "10.0.0.6\nOffice\nSER2\n\nq\nq\n") == 0
+    assert _printers_session(monkeypatch, "11\n" + ADD + "10.0.0.5\nOffice\nSER1\n\nq\nq\n") == 0   # SER1 again
     got = registry.load()
     assert (got["SER1"].name, got["SER2"].name) == ("Office", "Office 2")
     assert "Added Office 2." in capsys.readouterr().out
@@ -325,7 +325,7 @@ def test_printers_list_shows_detected_without_code(capsys, monkeypatch):
     from filament_kit.bridge import registry
     registry.detected("DET1", "10.0.0.9", "C11", "Found one")
     registry.upsert(registry.Printer("CFG1", "Mine", "O1D", "10.0.0.2", "SECRETCODE", True))
-    assert _printers_session(monkeypatch, "10\nq\nq\n") == 0
+    assert _printers_session(monkeypatch, "11\nq\nq\n") == 0
     out = capsys.readouterr().out
     assert "Found one" in out and "Mine" in out and "SECRETCODE" not in out
     assert "found, not added" in out and "1 set up - 1 found" in out
@@ -333,7 +333,7 @@ def test_printers_list_shows_detected_without_code(capsys, monkeypatch):
 
 def test_printers_add_rejects_blank_fields(capsys, monkeypatch):
     from filament_kit.bridge import registry
-    assert _printers_session(monkeypatch, "10\n" + ADD + "\n\n10.0.0.5\n\n\nq\nq\n") == 0
+    assert _printers_session(monkeypatch, "11\n" + ADD + "\n\n10.0.0.5\n\n\nq\nq\n") == 0
     assert registry.load() == {}
     assert "an address is needed" in capsys.readouterr().err
 
@@ -341,13 +341,13 @@ def test_printers_add_rejects_blank_fields(capsys, monkeypatch):
 def test_config_menu_lists_printers_entry(capsys, monkeypatch):
     assert _menu(monkeypatch, "q\n") == 0
     out = capsys.readouterr().out
-    assert "10  Printers" in out and "11  Features" in out
+    assert "11  Printers" in out and "12  Features" in out
 
 
 def test_printers_bad_number_is_an_error_and_asks_again(capsys, monkeypatch):
     from filament_kit.bridge import registry
     registry.upsert(registry.Printer("S1", "A", configured=True))
-    assert _printers_session(monkeypatch, "10\n9\n0\nq\nq\n") == 0
+    assert _printers_session(monkeypatch, "11\n9\n0\nq\nq\n") == 0
     assert capsys.readouterr().err.count('is not a number or letter on this screen.') == 2
     assert "S1" in registry.load()
 
@@ -355,7 +355,7 @@ def test_printers_bad_number_is_an_error_and_asks_again(capsys, monkeypatch):
 def test_printers_corrupt_file_reports_error_and_keeps_it(capsys, monkeypatch, env):
     f = env / "state" / "printers.json"
     f.write_text("garbage")
-    assert _printers_session(monkeypatch, "10\n" + ADD + "10.0.0.5\nOffice\nSER1\n\nq\nq\n") == 0
+    assert _printers_session(monkeypatch, "11\n" + ADD + "10.0.0.5\nOffice\nSER1\n\nq\nq\n") == 0
     assert "unreadable" in capsys.readouterr().err
     assert f.read_text() == "garbage"
 
@@ -364,7 +364,7 @@ def test_printers_corrupt_file_reports_error_and_keeps_it(capsys, monkeypatch, e
 
 def test_printers_add_rejects_bad_serial(capsys, monkeypatch):
     from filament_kit.bridge import registry
-    assert _printers_session(monkeypatch, "10\n" + ADD + "10.0.0.5\nOffice\nbad serial!\n\nq\nq\n") == 0
+    assert _printers_session(monkeypatch, "11\n" + ADD + "10.0.0.5\nOffice\nbad serial!\n\nq\nq\n") == 0
     assert registry.load() == {}
     assert "serial" in capsys.readouterr().err.lower()
 
@@ -372,7 +372,7 @@ def test_printers_add_rejects_bad_serial(capsys, monkeypatch):
 @pytest.mark.parametrize("code", ["1234-5678", "x" * 33, "côde12"])
 def test_printers_add_rejects_bad_access_code(capsys, monkeypatch, code):
     from filament_kit.bridge import registry
-    assert _printers_session(monkeypatch, "10\n" + ADD + "10.0.0.5\nOffice\nSER1\n\nq\nq\n", code=code) == 0
+    assert _printers_session(monkeypatch, "11\n" + ADD + "10.0.0.5\nOffice\nSER1\n\nq\nq\n", code=code) == 0
     assert registry.load() == {}
     cap = capsys.readouterr()
     assert "Access Code" in cap.err and code not in cap.out + cap.err
@@ -381,7 +381,7 @@ def test_printers_add_rejects_bad_access_code(capsys, monkeypatch, code):
 def test_printers_add_records_the_model_for_the_camera(capsys, monkeypatch):
     # A printer added by hand never announces itself, so its model (which picks the camera kind) is asked for.
     from filament_kit.bridge import models, registry
-    assert _printers_session(monkeypatch, "10\n" + ADD + "10.0.0.6\nWorkshop\nSER2\nH2D\nq\nq\n") == 0
+    assert _printers_session(monkeypatch, "11\n" + ADD + "10.0.0.6\nWorkshop\nSER2\nH2D\nq\nq\n") == 0
     p = registry.load()["SER2"]
     assert p.model == "H2D" and models.camera_kind(p.model) == "hls"
 
@@ -704,9 +704,9 @@ def test_label_reader_off_shows_only_records_kept_and_says_where_to_switch_it_on
     cfg = config.load()
     cfg["modules"] = {n: n in modules.MODES["server"] for n in modules.MODULES}
     config.save(cfg)
-    assert _menu(monkeypatch, "4\nq\nq\n") == 0
+    assert _menu(monkeypatch, "5\nq\nq\n") == 0
     out = " ".join(capsys.readouterr().out.split())
-    assert "The Label Reader is switched off. Spools are then added by hand. Switch it on in Features (11)." in out
+    assert "The Label Reader is switched off. Spools are then added by hand. Switch it on in Features (12)." in out
     assert "off: only Records kept" in out and "Records kept" in out and "Anthropic API key" not in out
 
 
@@ -732,11 +732,11 @@ def test_config_menu_station_voice_piper_or_espeak(monkeypatch, capsys):
     config.save(cfg)
     monkeypatch.setattr(cli, "_run_apply", lambda pairing=True: print("APPLIED") or 0)
     monkeypatch.setattr(cli, "_plan_error", lambda cfg: None)
-    assert _menu(monkeypatch, "9\n1\n2\nq\ns\nq\n") == 0                # 9 Weigh Station voice, 2 espeak-ng
+    assert _menu(monkeypatch, "10\n1\n2\nq\ns\nq\n") == 0                # 10 Weigh Station voice, 2 espeak-ng
     assert config.load()["station"]["tts"] == "espeak" and "APPLIED" in capsys.readouterr().out
-    assert _menu(monkeypatch, "9\n1\n1\nq\ns\nq\n") == 0
+    assert _menu(monkeypatch, "10\n1\n1\nq\ns\nq\n") == 0
     assert config.load()["station"]["tts"] == "auto" and "APPLIED" in capsys.readouterr().out
-    assert _menu(monkeypatch, "9\n1\n\nq\nq\n") == 0                    # an empty answer keeps it
+    assert _menu(monkeypatch, "10\n1\n\nq\nq\n") == 0                    # an empty answer keeps it
     assert config.load()["station"]["tts"] == "auto" and "APPLIED" not in capsys.readouterr().out
 
 

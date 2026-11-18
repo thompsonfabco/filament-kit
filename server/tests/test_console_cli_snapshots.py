@@ -38,6 +38,7 @@ def test_status_lines_on_a_server(cfg, capsys, monkeypatch):
     assert lines(capsys) == [
         "--   service checks skipped (FK_NO_SYSTEMD=1)",
         f"OK   certificate present, fingerprint {' '.join(('AB' * 32)[i:i + 4] for i in range(0, 64, 4))}",
+        "OK   Storage: 900 GB free of 1.0 TB (10 % used)",
         "--   display name: Workshop",
         f"OK   Spoolman reachable at {DEAD} (v1.2.3)",
         f"--   reads used today: 0 of {cfg['reads_per_day']}",
@@ -66,6 +67,7 @@ def test_status_lines_when_things_fail(cfg, capsys, monkeypatch):
         "--   service checks skipped (FK_NO_SYSTEMD=1)",
         f"FAIL certificate missing ({config.paths().etc / 'cert.pem'})",
         "     fix: run: sudo spoolwarden cert",
+        "OK   Storage: 900 GB free of 1.0 TB (10 % used)",
         "--   display name: Workshop",
         f"FAIL Spoolman not reachable at {DEAD}: no answer",
         "     fix: check that the remote Spoolman is running and spoolman_url is right",

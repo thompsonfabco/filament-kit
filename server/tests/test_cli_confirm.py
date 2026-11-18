@@ -392,12 +392,12 @@ def test_purge_piped_without_yes_is_refused_and_with_yes_runs_both(rec, monkeypa
 def test_the_config_menu_asks_in_the_hub_pages_words_and_a_no_removes_nothing(rec, monkeypatch, capsys):
     p = registry.Printer(SERIAL, "Workshop X1", "X1C", "192.0.2.40", "12345678", True)
     registry.upsert(p)
-    monkeypatch.setattr(sys, "stdin", io.StringIO("10\n1\nf\nn\nq\nq\nq\n"))        # Printers, the printer, forget: no
+    monkeypatch.setattr(sys, "stdin", io.StringIO("11\n1\nf\nn\nq\nq\nq\n"))        # Printers, the printer, forget: no
     assert cli.main(["config", "--numbered"]) == 0
     out = " ".join(capsys.readouterr().out.split())
     assert SERIAL in registry.load() and "Forget Workshop X1? Spoolwarden stops connecting to it and deletes its Access Code." in out
     assert "To use it again, add it again." in out and "Nothing changed." in out
-    monkeypatch.setattr(sys, "stdin", io.StringIO("10\n1\nf\nyes\nq\nq\n"))
+    monkeypatch.setattr(sys, "stdin", io.StringIO("11\n1\nf\nyes\nq\nq\n"))
     assert cli.main(["config", "--numbered"]) == 0
     assert SERIAL not in registry.load() and "Forgot Workshop X1." in capsys.readouterr().out
 

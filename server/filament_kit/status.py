@@ -101,14 +101,14 @@ def _needing_a_look(rows: list[Row]) -> list[Row]:
     return keep
 
 
-def print_rows(rows: Iterable[Row], *, summary: bool = False) -> bool:
+def print_rows(rows: Iterable[Row], *, summary: bool = False, extra: dict | None = None) -> bool:
     """The rows as the command line shows them (06 9.1): a heading per group, then a glyph, the state word and the text
     of each row, a needs-a-look row followed by its `Fix:` line. Detail rows are aligned with the text. True when none
     needs a look. `--json`: the document `{"rows": [...], "summary": {...}}` instead; `--quiet`: only the rows that need
     a look, and no summary line."""
     rows = list(rows)
     if output.json_mode():
-        output.emit({"rows": row_dicts(rows), "summary": summary_counts(rows)})
+        output.emit({"rows": row_dicts(rows), "summary": summary_counts(rows), **(extra or {})})
         return not any(r.state == FAIL for r in rows)
     ok = not any(r.state == FAIL for r in rows)
     if output.quiet():
@@ -368,6 +368,7 @@ def rows(cfg: dict | None = None, client_factory=None, *, live_key: bool = True,
             yield Row(FAIL, f"certificate missing ({cert})", "run: sudo spoolwarden cert",
                       group="Hub", key="hub.certificate")
         yield from storage_rows(api_up)
+        yield from alerts_rows(cfg)
 
     station_url = (cfg.get("station") or {}).get("url")
     if station_url:
@@ -395,6 +396,49 @@ def storage_rows(hub_running: bool = False) -> Iterator[Row]:
     row = storage.checks_row(hub_running)
     if row:
         yield Row(FAIL, row["text"], row["fix"], group=row["group"], key="hub.storage-locations")
+
+
+def low_spools(cfg: dict | None = None) -> int | None:
+    """How many spools are running low as of the Hub's last look (every 5 minutes and after each weight change it
+    writes spool.low, which raises `spool-low:<id>`; the raised ones are the list). Read from the event store, so a
+    status run asks Spoolman nothing; `spoolwarden spools low` is the live list. None when the store cannot be read."""
+    from . import events
+    try:
+        return sum(1 for c in events.conditions() if c["condition"]["key"].startswith("spool-low:"))
+    except (events.EventError, OSError):
+        return None
+
+
+def alerts_rows(cfg: dict | None = None) -> Iterator[Row]:
+    """The Hub group's rows of events and alerts (R80 sections 6, 7): the Hub's disk ("Storage: 41 GB free of 117 GB
+    (65 % used)", needs a look past a limit, fix "Show storage use"), the note "Running low: <n> spools" (none when
+    nothing is low), and one row when alerts.xml could not be read or saved. The same rows are the Overview's."""
+    from . import alerts, alerts_api
+    say = alerts_api.say
+    bad = alerts.problem()
+    if bad:
+        kind, reason = bad
+        yield Row(FAIL, say(f"status_alerts_{'unsaved' if kind == 'unsaved' else 'unreadable'}", reason=reason),
+                  say(f"status_alerts_{'unsaved' if kind == 'unsaved' else 'unreadable'}_fix"), group="Hub",
+                  key="hub.alerts-settings")
+    worst = alerts.worst(alerts.filesystems())
+    if worst is not None:
+        yield Row(OK if worst["state"] == "ok" else FAIL,
+                  say("storage_use_row", free=alerts_api.size_text(worst["free"]),
+                      total=alerts_api.size_text(worst["total"]), percent=alerts_api.number(worst["percent_used"])),
+                  "" if worst["state"] == "ok" else say("storage_use_fix"), action="" if worst["state"] == "ok"
+                  else "storage_use", group="Hub", key="hub.storage")
+    low = low_spools(cfg)
+    if low:
+        yield Row(INFO, say("status_running_low", count=low), say("status_running_low_fix"), group="Hub",
+                  key="hub.running-low")
+
+
+def numbers(cfg: dict | None = None) -> dict:
+    """What `status --json` carries beside the rows (06 9.1): `storage` is the answer of GET api/storage-use,
+    `running_low` the number of spools running low (null when the events cannot be read)."""
+    from . import alerts_api
+    return {"storage": alerts_api.storage_view(), "running_low": low_spools(cfg)}
 
 
 def local_reader_rows(cfg: dict | None = None) -> Iterator[Row]:
