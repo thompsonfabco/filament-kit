@@ -16,11 +16,10 @@ from starlette.responses import Response
 from starlette.routing import Route
 from starlette.testclient import TestClient
 
-from filament_kit import config, modules, setup_page, trusted
+from filament_kit import camera_ticket, config, modules, setup_page, trusted
 from filament_kit.bridge import camera, family, loading, mapping, pending, registry, usage
 from filament_kit.bridge.connection import NoReply, PrinterOffline
 from filament_kit.setup_console import printer_live_tab
-from filament_kit.setup_console.printer_live_tab import Tickets
 from filament_kit.spoolman import Spoolman
 
 from test_hub_page_audit import hub_app  # noqa: F401
@@ -141,6 +140,7 @@ def stub(env, helper, tmp_path, monkeypatch):  # noqa: F811
     printers = StubPrinters()
     page = setup_page.SetupPage(printers, families={"bambu", "klipper"}, helper=helper, hosts=lambda: {HOSTNAME}, mapper=type("M", (), {"in_progress": lambda self, s: False})())
     cam = StubCameraHub(tmp_path)
+    camera_ticket.clear()                                  # the tickets are the process's: none from another test
     seen: list = []
     monkeypatch.setattr(pending, "load_or_wait", lambda m, sm, serial, label, spool_id, dry, **kw: seen.append(("load", serial, label, spool_id, dry)) or
                         {"dry_run": dry, "confirmed": None, "moved_back": [], **({} if dry else {"pending": True})})
@@ -266,46 +266,117 @@ def _stream(stub, serial, query="", name="camera.mjpeg"):
     return stub.c.get(f"/setup/api/printers/{serial}/{name}{query}")
 
 
-def test_a_ticket_needs_the_code_starts_one_stream_for_its_printer_and_is_worthless_afterwards(stub):
+def _ticket(stub, serial=SERIAL):
+    return post(stub.c, f"printers/{serial}/camera/ticket").json()["ticket"]
+
+
+def _session_cookie(r) -> str:
+    return next(v for k, v in r.headers.multi_items() if k == "set-cookie" and v.startswith(printer_live_tab.SESSION_COOKIE + "="))
+
+
+def test_a_ticket_needs_the_code_and_the_stream_needs_a_ticket_a_session_or_a_trusted_computer(stub):
     assert post(stub.c, f"printers/{SERIAL}/camera/ticket", code=None).status_code == 403
-    assert _stream(stub, SERIAL).status_code == 403 and stub.cam.acquired == []                    # no ticket, no cookie: nothing starts
-    assert _stream(stub, SERIAL, "?ticket=nope").status_code == 403
+    assert post(stub.c, f"printers/{SERIAL}/camera/ticket", code="00000000").status_code == 403
+    assert _stream(stub, SERIAL).status_code == 403 and _stream(stub, SERIAL, name="camera/index.m3u8").status_code == 403
+    assert _stream(stub, SERIAL, "?ticket=nope").status_code == 403 and stub.cam.acquired == []        # nothing starts
     r = post(stub.c, f"printers/{SERIAL}/camera/ticket")
     assert r.status_code == 200 and r.json()["expires_in"] == 60 and len(r.json()["ticket"]) >= 30
-    t = r.json()["ticket"]
-    assert _stream(stub, OTHER, f"?ticket={t}").status_code == 403 and stub.cam.acquired == []      # the ticket of another printer
-    assert _stream(stub, SERIAL, f"?ticket={t}").status_code == 403                                   # and it is spent by the asking
-    t = post(stub.c, f"printers/{SERIAL}/camera/ticket").json()["ticket"]
-    other = post(stub.c, f"printers/{SERIAL}/camera/ticket").json()["ticket"]
+    assert post(stub.c, "printers/00M00A00000FFFF/camera/ticket").status_code == 404
+
+
+def test_the_first_request_with_a_ticket_spends_it_and_sets_the_camera_session_cookie_with_the_ruled_attributes(stub):
+    t = _ticket(stub)
+    assert _stream(stub, OTHER, f"?ticket={t}").status_code == 403 and stub.cam.acquired == []        # a ticket is for its printer only
     ok = _stream(stub, SERIAL, f"?ticket={t}")
     assert ok.status_code == 200 and ok.headers["content-type"].startswith("multipart/x-mixed-replace") and stub.cam.acquired == [(SERIAL, "mjpeg")]
-    assert stub.cam.released == [SERIAL]                                                          # counted out when the stream ends
-    assert _stream(stub, SERIAL, f"?ticket={t}").status_code == 403                                 # used once
-    assert _stream(stub, SERIAL, f"?ticket={other}").status_code == 200                              # a second ticket is its own
-    assert post(stub.c, f"printers/{SERIAL}/camera/ticket").json()["ticket"] != other
-    assert post(stub.c, f"printers/{SERIAL}/camera/ticket", code="00000000").status_code == 403
+    cookie = _session_cookie(ok).lower()
+    assert printer_live_tab.SESSION_COOKIE == "fk_setup_camera" and cookie.startswith("fk_setup_camera=")
+    for part in ("httponly", "secure", "samesite=strict", f"path=/setup/api/printers/{SERIAL}/camera".lower()):
+        assert part in cookie, (part, cookie)
+    assert "max-age" not in cookie and "expires" not in cookie, cookie                      # a session cookie: the Hub's memory decides the end
+    assert camera_ticket.sessions_open() == 1 and stub.cam.released == [SERIAL]
+    stub.c.cookies.clear()
+    assert _stream(stub, SERIAL, f"?ticket={t}").status_code == 403                                   # spent: worthless afterwards
+    assert camera_ticket.sessions_open() == 1
 
 
-def test_a_ticket_past_60_seconds_is_refused_and_the_table_does_not_grow_without_end():
-    now = [100.0]
-    held = Tickets(clock=lambda: now[0])
-    a = held.issue(SERIAL)
-    now[0] += 59.9
-    assert held.take(a, SERIAL) is True
-    b = held.issue(SERIAL)
-    now[0] += 60.1
-    assert held.take(b, SERIAL) is False and held.take(b, SERIAL) is False
-    assert held.take(None, SERIAL) is False and held.take(["x"], SERIAL) is False
-    for _ in range(printer_live_tab.TICKET_MAX * 3):
-        held.issue(SERIAL)
-    assert len(held._held) <= printer_live_tab.TICKET_MAX
+def test_the_playlist_takes_the_ticket_and_the_segments_then_take_the_cookie_for_that_printer_only(stub, tmp_path):
+    (tmp_path / "seg1.ts").write_bytes(b"ts")
+    assert _stream(stub, SERIAL, name="camera/seg1.ts").status_code == 403                           # no ticket on a segment, no cookie: no
+    t = _ticket(stub)
+    first = _stream(stub, SERIAL, f"?ticket={t}", name="camera/index.m3u8")
+    assert first.status_code == 200 and "fk_setup_camera=" in _session_cookie(first)
+    seg = _stream(stub, SERIAL, name="camera/seg1.ts")                                                # the jar sends the cookie: its path matches
+    assert seg.status_code == 200 and seg.content == b"ts"
+    assert _stream(stub, SERIAL, name="camera/index.m3u8").status_code == 200                         # the playlist again, with the cookie
+    assert _stream(stub, OTHER, name="camera/seg1.ts").status_code == 403                             # the cookie is not the other printer's
+    raw = stub.c.cookies.get(printer_live_tab.SESSION_COOKIE)
+    stub.c.cookies.clear()
+    stub.c.cookies.set(printer_live_tab.SESSION_COOKIE, raw, path=f"/setup/api/printers/{OTHER}/camera")
+    assert _stream(stub, OTHER, name="camera/seg1.ts").status_code == 403                             # sent to the other printer's routes anyway
+    assert stub.c.post(f"/setup/api/printers/{SERIAL}/command", json={"action": "pause"}, headers=H).status_code == 403   # only camera routes
+
+
+def test_a_session_ends_after_ten_minutes_with_no_camera_request_and_every_request_moves_it_forward(stub, tmp_path, monkeypatch):
+    (tmp_path / "seg1.ts").write_bytes(b"ts")
+    now = [1000.0]
+    monkeypatch.setattr(camera_ticket, "_clock", lambda: now[0])
+    assert _stream(stub, SERIAL, f"?ticket={_ticket(stub)}", name="camera/index.m3u8").status_code == 200
+    for _ in range(3):                                                                                # 3 x 9 minutes: alive, as each request renews it
+        now[0] += 540
+        assert _stream(stub, SERIAL, name="camera/seg1.ts").status_code == 200
+    now[0] += 601
+    assert _stream(stub, SERIAL, name="camera/seg1.ts").status_code == 403 and camera_ticket.sessions_open() == 0
+
+
+def test_close_needs_only_the_cookie_ends_the_session_and_clears_the_cookie(stub, tmp_path):
+    (tmp_path / "seg1.ts").write_bytes(b"ts")
+    path = f"/setup/api/printers/{SERIAL}/camera/close"
+    assert stub.c.post(path, json={}, headers=H).json() == {"closed": True}                           # no cookie: nothing to close, not an error
+    assert _stream(stub, SERIAL, f"?ticket={_ticket(stub)}", name="camera/index.m3u8").status_code == 200
+    r = stub.c.post(f"/setup/api/printers/{OTHER}/camera/close", json={}, headers=H)
+    assert r.status_code == 200 and camera_ticket.sessions_open() == 1                               # another printer's close leaves the session alone
+    r = stub.c.post(path, json={}, headers=H)                                                         # no code in the body
+    assert r.status_code == 200 and r.json() == {"closed": True} and "fk_setup_camera=" in r.headers["set-cookie"] and "max-age=0" in r.headers["set-cookie"].lower()
+    assert camera_ticket.sessions_open() == 0
+    assert _stream(stub, SERIAL, name="camera/seg1.ts").status_code == 403                            # the session is gone
+    assert stub.c.post(path, json={}, headers={"Origin": "https://evil.example"}).status_code == 403
+
+
+def test_at_most_eight_sessions_the_ninth_ticket_is_refused_with_the_ruled_words_and_a_closed_one_frees_a_place(stub):
+    spare = _ticket(stub)                                                                             # asked while there was room
+    ids = []
+    for _ in range(8):
+        stub.c.cookies.clear()
+        assert _stream(stub, SERIAL, f"?ticket={_ticket(stub)}", name="camera/index.m3u8").status_code == 200
+        ids.append(stub.c.cookies.get(printer_live_tab.SESSION_COOKIE))
+    assert camera_ticket.sessions_open() == 8
+    r = post(stub.c, f"printers/{SERIAL}/camera/ticket")
+    assert r.status_code == 429 and r.json()["error"] == camera_ticket.TOO_MANY == "Too many camera views are open. Close one first." and r.json()["code"] == "too_many_views"
+    stub.c.cookies.clear()
+    r = _stream(stub, SERIAL, f"?ticket={spare}", name="camera/index.m3u8")                          # a ticket from before the ninth: refused when spent
+    assert r.status_code == 429 and r.json()["code"] == "too_many_views" and camera_ticket.sessions_open() == 8
+    stub.c.cookies.clear()
+    stub.c.cookies.set(printer_live_tab.SESSION_COOKIE, ids[0], path=f"/setup/api/printers/{SERIAL}/camera")
+    assert stub.c.post(f"/setup/api/printers/{SERIAL}/camera/close", json={}, headers=H).status_code == 200
+    assert post(stub.c, f"printers/{SERIAL}/camera/ticket").status_code == 200
+
+
+def test_a_printer_taken_away_ends_its_tickets_and_sessions(stub, tmp_path):
+    (tmp_path / "seg1.ts").write_bytes(b"ts")
+    assert _stream(stub, OTHER, f"?ticket={_ticket(stub, OTHER)}", name="camera/index.m3u8").status_code == 200
+    assert camera_ticket.sessions_open() == 1
+    spare = _ticket(stub, OTHER)
+    registry.remove(OTHER)
+    assert _stream(stub, OTHER, name="camera/seg1.ts").status_code == 404 and camera_ticket.sessions_open() == 0
+    assert camera_ticket.use_ticket(OTHER, spare) is None                                             # its unspent tickets went too
 
 
 def test_a_trusted_computer_asks_the_stream_directly_and_a_cookie_that_is_not_one_gets_nothing(stub):
     assert stub.c.post("/setup/api/trust", json={"code": CODE}, headers={**H, **AGENT}).status_code == 200
     assert trusted.COOKIE in stub.c.cookies
     r = _stream(stub, SERIAL)                                                                      # no ticket: the cookie is checked by the helper
-    assert r.status_code == 200 and stub.cam.acquired == [(SERIAL, "mjpeg")]
+    assert r.status_code == 200 and stub.cam.acquired == [(SERIAL, "mjpeg")] and camera_ticket.sessions_open() == 0
     assert _stream(stub, SERIAL, name="camera/index.m3u8").status_code == 200 and stub.cam.acquired[-1] == (SERIAL, "hls")
     assert _stream(stub, SERIAL, "?ticket=whatever").status_code == 200                              # a bad ticket does not spoil the cookie
     stub.c.cookies.clear()
@@ -314,9 +385,7 @@ def test_a_trusted_computer_asks_the_stream_directly_and_a_cookie_that_is_not_on
     assert _stream(stub, SERIAL, name="camera/index.m3u8").status_code == 403
 
 
-def test_the_playlist_does_not_take_a_ticket_and_no_camera_hub_is_said_plainly(stub, tmp_path):
-    t = post(stub.c, f"printers/{SERIAL}/camera/ticket").json()["ticket"]
-    assert _stream(stub, SERIAL, f"?ticket={t}", name="camera/index.m3u8").status_code == 403       # a segment's address cannot carry one
+def test_no_camera_hub_is_said_plainly(stub):
     page = stub.page
     page.camera_hub = None
     none = Starlette(routes=page.routes() + [Route("/setup/api" + p, fn, methods=[m]) for p, fn, m in printer_live_tab.routes(page, sm=Spoolman("http://127.0.0.1:9"))])
@@ -329,7 +398,7 @@ def test_the_routes_are_the_ones_of_the_contract_and_a_locked_get_still_reads():
     paths = {(m, p) for p, _, m in printer_live_tab.routes(type("P", (), {"guard": staticmethod(lambda fn, **k: fn)})())}
     assert paths == {("GET", "/printers/{serial}/live"), ("POST", "/printers/{serial}/command"), ("POST", "/printers/{serial}/slots/{label}/load"),
                      ("POST", "/printers/{serial}/slots/{label}/unload"), ("POST", "/printers/{serial}/slots/{label}/clear"),
-                     ("GET", "/printers/{serial}/usage"), ("POST", "/usage/{entry_id}/undo"), ("POST", "/printers/{serial}/camera/ticket"),
+                     ("GET", "/printers/{serial}/usage"), ("POST", "/usage/{entry_id}/undo"), ("POST", "/printers/{serial}/camera/ticket"), ("POST", "/printers/{serial}/camera/close"),
                      ("GET", "/printers/{serial}/camera.mjpeg"), ("GET", "/printers/{serial}/camera/{name:path}")}
 
 
@@ -405,6 +474,7 @@ const stubHub = (rec) => {
   if (/^printers\/[^/]+\/command$/.test(p)) return [200, { ok: true, reply: { ok: true } }];
   if (/^printers\/[^/]+\/usage/.test(p)) return [200, { entries: hub.usage }];
   if (/^usage\/[^/]+\/undo$/.test(p)) return [200, { entry: { id: p.split("/")[1], undone: true } }];
+  if (/^printers\/[^/]+\/camera\/close$/.test(p)) return [200, { closed: true }];
   if (/^printers\/[^/]+\/camera\/ticket$/.test(p)) return [200, { ticket: "tk" + calls(/camera\/ticket/).length, expires_in: 60 }];
   if (/^spools\?/.test(p)) return [200, { spools: [PLAN_SPOOL, { id: 8, vendor: "Sunlu", name: "PETG Blue", remaining_g: 410, location: "Rack 2" }] }];
   return [404, { error: "no such stub " + p }];
@@ -773,6 +843,7 @@ out.ticket = { calls: calls(/camera\/ticket/).map((c) => [c.method, c.path, c.bo
 $(".plive__img").dispatchEvent(new Event("load"));
 out.started = !$(".plive__camtext");
 btn(document, "camera").click();
+await until(() => calls(/camera\/close/).length === 1, "the close");
 out.hidden = { box: shown($(".plive__cam")), img: !!$(".plive__img"), label: text(btn(document, "camera")) };
 // Trusted: no ticket, the address is asked directly (the cookie goes along)
 SW.setLock("trusted");
@@ -790,10 +861,11 @@ out.failed = text($(".plive__camtext"));
 $('[data-action="try-again"]').click();
 await until(() => imgs.length === 4, "the retry");
 out.retry = { img: imgs[3], tickets: calls(/camera\/ticket/).length };
-// locking the page stops the stream
+// locking the page does not cut a running picture
 SW.setLock("locked");
-await until(() => !$(".plive__img"), "the stream to stop");
-out.lockedStops = shown($(".plive__cam"));
+await sleep(300);
+out.lockedStays = shown($(".plive__cam")) && !!$(".plive__img");
+out.closes = calls(/camera\/close/).length;
 """)
     assert page["lockedTickets"] == 0 and page["lockedImgs"] == 0
     assert page["ticket"]["calls"] == [["POST", f"printers/{'00M00A000000001'}/camera/ticket", {"code": CODE}]]
@@ -802,7 +874,7 @@ out.lockedStops = shown($(".plive__cam"));
     assert page["started"] is True and page["hidden"] == {"box": False, "img": False, "label": T("printer_camera_show")}
     assert page["direct"] == {"img": "/setup/api/printers/00M00A000000001/camera.mjpeg", "tickets": 1}            # a trusted computer: no ticket, no query
     assert page["failed"].startswith(T("printer_camera_failed")) and page["retry"] == {"img": "/setup/api/printers/00M00A000000001/camera.mjpeg?ticket=tk3", "tickets": 3}
-    assert page["lockedStops"] is False
+    assert page["lockedStays"] is True and page["closes"] == 2          # the first hide, and Try again's old session; the trusted one had none
 
 
 def test_a_ticket_the_hub_refuses_is_said_and_a_printer_without_a_camera_has_no_button(hub, tmp_path):

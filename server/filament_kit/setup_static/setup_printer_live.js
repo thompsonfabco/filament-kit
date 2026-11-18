@@ -35,7 +35,8 @@ const STUB = {
   live_load_waiting: "Waiting for the spool to load in {slot}.", live_load_done: "Loaded {name} into {slot}.", live_load_sent: "Sent to {slot}.",
   live_pick_title: "Load into slot {slot}", live_pick_none: "Pick a spool first.", live_pick_failed: "The spools could not be listed.",
   live_plan: "Load {name} into {slot}.",
-  live_not_supported: "This printer has no such control.", live_camera_trust: "This printer's camera plays only on a trusted computer."
+  live_not_supported: "This printer has no such control.",
+  live_too_many: "Too many camera views are open. Close one first."
 };
 const fill = (text, vars) => (vars ? String(text).replace(/\{([a-z][a-z0-9_]*)\}/g, (m, n) => (vars[n] != null ? String(vars[n]) : m)) : String(text));
 const t = (key, vars) => {
@@ -156,12 +157,21 @@ function printerLive(p, ctx = {}) {
   });
 
   // ----- the camera: an image request carries no code, so a trusted computer asks directly (its cookie goes along) and any other
-  // gets a ticket first (POST camera/ticket, with the code); the ticket starts one stream within 60 s, for this printer only -----
-  async function streamSrc() {
-    const base = "/setup/api/" + path("camera.mjpeg");
+  // gets a ticket first (POST camera/ticket, with the code). The FIRST camera address carries ?ticket=; the Hub then keeps a camera
+  // session (a cookie for this printer's camera routes, 10 minutes from the last request), so the playlist's segments need no
+  // ticket. The page ends the session (POST camera/close) when the camera is closed -----
+  async function firstAddress(file) {
+    const base = "/setup/api/" + path(file);
     if (SW.lock.state === "trusted") return base;
     const r = await post("camera/ticket", {});
+    S.session = true;
     return `${base}?ticket=${enc(r.ticket)}`;
+  }
+  function closeSession() {
+    if (!S.session) return;
+    S.session = false;
+    // keepalive: it still goes when the page is being left; the answer is of no interest
+    fetch("/setup/api/" + path("camera/close"), { method: "POST", credentials: "same-origin", keepalive: true, headers: { "Content-Type": "application/json" }, body: "{}" }).catch(() => {});
   }
   function cameraStop() {
     for (const m of camBox.querySelectorAll("img, video")) { m.removeAttribute("src"); if (m.load) m.load(); }   // drops the connection: the camera stops
@@ -169,6 +179,7 @@ function printerLive(p, ctx = {}) {
     camBox.hidden = true;
     S.camOn = false;
     camBtn.replaceChildren(SW.icon("camera", "icon--s"), t("printer_camera_show"));
+    closeSession();
   }
   function cameraFail(text) {
     camBox.hidden = false;
@@ -176,21 +187,23 @@ function printerLive(p, ctx = {}) {
   }
   async function cameraStart() {
     const kind = S.live && S.live.camera && S.live.camera.kind, name = p.name || (S.live && S.live.name) || "";
+    closeSession();                                          // Try again: the old session goes before a new ticket is asked
     S.camOn = true;
     camBtn.replaceChildren(SW.icon("camera", "icon--s"), t("printer_camera_hide"));
     camBox.hidden = false;
     camBox.replaceChildren(E("div", "plive__camtext", SW.spinner(), t("printer_camera_starting")));
     try {
       if (kind === "hls") {
-        if (SW.lock.state !== "trusted") { cameraFail(t("live_camera_trust")); return; }
         const v = h("video", { class: "plive__video", playsInline: true, muted: true, autoplay: true, controls: true, "aria-label": t("printer_camera_alt", { printer: name }) });
         if (!v.canPlayType("application/vnd.apple.mpegurl")) { cameraFail(t("printer_camera_no_hls")); return; }
-        v.addEventListener("error", () => cameraFail(t("printer_camera_failed")));
-        v.src = "/setup/api/" + path("camera/index.m3u8");
+        const src = await firstAddress("camera/index.m3u8");
+        if (!S.camOn) return;
+        v.addEventListener("error", () => { if (S.camOn) cameraFail(t("printer_camera_failed")); });
+        v.src = src;                                         // its segments are asked with the session's cookie
         camBox.replaceChildren(v);
         return;
       }
-      const src = await streamSrc();
+      const src = await firstAddress("camera.mjpeg");
       if (!S.camOn) return;
       const img = h("img", { class: "plive__img", alt: t("printer_camera_alt", { printer: name }) });
       img.addEventListener("load", () => camBox.querySelector(".plive__camtext")?.remove(), { once: true });
@@ -199,7 +212,7 @@ function printerLive(p, ctx = {}) {
       img.src = src;
     } catch (e) {
       if (e.locked) { cameraStop(); throw e; }
-      cameraFail(e.message);
+      cameraFail(e.data && e.data.code === "too_many_views" ? t("live_too_many") : e.message);
     }
   }
   function cameraToggle() {
@@ -390,11 +403,13 @@ function printerLive(p, ctx = {}) {
     cameraStop();
     document.removeEventListener("visibilitychange", onVisible);
     document.removeEventListener("sw:lock", onLock);
+    window.removeEventListener("pagehide", closeSession);
   }
   function onVisible() { if (!document.hidden && root.isConnected) { clearTimeout(S.timer); tick(); } else if (document.hidden) cameraStop(); }
-  function onLock() { if (SW.lock.state === "locked" && S.camOn) cameraStop(); S.ctl = ""; if (S.live) paintControls(); }
+  function onLock() { S.ctl = ""; if (S.live) paintControls(); }                 // a running picture is not cut by a lock: the next Show camera asks for the code
   document.addEventListener("visibilitychange", onVisible);
   document.addEventListener("sw:lock", onLock);
+  window.addEventListener("pagehide", closeSession);
   paintState(); paintSlots(); paintControls();
   schedule(0);
   root.stop = teardown;
