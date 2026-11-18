@@ -1,0 +1,6 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/alerts/AlertRules.kt | alert:$clearedKey | not text: a route, JSON field, storage key or log value of the alerts feature (EA8)
+android/app/src/main/java/com/thompsonfabco/filamentkit/alerts/AlertRules.kt | alert:${} | not text: a route, JSON field, storage key or log value of the alerts feature (EA8)
+android/app/src/main/java/com/thompsonfabco/filamentkit/alerts/AlertRules.kt | condition.cleared | not text: a route, JSON field, storage key or log value of the alerts feature (EA8)
+android/app/src/main/java/com/thompsonfabco/filamentkit/alerts/AlertRules.kt | key | not text: a route, JSON field, storage key or log value of the alerts feature (EA8)
+android/app/src/main/java/com/thompsonfabco/filamentkit/alerts/AlertRules.kt | printer | not text: a route, JSON field, storage key or log value of the alerts feature (EA8)
+android/app/src/main/java/com/thompsonfabco/filamentkit/alerts/AlertRules.kt | running_low | not text: a route, JSON field, storage key or log value of the alerts feature (EA8)

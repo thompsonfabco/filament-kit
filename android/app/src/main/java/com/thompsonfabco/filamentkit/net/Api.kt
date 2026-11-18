@@ -1,5 +1,10 @@
 package com.thompsonfabco.filamentkit.net
 
+import com.thompsonfabco.filamentkit.alerts.AlertParsing
+import com.thompsonfabco.filamentkit.alerts.AlertsConfig
+import com.thompsonfabco.filamentkit.alerts.EventsAnswer
+import com.thompsonfabco.filamentkit.alerts.EventsQuery
+import com.thompsonfabco.filamentkit.alerts.LowSpools
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
@@ -192,6 +197,32 @@ class Api(
         }
         return call(req.get()).jsonObject["spools"]?.jsonArray.orEmpty().map { it.jsonObject }
     }
+
+    // ---- events and alerts (R80 section 8, E4) ----
+
+    /**
+     * `GET api/events`: waits up to `q.waitS` seconds (at most 55) for an event after the cursor, so the call's timeout is
+     * longer than the wait. 404 `not_found` is a Hub without alerts; 401 is a revoked token.
+     */
+    suspend fun events(q: EventsQuery): EventsAnswer {
+        val req = request("api", "events") {
+            q.since?.let { addQueryParameter("since", it.toString()) }
+            q.sinceAt?.let { addQueryParameter("since_at", it) }
+            addQueryParameter("wait", q.waitS.toString())
+            if (q.alertOnly) addQueryParameter("alert", "1")
+            q.limit?.let { addQueryParameter("limit", it.toString()) }
+        }
+        return AlertParsing.events(call(req.get(), if (q.waitS > 0) q.waitS + EVENTS_EXTRA_S else null))
+    }
+
+    suspend fun alertsConfig(): AlertsConfig = AlertParsing.alerts(call(request("api", "alerts").get()))
+
+    /** Stores nothing: the Hub gives this phone one test alert in its next events answer, within 60 seconds. */
+    suspend fun sendTestAlert() {
+        call(request("api", "alerts", "test").post(ByteArray(0).toRequestBody(null)))
+    }
+
+    suspend fun lowSpools(): LowSpools = AlertParsing.lowSpools(call(request("api", "spools", "low").get()))
 
     /** Spoolman's filaments (also ones without spools) whose vendor, name or material hold every word of [q]. */
     suspend fun filaments(q: String): List<FilamentChoice> {
@@ -601,5 +632,6 @@ class Api(
         val JSON = "application/json".toMediaType()
         const val SLOW_READ_S = 120L
         const val DOWNLOAD_S = 600L
+        const val EVENTS_EXTRA_S = 10L
     }
 }
