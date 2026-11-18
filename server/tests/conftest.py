@@ -198,6 +198,16 @@ def free_port() -> int:
 
 
 @pytest.fixture
+def dead_port():
+    """A port nothing can answer for the whole test: a socket bound and never listening, so a connection is refused
+    and no other process (pytest runs side by side, and their fake servers draw from the same ports) can take it."""
+    from fakes import serving
+    sock = serving.bind()
+    yield sock.getsockname()[1]
+    sock.close()
+
+
+@pytest.fixture
 def spoolman_fake_store():
     """In-memory data behind the fake Spoolman; seed or inspect it directly (reset per test)."""
     return spoolman_fake.new_store()

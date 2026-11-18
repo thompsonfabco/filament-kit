@@ -24,7 +24,7 @@ RANGE_SIZE = 400
 WORKER_SLOTS = 64                                            # worker index mod this: one slot each, never shared
 MIN_RANGE = 16
 PROBE_TIMEOUT = 0.05
-_next = [0]
+_next = [os.getpid() * 37]                                  # separate pytest processes (no xdist) must not walk the same ports
 
 
 def _ephemeral_low() -> int | None:

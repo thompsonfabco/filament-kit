@@ -9,7 +9,6 @@ from fakes import readers_fake
 from fakes.claude_fake import FakeClaude
 from starlette.testclient import TestClient
 
-from conftest import free_port
 from filament_kit import config, intake, modules, pairing, tagsources
 from filament_kit.api import create_app
 from filament_kit.spoolman import Spoolman
@@ -76,8 +75,8 @@ def test_context_orders_only_when_on_and_file_exists(tmp_path, sm, readers):
     assert intake.read_context(_cfg(tmp_path / "other", url, orders_file=False), sm, None)["orders"] is None
 
 
-def test_context_dead_station_and_no_tag(tmp_path, sm):
-    dead = f"http://127.0.0.1:{free_port()}"
+def test_context_dead_station_and_no_tag(tmp_path, sm, dead_port):
+    dead = f"http://127.0.0.1:{dead_port}"
     ctx = intake.read_context(_cfg(tmp_path, dead), sm, StationClient(dead))
     assert ctx["station_state"] is None and ctx["fresh_tag"] is None
     assert intake.read_context({}, sm, None) == {"orders": None, "station_state": None, "fresh_tag": None}
