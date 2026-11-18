@@ -1,0 +1,38 @@
+/* Alerts on the Hub page: the Running low card (03 4.2), the Storage use panel (03 4.2) and the Settings > Alerts group (03 10.13) */
+.overview__low:empty { display: none; }
+.low__list { list-style: none; margin: 0; padding: 0; display: grid; }
+.low__row { display: flex; align-items: center; gap: var(--s3); padding: var(--s2) 0; border-top: var(--hairline) solid var(--border); min-width: 0; }
+.low__row:first-child { border-top: 0; }
+.low__text { flex: 1 1 0; min-width: 0; display: grid; gap: var(--s1); }
+.low__name { overflow-wrap: anywhere; font-weight: var(--fw-label); }
+.low__meta { display: flex; flex-wrap: wrap; gap: 0 var(--s3); font-size: var(--fs-s); }
+.low__meta > span { overflow-wrap: anywhere; }
+.low__stock { flex: none; font-size: var(--fs-s); text-align: right; }
+.low .actions { margin-top: var(--s2); }
+.low__foot { margin: var(--s3) 0 0; font-size: var(--fs-s); }
+.alerts__place { display: grid; gap: var(--s3); min-width: 0; }
+.stuse__body { display: grid; gap: var(--s4); min-width: 0; }
+.stuse__fs { display: grid; gap: var(--s1); }
+.stuse__line { margin: 0; font-size: var(--fs-s); overflow-wrap: anywhere; }
+.stuse__items { list-style: none; margin: 0; padding: 0; display: grid; }
+.stuse__item { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: var(--s1) var(--s3); padding: var(--s2) 0; border-top: var(--hairline) solid var(--border); }
+.stuse__item:first-child { border-top: 0; }
+.stuse__title { overflow-wrap: anywhere; font-weight: var(--fw-label); }
+.stuse__size { text-align: right; }
+.stuse__where { grid-column: 1 / -1; min-width: 0; font-size: var(--fs-s); overflow-wrap: anywhere; }
+.stuse__where:empty { display: none; }
+.alerts__types { display: grid; gap: var(--s2); min-width: 0; }
+.alerts__sub { margin-left: var(--s5); }
+.alerts__device { display: grid; gap: var(--s2); min-width: 0; }
+.alerts__device .settings__heading { margin-top: var(--s3); }
+.alerts__state { min-width: 0; overflow-wrap: anywhere; font-size: var(--fs-s); }
+.alerts__state:empty { display: none; }
+.alerts__device .actions { flex-wrap: wrap; }
+/* Panes hides the Fix column (priority 2) of a table without an expander; the Storage row's fix is the way to its panel */
+:root[data-look="panes"] .coll--checks .coll__cell[data-col="fix"]:has([data-action="storage-show"]) { display: block; flex-basis: 100%; }
+@media (max-width: 600px) {
+  .low__row { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: var(--s1) var(--s3); }
+  .low__row > .swatch { margin-top: var(--s1); }
+  .low__stock { grid-column: 2; max-width: none; text-align: left; }
+  .alerts__sub { margin-left: var(--s4); }
+}
