@@ -526,6 +526,48 @@ def test_unload_works_while_printer_offline_or_busy(rig, sm, fil):
     assert sm.get(f"spool/{s['id']}")["location"] == "Rack 1"
 
 
+def test_clear_forgets_the_spool_and_sends_nothing_to_the_printer(rig, sm, fil):
+    m, printer, client = rig
+    s = spool(sm, fil, LOC_A2, prev="Storage box 1")
+    n = len(client.published)
+    r = loading.clear(m, sm, SERIAL, "A2", False)
+    assert len(client.published) == n and printer.writes == [] and r["printer_cleared"] is False
+    got = sm.get(f"spool/{s['id']}")
+    assert got["location"] == "Storage box 1" and prev(got) == ""
+    assert r["moved_back"] == [{"id": s["id"], "location": "Storage box 1"}] and r["spool"]["id"] == s["id"]
+    assert r["slot"]["label"] == "A2" and r["dry_run"] is False
+
+
+def test_clear_of_a_slot_with_no_spool_is_not_an_error_and_dry_run_changes_nothing(rig, sm, fil, spoolman_fake_store):
+    m, printer, client = rig
+    r = loading.clear(m, sm, SERIAL, "A2", False)
+    assert r["spool"] is None and r["moved_back"] == [] and r["printer_cleared"] is False
+    s = spool(sm, fil, LOC_A2)
+    before = copy.deepcopy(spoolman_fake_store["spools"])
+    d = loading.clear(m, sm, SERIAL, "A2", True)
+    assert spoolman_fake_store["spools"] == before and d["dry_run"] is True
+    assert d["spool"]["location"] == "Sealed stock" and d["moved_back"] == [{"id": s["id"], "location": "Sealed stock"}]
+
+
+def test_clear_view_is_the_kit_routes_answer(rig, sm, fil):
+    m, printer, client = rig
+    s = spool(sm, fil, LOC_A2, prev="Rack 1")
+    v = loading.clear_view(loading.clear(m, sm, SERIAL, "A2", False), True)
+    assert set(v) == {"slot", "spool", "moved_back", "waiting_ended", "printer_cleared", "dry_run"}
+    assert v["slot"] == "A2" and v["moved_back"] == "Rack 1" and v["waiting_ended"] is True
+    assert v["spool"]["id"] == s["id"] and v["spool"]["location"] == "Rack 1" and v["spool"]["loaded"] is None
+    e = loading.clear_view(loading.clear(m, sm, SERIAL, "A2", False), False)
+    assert e["spool"] is None and e["moved_back"] is None and e["waiting_ended"] is False
+
+
+def test_clear_of_the_slot_the_running_print_feeds_is_refused(rig, sm, fil, monkeypatch):
+    m, printer, client = rig
+    spool(sm, fil, LOC_A2)
+    monkeypatch.setattr(loading, "in_use", lambda *a, **k: "A2 feeds the running print")
+    with pytest.raises(loading.SlotInUse, match="clear it once"):
+        loading.clear(m, sm, SERIAL, "A2", False)
+
+
 # ---------------------------------------------------------------- I1: one writer per printer (load vs mapping)
 
 from filament_kit.bridge import mapping  # noqa: E402

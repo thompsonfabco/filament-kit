@@ -482,5 +482,50 @@ def unload(manager, sm, serial: str, label: str, dry: bool, *, sealed_location: 
     return {"spool": spool, "slot": slot, "preset": None, "dry_run": bool(dry), "moved_back": moved}
 
 
+def clear(manager, sm, serial: str, label: str, dry: bool, *, sealed_location: str = SEALED) -> dict:
+    """Clear slot `label` of printer `serial`: the Hub forgets which spool is in it (R83 s3). Whatever spool is
+    recorded there goes back where it was, exactly as `unload` moves it; no spool recorded is not an error. Nothing
+    is sent to a Bambu Lab printer (no recorded printer answer shows a command that resets a slot's setting without
+    moving anything), so `printer_cleared` is False and the slot keeps showing its old filament. Refused for the
+    slot the running print feeds, as `unload` is."""
+    p = _printer(serial)
+    name = registry.display_name(p)
+    label = _label(serial, label)
+    loc = status.location(name, label)
+    report = manager.wait_report(serial, lambda r: True, 0) if manager is not None else None
+    addr = _address(serial, report or {}, label)
+    slot = {"label": label, "ams_id": addr[0] if addr else None, "tray_id": addr[1] if addr else None,
+            "location": loc}
+    alias = addr[3] if addr else next((a for a, cur in layout.aliases(p.model).items() if cur == label), None)
+    old_loc = status.location(name, alias) if alias else None
+    why = in_use(serial, p.model, report, addr[0], addr[1], label,
+                 lambda: ask_for_mapping(manager, serial)) if addr and report else None
+    if why:
+        raise SlotInUse(f"{why}; clear it once the print is done")
+    guard = mapping.load_guard(serial) if not dry else contextlib.nullcontext()
+    with guard, _slot_lock(serial, label), inventory._LOCK, event_sink.batch_scope():
+        here = _occupants(sm, loc, also=old_loc)
+        moved = _send_back(sm, here, sealed_location, dry) if here else []
+        first = min(here, key=lambda s: s["id"]) if here else None
+        if first is None:
+            spool = None
+        elif dry:
+            spool = {**first, "location": moved[0]["location"],
+                     "extra": {**(first.get("extra") or {}), "prev_location": json.dumps("")}}
+        else:
+            spool = sm.get(f"spool/{first['id']}")
+    return {"slot": slot, "spool": spool, "moved_back": moved, "printer_cleared": False, "dry_run": bool(dry)}
+
+
+def clear_view(r: dict, waiting_ended: bool) -> dict:
+    """`clear`'s result as the kit route answers it (R83 s10.1): `slot` the label, `spool` its spool view and
+    `moved_back` the place it goes back to (None without a spool)."""
+    moved = r.get("moved_back") or []
+    sp = r.get("spool")
+    return {"slot": r["slot"]["label"], "spool": inventory.spool_view(sp) if sp else None,
+            "moved_back": moved[0]["location"] if moved else None, "waiting_ended": bool(waiting_ended),
+            "printer_cleared": bool(r.get("printer_cleared")), "dry_run": bool(r["dry_run"])}
+
+
 # the Spoolman moves, shared with the Klipper family (bridge.klipper.loads)
 send_back, occupants, target_patch, prev_location = _send_back, _occupants, _target_patch, _prev
