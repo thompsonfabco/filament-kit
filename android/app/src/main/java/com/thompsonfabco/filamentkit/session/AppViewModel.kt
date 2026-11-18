@@ -4,6 +4,12 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.thompsonfabco.filamentkit.BuildConfig
+import com.thompsonfabco.filamentkit.alerts.AlertNotifier
+import com.thompsonfabco.filamentkit.alerts.AlertTarget
+import com.thompsonfabco.filamentkit.alerts.AlertsFeed
+import com.thompsonfabco.filamentkit.alerts.AlertsLauncher
+import com.thompsonfabco.filamentkit.alerts.AlertsStore
+import com.thompsonfabco.filamentkit.alerts.NotifyAction
 import com.thompsonfabco.filamentkit.data.Settings
 import com.thompsonfabco.filamentkit.drafts.Draft
 import com.thompsonfabco.filamentkit.drafts.DraftStore
@@ -66,6 +72,53 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             onProblem = router::report,
             words = { app.getString(it.text) },
         )
+    }
+
+    /** The switch "Alerts on this phone", the last event the watching service saw and the banners put away (R80 E4). */
+    val alertsStore = AlertsStore.create(app)
+
+    /** The banners, the Alerts list and the running-low count while the app is open; the test alert shows as a notification. */
+    val alerts = AlertsFeed(
+        viewModelScope, { session.api.value }, alertsStore,
+        onTest = { AlertNotifier(app).act(listOf(NotifyAction.ShowTest(it))) },
+    )
+
+    private val _alertTap = MutableStateFlow<AlertTarget?>(null)
+
+    /** Where a tapped alert notification wants to go; the navigation host takes it with [consumeAlertTap]. */
+    val alertTap: StateFlow<AlertTarget?> = _alertTap.asStateFlow()
+
+    fun openAlert(target: AlertTarget?) {
+        if (target != null) _alertTap.value = target
+    }
+
+    fun consumeAlertTap() {
+        _alertTap.value = null
+    }
+
+    /** The last Running low request the Spools screen acted on (survives rotation). */
+    var handledLowRequests = 0
+
+    /** Settings > Alerts > the switch: on starts the watching service (the app is showing), off stops it. */
+    fun setAlertsOn(on: Boolean) {
+        viewModelScope.launch {
+            alertsStore.setOn(on)
+            if (on) AlertsLauncher.start(getApplication()) else AlertsLauncher.stop(getApplication())
+        }
+    }
+
+    /** Settings > Alerts > Send a test alert: the Hub hands the test out in the next events answer. */
+    fun sendTestAlert() {
+        viewModelScope.launch {
+            try {
+                session.api.value?.sendTestAlert()
+                alerts.refresh(com.thompsonfabco.filamentkit.alerts.AlertsUi.BANNER_DAYS)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // the Hub could not be reached: there is nothing to show
+            }
+        }
     }
 
     private val _draftList = MutableStateFlow<List<Draft>>(emptyList())
@@ -168,6 +221,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Settings → Forget server. */
     fun forget(then: () -> Unit) {
         viewModelScope.launch {
+            // nothing of the old Hub stays: the watching service stops with it
+            alertsStore.setOn(false)
+            AlertsLauncher.stop(getApplication())
+            alerts.clear()
             settings.clear()
             router.clear()
             then()

@@ -45,6 +45,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.thompsonfabco.filamentkit.R
+import com.thompsonfabco.filamentkit.alerts.AlertTexts
+import com.thompsonfabco.filamentkit.alerts.LowSpool
 import com.thompsonfabco.filamentkit.ui.components.DetailPresentation
 import com.thompsonfabco.filamentkit.ui.components.SwButton
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
@@ -90,17 +92,24 @@ data class SearchUi(
     val failure: HubFailure? = null,
     /** When the results were read (epoch millis), for the offline notice. */
     val loadedAt: Long? = null,
+    /** The "Running low" filter (R80 section 7): the list of spools at or under the Hub's threshold replaces the search. */
+    val lowOnly: Boolean = false,
+    val low: List<LowSpool> = emptyList(),
+    val lowLoaded: Boolean = false,
 )
 
 /** Spool search; [search] is `api.search(q, sealedOnly)`, asked of the session's current client at each call. */
 class SearchViewModel(
     private val pauseMs: Long = TYPING_PAUSE_MS,
+    /** `api.lowSpools()`; null: the Hub has no running-low list, so there is no filter. */
+    private val loadLow: (suspend () -> List<LowSpool>)? = null,
     private val search: suspend (q: String, sealedOnly: Boolean) -> List<JsonObject>,
 ) : ViewModel() {
     private val _state = MutableStateFlow(SearchUi())
     val state: StateFlow<SearchUi> = _state.asStateFlow()
     private var job: Job? = null
     private var typing: Job? = null
+    private var lowJob: Job? = null
 
     /** A pause in typing searches by itself once two letters are typed; clearing the box clears the results. */
     fun setQuery(q: String) {
@@ -144,6 +153,29 @@ class SearchViewModel(
     }
 
     fun clear() = setQuery("")
+
+    /** The "Running low" chip: shows the list of low spools (least first, as the Hub gives it) instead of the search. */
+    fun setLowOnly(on: Boolean) {
+        _state.update { it.copy(lowOnly = on, failure = if (on) null else it.failure) }
+        if (on) loadLowSpools()
+    }
+
+    /** Reads the running-low list again (the chip, Try again). */
+    fun loadLowSpools() {
+        val load = loadLow ?: return
+        _state.update { it.copy(busy = true) }
+        lowJob?.cancel()
+        lowJob = viewModelScope.launch {
+            try {
+                val spools = load()
+                _state.update { it.copy(busy = false, low = spools, lowLoaded = true, failure = null, loadedAt = System.currentTimeMillis()) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(busy = false, failure = hubFailure(e)) }
+            }
+        }
+    }
 
     private companion object {
         const val MIN_TYPED = 2
@@ -191,6 +223,8 @@ fun SearchScreen(
     modifier: Modifier = Modifier,
     nfc: NfcState = rememberNfcState(),
     online: Boolean = true,
+    /** How many spools are running low, for the chip "Running low (n)"; null: no chip (the Hub has no such list). */
+    lowCount: Int? = null,
     onNfcSettings: (() -> Unit)? = null,
     spoolDetail: (@Composable (spool: SpoolSummary, embedded: Boolean, onClose: () -> Unit) -> Unit)? = null,
 ) {
@@ -256,27 +290,34 @@ fun SearchScreen(
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
-                    // the whole chip toggles: no check icon (08 10.3)
-                    FilterChip(
-                        selected = ui.sealedOnly,
-                        onClick = { vm.setSealedOnly(!ui.sealedOnly) },
-                        label = { Text(stringResource(R.string.spools_sealed_only), style = MaterialTheme.typography.labelLarge) },
-                        modifier = Modifier.heightIn(min = SpoolwardenTheme.sizes.row),
-                        shape = SpoolwardenTheme.shapes.rS,
-                        colors = FilterChipDefaults.filterChipColors(
-                            containerColor = colors.surface, labelColor = colors.text,
-                            selectedContainerColor = colors.accentSoft, selectedLabelColor = colors.accentText,
-                        ),
-                        border = FilterChipDefaults.filterChipBorder(
-                            enabled = true, selected = ui.sealedOnly, borderColor = colors.border, selectedBorderColor = colors.border,
-                            borderWidth = SpoolwardenTheme.sizes.hairline, selectedBorderWidth = SpoolwardenTheme.sizes.hairline,
-                        ),
-                    )
-                    if (ui.query.isBlank()) TagHint(nfc, onNfcSettings ?: { openNfcSettings(context) })
+                    Row(horizontalArrangement = Arrangement.spacedBy(space.s2)) {
+                        ToggleChip(stringResource(R.string.spools_sealed_only), ui.sealedOnly) { vm.setSealedOnly(!ui.sealedOnly) }
+                        // the Hub's running-low list (R80 section 7); no chip for a Hub that has none
+                        if (lowCount != null || ui.lowOnly) {
+                            ToggleChip(AlertTexts.runningLowChip(lowCount ?: ui.low.size), ui.lowOnly) { vm.setLowOnly(!ui.lowOnly) }
+                        }
+                    }
+                    val openOrToggle: (SpoolSummary) -> Unit = { spool ->
+                        when {
+                            useCardDetail -> {
+                                cachedSpool = spool
+                                com.thompsonfabco.filamentkit.ui.spool.SpoolCache.put(spool)
+                                expandedIds = if (spool.id in expandedIds) expandedIds - spool.id else expandedIds + spool.id
+                            }
+                            useSheetDetail || usePaneDetail -> {
+                                cachedSpool = spool
+                                com.thompsonfabco.filamentkit.ui.spool.SpoolCache.put(spool)
+                                sheetSpoolId = spool.id
+                            }
+                            else -> onOpenSpool(spool)
+                        }
+                    }
+                    if (ui.query.isBlank() && !ui.lowOnly) TagHint(nfc, onNfcSettings ?: { openNfcSettings(context) })
                     HubNoticeOf(ui.failure, onPairAgain)
+                    if (ui.lowOnly) LowSpoolsList(ui, openOrToggle, online, onTryAgain = vm::loadLowSpools)
                     val searched = ui.searched
                     // the states every Hub screen has (05 3.2): the progress line, the error card, offline
-                    ScreenState(
+                    if (!ui.lowOnly) ScreenState(
                         loaded = searched != null,
                         loading = ui.busy,
                         isEmpty = searched != null && ui.results.isEmpty(),
@@ -293,21 +334,6 @@ fun SearchScreen(
                         offline = !online,
                         loadedSecondsAgo = secondsSince(ui.loadedAt),
                     ) {
-                        val openOrToggle: (SpoolSummary) -> Unit = { spool ->
-                            when {
-                                useCardDetail -> {
-                                    cachedSpool = spool
-                                    com.thompsonfabco.filamentkit.ui.spool.SpoolCache.put(spool)
-                                    expandedIds = if (spool.id in expandedIds) expandedIds - spool.id else expandedIds + spool.id
-                                }
-                                useSheetDetail || usePaneDetail -> {
-                                    cachedSpool = spool
-                                    com.thompsonfabco.filamentkit.ui.spool.SpoolCache.put(spool)
-                                    sheetSpoolId = spool.id
-                                }
-                                else -> onOpenSpool(spool)
-                            }
-                        }
                         SwCollection(
                             ui.results, inset = SpoolwardenTheme.space.s4, surface = true, visual = SpoolwardenTheme.sizes.swatchRowW + SpoolwardenTheme.space.s3,
                             tile = { _, spool ->
@@ -392,6 +418,62 @@ private fun TagHint(nfc: NfcState, onNfcSettings: () -> Unit) {
                 style = MaterialTheme.typography.bodyMedium, color = colors.muted,
             )
             if (nfc == NfcState.Off) SwButton(stringResource(R.string.spools_nfc_settings), onNfcSettings, kind = SwButtonKind.Quiet)
+        }
+    }
+}
+
+/** A filter chip: the whole chip toggles, no check icon (08 10.3). */
+@Composable
+private fun ToggleChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    val colors = SpoolwardenTheme.colors
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label, style = MaterialTheme.typography.labelLarge) },
+        modifier = Modifier.heightIn(min = SpoolwardenTheme.sizes.row),
+        shape = SpoolwardenTheme.shapes.rS,
+        colors = FilterChipDefaults.filterChipColors(
+            containerColor = colors.surface, labelColor = colors.text,
+            selectedContainerColor = colors.accentSoft, selectedLabelColor = colors.accentText,
+        ),
+        border = FilterChipDefaults.filterChipBorder(
+            enabled = true, selected = selected, borderColor = colors.border, selectedBorderColor = colors.border,
+            borderWidth = SpoolwardenTheme.sizes.hairline, selectedBorderWidth = SpoolwardenTheme.sizes.hairline,
+        ),
+    )
+}
+
+/** The spool a running-low row stands for, as the Spools list shows it. */
+internal fun LowSpool.toSummary(): SpoolSummary = SpoolSummary(
+    id = id, brand = "", name = filament, material = material, colorHex = color, location = location, remaining = remainingG,
+)
+
+/** The running-low list (R80 section 7): least filament first, each row with "Last one" or "<n> more in stock" under it. */
+@Composable
+private fun LowSpoolsList(ui: SearchUi, onOpen: (SpoolSummary) -> Unit, online: Boolean, onTryAgain: () -> Unit) {
+    val space = SpoolwardenTheme.space
+    val colors = SpoolwardenTheme.colors
+    ScreenState(
+        loaded = ui.lowLoaded,
+        loading = ui.busy,
+        isEmpty = ui.lowLoaded && ui.low.isEmpty(),
+        empty = { Text(AlertTexts.spoolsRunningLow(0), style = MaterialTheme.typography.bodyLarge) },
+        error = ui.failure?.let { hubFailureText(it) },
+        onTryAgain = onTryAgain,
+        offline = !online,
+        loadedSecondsAgo = secondsSince(ui.loadedAt),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(space.s2)) {
+            ui.low.forEach { spool ->
+                Column {
+                    SpoolRow(spool.toSummary(), onClick = { onOpen(spool.toSummary()) })
+                    Text(
+                        if (spool.lastOne) AlertTexts.LAST_ONE else AlertTexts.moreInStock(spool.inStock),
+                        color = if (spool.lastOne) colors.warn else colors.muted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
         }
     }
 }

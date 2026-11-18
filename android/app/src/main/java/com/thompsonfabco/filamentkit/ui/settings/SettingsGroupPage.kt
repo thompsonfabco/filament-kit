@@ -17,6 +17,7 @@ internal class SettingsActions(
     val onCheckForUpdates: () -> Unit,
     val onSimulateTag: (String) -> Unit,
     val onLook: (Look) -> Unit = {},
+    val alerts: AlertsActions = AlertsActions(),
 )
 
 /** The page of one group: the route of a narrow window, and the right pane of a wide one. */
@@ -34,6 +35,7 @@ internal fun SettingsGroupPage(group: SettingsGroup, facts: SettingsFacts, actio
             setupUrl = actions.setupUrl,
             modifier = modifier,
         )
+        SettingsGroup.Alerts -> AlertsSettings(facts.alerts, actions.alerts, modifier)
         SettingsGroup.Updates -> UpdatesSettings(
             appVersion = facts.appVersion,
             hubVersion = facts.hub?.version,

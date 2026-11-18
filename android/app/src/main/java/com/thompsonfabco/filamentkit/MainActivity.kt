@@ -3,6 +3,7 @@ package com.thompsonfabco.filamentkit
 import android.app.UiModeManager
 import android.graphics.Color as AndroidColor
 import android.os.Build
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -76,6 +77,13 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import com.thompsonfabco.filamentkit.alerts.AlertNotifier
+import com.thompsonfabco.filamentkit.alerts.AlertTarget
+import com.thompsonfabco.filamentkit.alerts.AlertsLauncher
+import com.thompsonfabco.filamentkit.alerts.AlertsRoute
+import com.thompsonfabco.filamentkit.alerts.AlertsUi
+import com.thompsonfabco.filamentkit.alerts.SettingsAlertsRoute
+import com.thompsonfabco.filamentkit.alerts.bannerState
 import com.thompsonfabco.filamentkit.nav.AddProfileRoute
 import com.thompsonfabco.filamentkit.nav.AddProfileTitle
 import com.thompsonfabco.filamentkit.nav.PresetsRoute
@@ -164,6 +172,9 @@ import com.thompsonfabco.filamentkit.tags.TagEvents
 import com.thompsonfabco.filamentkit.tags.disableTagReader
 import com.thompsonfabco.filamentkit.tags.enableTagReader
 import com.thompsonfabco.filamentkit.ui.rememberLocalNetworkAccess
+import com.thompsonfabco.filamentkit.ui.alerts.AlertBannerActions
+import com.thompsonfabco.filamentkit.ui.alerts.AlertsScreen
+import com.thompsonfabco.filamentkit.ui.alerts.alertsPlaceTitle
 import com.thompsonfabco.filamentkit.ui.add.AddStep
 import com.thompsonfabco.filamentkit.ui.add.AddStepRoute
 import com.thompsonfabco.filamentkit.ui.add.text
@@ -234,6 +245,8 @@ import com.thompsonfabco.filamentkit.ui.profile.ProfileApi
 import com.thompsonfabco.filamentkit.ui.profile.ProfileField
 import com.thompsonfabco.filamentkit.ui.search.SearchScreen
 import com.thompsonfabco.filamentkit.ui.search.SearchViewModel
+import com.thompsonfabco.filamentkit.ui.settings.AlertsActions
+import com.thompsonfabco.filamentkit.ui.settings.AlertsFacts
 import com.thompsonfabco.filamentkit.ui.settings.HubPage
 import com.thompsonfabco.filamentkit.ui.settings.SettingsActions
 import com.thompsonfabco.filamentkit.ui.settings.SettingsFacts
@@ -244,7 +257,7 @@ import com.thompsonfabco.filamentkit.ui.settings.SettingsScreen
 import com.thompsonfabco.filamentkit.ui.settings.UpdateActions
 import com.thompsonfabco.filamentkit.ui.settings.icon
 import com.thompsonfabco.filamentkit.ui.settings.settingsGroups
-import com.thompsonfabco.filamentkit.ui.settings.title
+import com.thompsonfabco.filamentkit.ui.settings.titleText
 import com.thompsonfabco.filamentkit.ui.spool.LinkFindScreen
 import com.thompsonfabco.filamentkit.ui.spool.LinkFindViewModel
 import com.thompsonfabco.filamentkit.ui.spool.LinkPreviewScreen
@@ -293,6 +306,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         splash.setKeepOnScreenCondition { app.startup.value == null }
         appEdgeToEdge()
+        // a tapped alert notification names the place it opens; a recreated activity has used it already
+        if (savedInstanceState == null) app.openAlert(AlertNotifier.targetOf(intent))
         setContent {
             val startup by app.startup.collectAsStateWithLifecycle()
             // Nothing is drawn (the splash shows) until the stored pairing and appearance have been read.
@@ -314,6 +329,12 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        app.openAlert(AlertNotifier.targetOf(intent))
     }
 
     override fun onResume() {
@@ -353,6 +374,10 @@ internal fun FilamentKitApp(
     val skipFingerprintCheck by app.settings.skipFingerprintCheck.collectAsStateWithLifecycle(initialValue = false)
     val connection by app.session.connection.collectAsStateWithLifecycle()
     val notice by app.router.notice.collectAsStateWithLifecycle()
+    val alertsUi by app.alerts.state.collectAsStateWithLifecycle()
+    val alertsOn by app.alertsStore.on.collectAsStateWithLifecycle(initialValue = false)
+    // each ask for Spools with the Running low filter on (Home's line, an alert's action) counts one up
+    var lowRequest by rememberSaveable { mutableIntStateOf(0) }
 
     // App-wide, one per Api (owned by AppViewModel; replaced when the pinned client changes).
     val updater by app.updater.current.collectAsStateWithLifecycle()
@@ -389,6 +414,26 @@ internal fun FilamentKitApp(
     }
     LaunchedEffect(lifecycle, updater) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { updater?.onResumed() }
+    }
+    // Alerts on this phone: on return to the app, a watching service that was stopped (the notification dismissed, Task
+    // Manager) starts again while the app is showing
+    val appContext = LocalContext.current.applicationContext
+    LaunchedEffect(lifecycle, config) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { AlertsLauncher.startIfNeeded(appContext) }
+    }
+    // The banners, the Alerts list and the running-low count are read about every 10 s while the app is showing: a day
+    // back for the banners, seven days for the list
+    val onAlertsList = destination?.hasRoute(AlertsRoute::class) == true
+    LaunchedEffect(lifecycle, api, online, inPairing, onAlertsList) {
+        if (inPairing || api == null || !online) return@LaunchedEffect
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            var round = 0
+            while (true) {
+                app.alerts.refresh(if (onAlertsList) AlertsUi.LIST_DAYS else AlertsUi.BANNER_DAYS)
+                if (round++ % LOW_EVERY == 0) app.alerts.refreshLow()
+                delay(ALERTS_POLL_MS)
+            }
+        }
     }
 
     // the Hub that was paired when pairing was opened over the main graph
@@ -520,9 +565,42 @@ internal fun FilamentKitApp(
         }
     }
 
+    // Where an alert's action goes (R80 17:00 ruling): the printer, the running-low list, else the Alerts list
+    fun openAlertTarget(target: AlertTarget) {
+        when (target) {
+            is AlertTarget.Printer -> {
+                // the Printers stack goes back to its root first, so Back from the printer lands on the list
+                nav.selectTab(Tab.Printers)
+                nav.popBackStack<PrintersRoute>(inclusive = false)
+                nav.navigate(PrinterRoute(target.id))
+            }
+            AlertTarget.RunningLow -> {
+                lowRequest++
+                tabTapped(Tab.Spools)
+            }
+            AlertTarget.AlertsList -> nav.navigate(AlertsRoute) { launchSingleTop = true }
+        }
+    }
+    // a tapped alert notification
+    val alertTap by app.alertTap.collectAsStateWithLifecycle()
+    LaunchedEffect(alertTap, inPairing, destination != null) {
+        val target = alertTap ?: return@LaunchedEffect
+        if (inPairing || destination == null) return@LaunchedEffect
+        app.consumeAlertTap()
+        openAlertTarget(target)
+    }
+
     // The spool screens and the tag screens (05 2.5, "Shared"): declared in the graph of every tab, so they open on the stack of
     // the tab that is selected and the bar keeps showing it.
     val sharedRoutes: NavGraphBuilder.() -> Unit = {
+        composable<AlertsRoute> {
+            if (api == null) {
+                HubNoticePage(::pushPairing)
+                return@composable
+            }
+            AlertsScreen(alertsUi, System.currentTimeMillis(), onAction = ::openAlertTarget)
+        }
+
         composable<SpoolRoute> { e ->
             if (api == null) {
                 HubNoticePage(::pushPairing)
@@ -785,7 +863,7 @@ internal fun FilamentKitApp(
                 // the pills of Palette are a row under the top bar on a tablet and wider; nothing on a phone or in another look
                 Column {
                     if (!scanning) SwTopBar(
-                        title = if (sectionPage) stringResource(R.string.nav_label) else printerPlaceTitle(destination, entry) ?: placeTitle(destination, entry, storedCertificate),
+                        title = if (sectionPage) stringResource(R.string.nav_label) else printerPlaceTitle(destination, entry) ?: alertsPlaceTitle(destination) ?: placeTitle(destination, entry, storedCertificate),
                         subtitle = if (destination?.hasRoute(HomeRoute::class) == true && !sectionPage) config?.name?.takeIf { it.isNotBlank() } else null,
                         onBack = if (showBack) ({ backDispatcher?.onBackPressed() }) else null,
                         scrollBehavior = scroll,
@@ -802,7 +880,7 @@ internal fun FilamentKitApp(
                             settingsGroups(BuildConfig.DEBUG).map { group ->
                                 val route = group.route()
                                 PillMore(
-                                    stringResource(group.title), group.icon, destination?.hasRoute(route::class) == true,
+                                    group.titleText(), group.icon, destination?.hasRoute(route::class) == true,
                                     section = stringResource(Tab.Settings.label),
                                 ) {
                                     if (destination?.hasRoute(route::class) != true) {
@@ -962,6 +1040,14 @@ internal fun FilamentKitApp(
                                 nav.navigate(PrinterRoute(id))
                             },
                             onOpenPrinters = { tabTapped(Tab.Printers) },
+                            alertBanner = bannerState(alertsUi.conditions, alertsUi.events, alertsUi.dismissed, System.currentTimeMillis()),
+                            alertActions = AlertBannerActions(
+                                onAction = ::openAlertTarget,
+                                onDismiss = app.alerts::dismiss,
+                                onMore = { openAlertTarget(AlertTarget.AlertsList) },
+                            ),
+                            lowCount = alertsUi.lowCount ?: 0,
+                            onOpenLow = { openAlertTarget(AlertTarget.RunningLow) },
                             onRefreshPrinters = printersVm::refresh,
                             onReviewCertificate = app.router::pairAgain,
                             onPairAgain = app.router::pairAgain,
@@ -1068,11 +1154,18 @@ internal fun FilamentKitApp(
                         }
                         val searchVm: SearchViewModel = viewModel(factory = viewModelFactory {
                             initializer {
-                                SearchViewModel { q, sealedOnly ->
+                                SearchViewModel(loadLow = { currentApi().lowSpools().spools }) { q, sealedOnly ->
                                     currentApi().search(q, sealedOnly)
                                 }
                             }
                         })
+                        // Running low asked for from Home or an alert: the filter goes on, once per ask
+                        LaunchedEffect(lowRequest) {
+                            if (lowRequest > app.handledLowRequests) {
+                                app.handledLowRequests = lowRequest
+                                searchVm.setLowOnly(true)
+                            }
+                        }
                         SearchScreen(
                             vm = searchVm,
                             onOpenSpool = { spool ->
@@ -1081,6 +1174,7 @@ internal fun FilamentKitApp(
                             },
                             onPairAgain = app.router::pairAgain,
                             online = online,
+                            lowCount = alertsUi.lowCount,
                             spoolDetail = { spool, embedded, _ ->
                                 val spoolVm: SpoolViewModel = viewModel(
                                     key = "spool-${spool.id}",
@@ -1293,6 +1387,7 @@ internal fun FilamentKitApp(
                         update = update,
                         appVersion = BuildConfig.VERSION_NAME,
                         developer = BuildConfig.DEBUG,
+                        alerts = AlertsFacts(alertsOn, alertsUi.available, localNetwork.granted),
                     )
                     val settingsActions = SettingsActions(
                         onAppearance = app::setAppearance,
@@ -1319,6 +1414,12 @@ internal fun FilamentKitApp(
                         ),
                         onCheckForUpdates = { updater?.checkNow() },
                         onSimulateTag = TagEvents::emit,
+                        alerts = AlertsActions(
+                            onSwitch = app::setAlertsOn,
+                            onTest = app::sendTestAlert,
+                            onRecent = { openAlertTarget(AlertTarget.AlertsList) },
+                            requestLocalNetwork = localNetwork.request,
+                        ),
                     )
                     composable<SettingsRoute> {
                         SettingsScreen(
@@ -1331,6 +1432,7 @@ internal fun FilamentKitApp(
                     }
                     composable<SettingsAppearanceRoute> { SettingsGroupPage(SettingsGroup.Appearance, settingsFacts, settingsActions) }
                     composable<SettingsHubRoute> { SettingsGroupPage(SettingsGroup.Hub, settingsFacts, settingsActions) }
+                    composable<SettingsAlertsRoute> { SettingsGroupPage(SettingsGroup.Alerts, settingsFacts, settingsActions) }
                     composable<SettingsUpdatesRoute> { SettingsGroupPage(SettingsGroup.Updates, settingsFacts, settingsActions) }
                     composable<LicencesRoute> { SettingsGroupPage(SettingsGroup.Licences, settingsFacts, settingsActions) }
                     composable<SettingsDeveloperRoute> { SettingsGroupPage(SettingsGroup.Developer, settingsFacts, settingsActions) }
@@ -1510,10 +1612,15 @@ private fun SimulateTag() {
 private fun SettingsGroup.route(): Any = when (this) {
     SettingsGroup.Appearance -> SettingsAppearanceRoute
     SettingsGroup.Hub -> SettingsHubRoute
+    SettingsGroup.Alerts -> SettingsAlertsRoute
     SettingsGroup.Updates -> SettingsUpdatesRoute
     SettingsGroup.Licences -> LicencesRoute
     SettingsGroup.Developer -> SettingsDeveloperRoute
 }
+
+/** How often the banners are read again while the app is showing, and every how many reads the running-low count is. */
+private const val ALERTS_POLL_MS = 10_000L
+private const val LOW_EVERY = 3
 
 /** The saved-state key under which an add's panel hands brand, line and material to the Filament Catalog form. */
 private const val CATALOG_PREFILL = "catalog_prefill"
