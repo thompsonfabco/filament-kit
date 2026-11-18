@@ -2,7 +2,7 @@
 // Chromium-family browser already on the machine (same launch and DevTools-over-WebSocket way as tests/aut5_run.mjs; Node 22+).
 // Test-only: never shipped, never run on a Hub.
 //
-//   node tests/printers_flow_run.mjs --url http://127.0.0.1:8799/intake --flow add-found|add-klipper|forget [--width 375]
+//   node tests/printers_flow_run.mjs --url http://127.0.0.1:8799/intake --flow add-found|add-klipper|add-guided|clear-slot|forget [--width 375]
 //        [--browser <path>]
 //
 // Prints one JSON object: { flow, width, hash, title, h1, events, errors, ...flow facts }. Exit 0 when the run itself worked
@@ -31,7 +31,7 @@ function findBrowser() {
 
 async function main() {
   const base = args.url, flow = args.flow, width = Number(args.width || 375);
-  if (!base || !flow) { console.error("usage: --url <page> --flow add-found|add-klipper|forget"); return 2; }
+  if (!base || !flow) { console.error("usage: --url <page> --flow add-found|add-klipper|add-guided|clear-slot|forget"); return 2; }
   const exe = findBrowser();
   if (!exe) { console.error("AUT-5: no Chrome, Edge or Chromium found (set AUT5_BROWSER)"); return 2; }
   const profile = mkdtempSync(join(tmpdir(), "aut5-"));
@@ -118,25 +118,57 @@ async function main() {
     await evaluate(watch);
     await sleep(500);
 
-    if (flow === "add-found" || flow === "add-klipper") {
+    if (flow === "add-found" || flow === "add-klipper" || flow === "add-guided") {
       // the sheet's Back lands late (as on a slow phone): an address set before it lands is taken back with it
       await evaluate(`{ const back = history.back.bind(history); history.back = () => { setTimeout(back, 700); }; 1 }`);
       facts.cardsBefore =await evaluate(`document.querySelectorAll(".pitem").length`);
+      // the guided sheet (R82 section 5): a found printer opens it at its details, Add klipper at "Which printer?"; Add printer, then "Map its slots now?"
       if (flow === "add-found") {
         facts.opened = await click(`[data-action="add-found"]`);
-        await until(`!!document.querySelector("dialog[open]")`);
-        await fill(0, "12345678");
+        await until(`!!document.querySelector("dialog[open] [data-action=add]")`);
+        await fill(1, "12345678");
+      } else if (flow === "add-guided") {
+        // the found list first (the Klipper search), then a test that fails, then Add anyway
+        facts.opened = await click(`[data-action="add-klipper"]`);
+        facts.foundRow = await until(`[...document.querySelectorAll("dialog[open] .pfound__row")].some((r) => r.innerText.includes("Shelf Voron"))`);
+        facts.foundText = await evaluate(`(document.querySelector("dialog[open] .pfound") || {}).innerText || ""`);
+        await evaluate(`[...document.querySelectorAll("dialog[open] .pfound__row")].find((r) => r.innerText.includes("Shelf Voron")).querySelector("[data-action=use]").click()`);
+        await until(`!!document.querySelector("dialog[open] [data-action=add]")`);
+        facts.addressFilled = await evaluate(`document.querySelectorAll("dialog[open] input")[0].value`);
+        await click(`dialog[open] [data-action=add]`);
+        facts.failed = await until(`!!document.querySelector("dialog[open] [data-action=add-anyway]:not([hidden])")`);
+        facts.failText = await evaluate(`(document.querySelector("dialog[open] .result[data-state=bad]") || {}).innerText || ""`);
+        facts.cardsDuringFail = await evaluate(`document.querySelectorAll(".pitem").length`);
+        await click(`dialog[open] [data-action=add-anyway]`);
       } else {
         facts.opened = await click(`[data-action="add-klipper"]`);
-        await until(`!!document.querySelector("dialog[open]")`);
+        await until(`!!document.querySelector("dialog[open] [data-action=family-klipper]")`);
+        await click(`dialog[open] [data-action=family-klipper]`);
+        await until(`!!document.querySelector("dialog[open] [data-action=add]")`);
         await fill(0, "192.0.2.77");
       }
-      await evaluate(`document.querySelector("dialog[open] button[type=submit]").click()`);
+      if (flow !== "add-guided") await click(`dialog[open] [data-action=add]`);
+      facts.mapAsked = await until(`!!document.querySelector("dialog[open] [data-action=later]")`);
+      await click(`dialog[open] [data-action=later]`);
       await until(`!document.querySelector("dialog[open]")`);
       await sleep(1500);
       facts.sheetLeft = await evaluate(`(document.querySelector("dialog[open]") || {}).innerText || ""`);
       facts.added = await evaluate(`document.body.innerText.includes("Added.")`);
       facts.cardsAfter = await evaluate(`document.querySelectorAll(".pitem").length`);
+    } else if (flow === "clear-slot") {
+      // Clear slot is on every slot, with or without a spool; the dry run is read, a sheet asks, the real call answers
+      const serial = await evaluate(`decodeURIComponent(document.querySelector(".pcard__name").getAttribute("href").split("/")[1] || "")`);
+      await load("#printers/" + serial);
+      await until(`document.querySelectorAll(".pslot").length >= 4`, 12000);
+      facts.clearButtons = await evaluate(`document.querySelectorAll(".pslot [data-action=clear-slot]").length`);
+      facts.unloadButtons = await evaluate(`document.querySelectorAll(".pslot [data-action=unload]").length`);
+      await click(`.pslot [data-action=clear-slot]`);
+      await until(`!!document.querySelector("dialog[open]")`);
+      facts.sheet = await evaluate(`document.querySelector("dialog[open]").innerText`);
+      await evaluate(`document.querySelector("dialog[open] button[type=submit]").click()`);
+      await until(`!document.querySelector("dialog[open]")`);
+      await until(`[...document.querySelectorAll(".pslot .result__text")].some((e) => e.textContent.includes("cleared"))`, 5000);
+      facts.line = await evaluate(`[...document.querySelectorAll(".pslot .result__text")].map((e) => e.textContent).join(" | ")`);
     } else if (flow === "forget") {
       if (!(await until(`!!document.querySelector('[data-action="forget"]')`, 12000))) {
         throw new Error("no Forget button: " + await evaluate(`location.hash + " | " + document.body.innerText.slice(0, 600).replace(/\\s+/g, " ")`));

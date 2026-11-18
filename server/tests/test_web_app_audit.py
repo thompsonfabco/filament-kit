@@ -116,6 +116,21 @@ class ChangingKit(PrintersKit):
         return {"ok": True, "id": gone}
 
 
+class GuidedKit(ChangingKit):
+    """ChangingKit that also answers the guided add's search and test (a found Klipper printer; a test that fails) and Clear slot (EV6b, R83 10.1)."""
+
+    def post(self, path, body):
+        if path == "/api/printers/scan":
+            return {"found": [{"id": "shelf-voron", "host": "192.0.2.90", "port": 7125, "name": "Shelf Voron", "configured": False}]}
+        if path == "/api/printers/test":
+            return {"ok": False, "text": "no answer"}
+        if path.endswith("/clear"):
+            return {"slot": path.split("/")[-2], "spool": {"id": 7, "vendor": "Polymaker", "name": "PolyTerra PLA Charcoal Black"}, "moved_back": "Rack 1",
+                    "waiting_ended": True, "printer_cleared": False, "dry_run": body["dry_run"],
+                    "text": "The printer still shows the old filament for this slot until a spool is loaded."}      # a Bambu Lab printer: the Hub's own sentence (R83 20:33)
+        return super().post(path, body)
+
+
 # The Slicer presets screen in the states 04 8 draws: filaments waiting for a line (nothing in lines.json), waiting with a
 # line of their brand to join (the "Add to the line" select), every filament covered (the empty state), and switched off.
 STATES = ("waiting", "waiting-with-a-line", "all-covered", "presets-off", "public-address")
@@ -368,6 +383,16 @@ def test_the_page_audit_passes_on_the_printers_list_and_one_printer(served_print
     assert run.returncode == 0, run.stdout + run.stderr
     out = json.loads(run.stdout)
     assert out["views"] == 2 * 2 * 2 and out["failing"] == 0      # two views, two widths, light and dark
+
+
+@pytest.fixture
+def served_guided(tmp_path, monkeypatch, spoolman_url):
+    """The Printers module over a kit that finds a Klipper printer, fails its test, and answers Clear slot."""
+    running = _serve_printers(tmp_path, monkeypatch, spoolman_url, GuidedKit)
+    try:
+        yield running.url + "/intake"
+    finally:
+        running.stop()
 
 
 FLOWS = ROOT / "tests" / "printers_flow_run.mjs"
@@ -2092,3 +2117,26 @@ def test_a_phone_from_0_5_moves_its_alerts_to_the_registration_of_the_app_path(s
     assert out["subscribed"] == ["printers/push/key ", "subscribe 3", 'printers/push/subscribe {"subscription":{"endpoint":"new"}}',
                                  'printers/push/unsubscribe {"endpoint":"old"}', "unsub old", f"unregister {base}/"]
     assert out["quiet"] == [f"unregister {base}/"] and out["none"] == []     # no alerts on: only the stale one goes
+
+
+@pytest.mark.parametrize("width", [375, 768])
+def test_the_guided_add_lists_what_was_found_says_a_failed_test_and_adds_anyway(served_guided, width):
+    """EV6b: the found list first (the Klipper search), Use this fills the address, a test that fails says so in words and
+    holds the add back, Add anyway adds, then the sheet asks whether to map and Later opens the new printer."""
+    out = _flow(served_guided, "add-guided", width)
+    assert out["foundRow"] and "Shelf Voron" in out["foundText"] and "192.0.2.90:7125" in out["foundText"], json.dumps(out)
+    assert out["addressFilled"] == "192.0.2.90", json.dumps(out)
+    assert out["failed"] and "could not reach a Klipper printer at 192.0.2.90:7125" in out["failText"], json.dumps(out)
+    assert out["cardsDuringFail"] == out["cardsBefore"], json.dumps(out)                   # nothing saved by the failed test
+    assert out["mapAsked"] and out["cardsAfter"] == out["cardsBefore"] + 1 and out["hash"].startswith("#printers/"), json.dumps(out)
+
+
+def test_clear_slot_is_on_every_slot_asks_what_goes_back_and_says_what_was_done(served_guided):
+    out = _flow(served_guided, "clear-slot", 375)
+    assert out["clearButtons"] == 4 and out["unloadButtons"] == 3, json.dumps(out)           # the empty slot has no Unload, and still Clear slot
+    assert "Clear slot A1?" in out["sheet"] and "forgets the spool" in out["sheet"] and "goes back to Rack 1" in out["sheet"], json.dumps(out)
+    still = "The printer still shows the old filament for this slot until a spool is loaded."
+    assert still in out["sheet"] and still in out["line"], json.dumps(out)                        # in the confirmation AND the result
+    assert "Slot A1 cleared." in out["line"] and "not waiting any more" in out["line"], json.dumps(out)
+
+

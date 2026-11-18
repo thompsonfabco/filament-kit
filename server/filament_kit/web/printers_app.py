@@ -22,6 +22,11 @@ The web process never talks to a printer. Everything goes to the kit server's ow
                                         only)
     GET  printers/tagged                the last tapped tag and its spool (the load picker's "last tap")
     GET  printers/manage                every printer the kit knows, set up or only seen on the network (no secrets)
+    POST printers/scan                  the kit's Scan for Klipper printers: {found: [{id, host, port, name, configured}]}
+                                        (R83 10.3; the same change guard as add)
+    POST printers/test                  {family: klipper, host[, port, api_key]}: does a Klipper printer answer there?
+                                        {ok: bool, text?} - nothing is saved (R82 5.3; the kit route is EV1's)
+    POST printers/{id}/slots/{label}/clear  {[dry_run]}: the Hub forgets the slot's spool (R83 10.1, EV1)
     POST printers/add                   {serial, access_code[, name]} a Bambu printer the kit has seen;
                                         {family: klipper, host[, port, name]} a Klipper printer
     POST printers/{id}/edit             {name?, address?, port?, access_code?, api_key?, unpin?}: the kit's PATCH
@@ -144,9 +149,12 @@ class PrintersApp:
             ("/{id}/manual-map/{step}", g(self.manual_step), ["POST"]),
             ("/{id}/slots/{label}/load", g(self.slot_load), ["POST"]),
             ("/{id}/slots/{label}/unload", g(self.slot_unload), ["POST"]),
+            ("/{id}/slots/{label}/clear", g(self.slot_clear), ["POST"]),
             ("/tagged", g(self.tagged), ["GET"]),
             ("/manage", g(self.manage), ["GET"]),
             ("/add", g(self.add), ["POST"]),
+            ("/scan", g(self.scan), ["POST"]),
+            ("/test", g(self.test), ["POST"]),
             ("/{id}/edit", g(self.edit), ["POST"]),
             ("/{id}/forget", g(self.forget), ["POST"]),
             ("/{id}/camera.mjpeg", g(self.mjpeg), ["GET"]),
@@ -270,6 +278,14 @@ class PrintersApp:
             log.info("printers tab: unload %s %s", serial, label)
         return await self._kit_call(self.kit.post, f"/api/printers/{serial}/slots/{label}/unload", {"dry_run": dry})
 
+    async def slot_clear(self, request: Request):
+        """Clear slot (R83 section 3): the kit's own route, a dry run unless `dry_run: false`."""
+        serial, label = self._serial(request), self._label(request)
+        dry = self._dry(await self._body(request))
+        if not dry:
+            log.info("printers tab: clear %s %s", serial, label)
+        return await self._kit_call(self.kit.post, f"/api/printers/{serial}/slots/{label}/clear", {"dry_run": dry})
+
     async def tagged(self, request: Request):
         """The newest tap on any reader and the spool linked to it (only the fields the picker shows)."""
         t = await anyio.to_thread.run_sync(self.intake.tools.tag_state)
@@ -314,6 +330,20 @@ class PrintersApp:
         log.info("printers tab: add a %s printer", body.get("family", "bambu"))
         r = await self._kit_call(self.kit.post, "/api/printers", body)
         return {"printer": {k: (r.get("printer") or {}).get(k) for k in MANAGE_FIELDS}}
+
+    async def scan(self, request: Request):
+        """The owner's Scan for Klipper printers on this Hub's network: the kit's route with no subnet (its own /24)."""
+        if (no := self._changes_or_refuse()) is not None:
+            return no
+        return await self._kit_call(self.kit.post, "/api/printers/scan", {})
+
+    async def test(self, request: Request):
+        """Test a Klipper printer's address before it is saved (the guided add): the kit asks the printer, nothing is stored."""
+        if (no := self._changes_or_refuse()) is not None:
+            return no
+        b = await self._body(request)
+        body = {k: b[k] for k in ("family", "host", "port", "api_key") if k in b}
+        return await self._kit_call(self.kit.post, "/api/printers/test", body)
 
     async def edit(self, request: Request):
         if (no := self._changes_or_refuse()) is not None:
