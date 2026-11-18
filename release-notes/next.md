@@ -46,6 +46,13 @@ alerts**), with a button to the place that deals with it and **Dismiss**. **Rece
 alerts of the last 7 days. In the web app it is under **More**, **Settings**; in the Android app, under **Settings**,
 **Alerts**.
 
+**On the Hub page.** The Hub page shows the same banners at the top of the page. **Settings**, **Alerts** has the eight
+switches, a switch to limit **Spool running low** to the last spool of a filament, **Running low under** and **Storage
+warning at**; **Save alerts** saves them with the setup code, like the other settings. Under **On this device**, **Recent
+alerts** opens the list and **Send a test alert** sends one to that browser. The switch **Notifications in this browser**
+(off until you turn it on; the browser asks to allow notifications) shows each new alert as a notification while a Hub page
+tab is open in that browser; a tab in the background can be up to a minute late, and with every tab closed nothing arrives.
+
 **On the phone with the app closed.** In the Android app, **Settings**, **Alerts**, the switch **Alerts on this phone**
 (off until you turn it on) makes the app watch the Hub and notify you for each alert, with Android's small permanent
 notification **Watching the Hub for alerts**. It needs the phone to reach the Hub, so away from home nothing arrives until
@@ -58,7 +65,9 @@ asks within a minute.
 marked **Last one**). The Hub's disk is warned about at 85 % used and counts as full at 95 % used or under 1 GB free.
 `spoolwarden status` and the Hub page's Overview show the disk (`Storage: 41 GB free of 117 GB (65 % used)`) and, while some
 spools are running low, a note. The web app has a **Running low (n)** button in the spool search and the Android app one on its
-home screen.
+home screen. On the Hub page, the Overview has a **Running low** card while a spool is running low (**Show all <n>** opens
+every spool), and a Storage row that needs a look has **Show storage use**, which opens a **Storage use** panel with the
+disks and the space the Hub's backups, photos, events and logs take.
 
 **The commands.** `spoolwarden events [--since ID|TIME] [--kind PREFIX] [--follow]` lists the Hub's events.
 `spoolwarden alerts` shows the switches and limits; `sudo spoolwarden alerts set <type> on|off`, `alerts set running-low
@@ -80,6 +89,16 @@ answers.
 Yes installs the Hub with the usual choices, asks nothing more and ends with the Hub's address and the setup code. No asks the
 questions in the Terminal, as before, and is the way to install only a Weigh Station. Giving `--mode`, `--modules`, `--set` or
 `--hub` skips the question.
+
+**The Weigh Station serves HTTPS.** A Weigh Station now answers over HTTPS, with a certificate it makes for itself. Each
+time it starts, a paired Weigh Station tells the Hub its certificate, its port and its version, so the Hub learns them by
+itself and accepts only that certificate from it; a changed certificate is refused, never replaced by plain HTTP. A first
+install of a Weigh Station on a computer of its own takes port 443 when that is free; when it is in use, the installer at a
+Terminal asks `Port for the Weigh Station [5003]:`. Beside a Hub it takes 5003 without asking. A Weigh Station that is
+not updated yet tells the Hub no certificate, and the Hub keeps calling it over plain HTTP.
+
+**A Label Reader on another computer.** An `http://` address keeps working as before. For an `https://` address the Hub
+keeps the reader's certificate from the first time it reaches the reader and accepts no other from that address.
 
 **What happens when you upgrade.** Nothing to do. An existing Hub keeps the port it has, 8710 for almost every Hub, and so
 do its phones, Slicer Sync and the addresses you use: `https://my-server.local:8710/setup` keeps working. An update never moves

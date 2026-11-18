@@ -91,8 +91,8 @@ Answer the label reading, display name, storage and API key questions as in
 [Install the Hub](#install-the-server). Besides
 the usual Hub, this sets up:
 
-- the Weigh Station service `filament-kit-station`, which reads the scale and the reader and answers on port 5003,
-  for this computer only (`http://127.0.0.1:5003/state`);
+- the Weigh Station service `filament-kit-station`, which reads the scale and the reader and answers over HTTPS on port
+  5003, for this computer only (`https://127.0.0.1:5003/state`; see [Is it working?](#is-it-working));
 - the Hub's link to it, so `sudo spoolwarden status` shows a line `station answering at
   http://127.0.0.1:5003`, and the app can read the scale and the last tag;
 - the computer changes the Weigh Station needs (see [Weigh Station](#intake-station)): brltty removed, ModemManager
@@ -368,8 +368,8 @@ Run these in a Terminal on the Ubuntu computer, after `spoolwarden` (for example
 | `recent revise <record> --note TEXT [--item N]` | Ask the Label Reader to correct it | Ask the Label Reader to correct it |
 | `recent edit <record> field=value... [--item N] [--spools 41,42]` | Edit by hand | Edit by hand, Save changes |
 | `recent undo <record>` | Undo the newest revision that is not undone | Undo revision N |
-| `spools low` | The opened spools at or under the running-low threshold | (none) |
-| `events [--since ID\|TIME] [--kind PREFIX] [--follow]` | The Hub's events, newest last; `--follow` keeps printing new ones | (none) |
+| `spools low` | The opened spools at or under the running-low threshold | Overview, Running low |
+| `events [--since ID\|TIME] [--kind PREFIX] [--follow]` | The Hub's events, newest last; `--follow` keeps printing new ones | Settings > Alerts > Recent alerts (alerts only) |
 | `devices` (same as `devices list`) | Paired devices | Devices |
 | `devices forget <device>` | Unpair a device | Unpair |
 | `pair [--slicer-sync \| --weigh-station] [--text] [--no-wait]` | Pairing code, QR and fingerprint | Pair a phone / Link Slicer Sync / Link a Weigh Station |
@@ -404,11 +404,11 @@ Run these in a Terminal on the Ubuntu computer, after `spoolwarden` (for example
 | `locations remove <name>` | Remove a location (asks) | Remove |
 | `locations default-overflow <name>` | Make it the default overflow (a Bulk storage location that is not overflow becomes overflow as well) | Make default overflow |
 | `locations sealed <name>` | Sealed spools go here | Sealed spools go here |
-| `alerts` (same as `alerts list`) | The alert switches and thresholds | (none) |
-| `alerts set <type> on\|off` | Switch one alert type | (none) |
-| `alerts set running-low <grams>` | Running low under | (none) |
-| `alerts set storage-warning <percent>` | Storage warning at | (none) |
-| `alerts test` | Send a test alert | (none) |
+| `alerts` (same as `alerts list`) | The alert switches and thresholds | Settings > Alerts |
+| `alerts set <type> on\|off` | Switch one alert type | The type's switch |
+| `alerts set running-low <grams>` | Running low under | Running low under |
+| `alerts set storage-warning <percent>` | Storage warning at | Storage warning at |
+| `alerts test` | Send a test alert | Send a test alert |
 | `label-reader status` | Label Reader engines and their health | Settings > Label Reader |
 | `label-reader test <photo>... [--engine cloud\|local]` | Read label photos without adding anything | Test |
 | `catalog status` | Filament Catalog version and last check | Settings > Filament Catalog |
@@ -622,18 +622,45 @@ running low: ...**), which is not an alert.
 
 ### Where you see them
 
-- **The banner.** An alert shows as a banner at the top of the web app and of the app (Android): its title, a line of
-  detail, the time, a button to the place that deals with it (**Open the printer**, **Show running low**) and **Dismiss**,
-  which hides that banner on that device until it changes. At most two show; the rest are one line, **<n> more alerts**,
-  that opens the Alerts list. Only warnings and problems are banners.
+- **The banner.** An alert shows as a banner at the top of the web app, of the app (Android) and of the Hub page: its
+  title, a line of detail, the time, a button to the place that deals with it (**Open the printer**, **Show running
+  low**) and **Dismiss**, which hides that banner on that device (on the Hub page: in that browser) until it changes. At
+  most two show; the rest are one line, **<n> more alerts**, that opens the Alerts list. Only warnings and problems are
+  banners.
 - **The Alerts list.** **Recent alerts** (in the web app: **More**, **Settings**; in the app (Android): **Settings**,
-  **Alerts**) lists what is **Happening now**, then the alerts of the **Last 7 days**, newest first. The list shows only
-  alerts whose type is on.
+  **Alerts**; on the Hub page: **Settings**, **Alerts**, the button **Recent alerts**) lists what is **Happening now**,
+  then the alerts of the **Last 7 days**, newest first. The list shows only alerts whose type is on.
 - **The Terminal.** `sudo spoolwarden events` lists the events and `sudo spoolwarden events --follow` prints them as they
   come; `--kind print` or `--kind spool.low` narrows them. The Hub keeps events for 400 days (the setting
   `events.keep_days`, 30 to 3650), in `/var/lib/filament-kit/events`, which backups include.
 - **`spoolwarden status`** and the Hub page's Overview have a row for the Hub's disk (`Storage: 41 GB free of 117 GB
   (65 % used)`, which needs a look past a limit) and, while some spools are running low, a note `Running low: 2 spools`.
+  The Overview also has a **Running low** card and a **Storage use** panel; see [Running low](#running-low) and
+  [Storage use](#storage-use).
+
+### A computer with the Hub page
+
+The banners on the Hub page are at the top of the page, whichever section is open. Their buttons go to the printer's row
+in **Printers** (**Open the printer**), to the Overview's **Running low** window (**Show running low**) or **Storage use**
+panel (**Show storage use**), or to **Devices** (**Open Devices**). While a Hub page tab is open, a new alert also shows
+as a short message with **Show**, which goes to the same place. The page asks the Hub every 10 seconds and asks at once
+when the tab is shown again.
+
+For a notification of the browser itself, go to **Settings**, **Alerts**, **On this device** and switch on
+**Notifications in this browser**. The browser asks once whether to allow notifications; the switch stays on only if you
+allow them. The words under it say `Shown while a Spoolwarden tab is open in this browser. With the tab in the background
+they can arrive up to a minute late.` That is the limit: a notification arrives only while a Hub page tab is open in
+that browser, so with every tab closed nothing arrives (the phone's apps do that, see below). A notification about a state
+that lasts is closed again when the state ends, where the browser allows it; clicking one opens the place that deals with
+it. The switch is kept in that browser only and needs no setup code. Two things stop it:
+
+- If the browser blocks notifications for the Hub's address, the page says **Blocked in this browser's settings**. Allow
+  notifications for the address in the browser's site settings, then switch it on again.
+- A browser shows notifications only on a secure connection. If the page says **This browser cannot show notifications**,
+  open the Hub at its public address, which has a certificate this browser trusts.
+
+**Send a test alert**, on the same page, sends one test alert to this browser (`Sent.`); it shows as a short message and,
+if the switch is on, as a notification. **Recent alerts** opens the Alerts list.
 
 ### A phone with the web app
 
@@ -660,11 +687,18 @@ test alert** on the same page tests this phone. More in [Using the app, Alerts](
 
 ### Send a test alert
 
-`sudo spoolwarden alerts test` sends one test alert to every device that asks within a minute: an open web app, and every
-Android phone that has the switch on. It says `Test alert sent. Every device that asks in the next 60 seconds gets it.` The
-web app (with Web Push) and the app (Android) also have their own **Send a test alert** buttons, as above.
+`sudo spoolwarden alerts test` sends one test alert to every device that asks within a minute: an open web app, an open
+Hub page and every Android phone that has the switch on. It says `Test alert sent. Every device that asks in the next 60
+seconds gets it.` The web app (with Web Push), the Hub page and the app (Android) also have their own **Send a test
+alert** buttons, as above.
 
 ### Which alerts are on, and the limits
+
+On the Hub page, **Settings**, **Alerts** has a switch for each of the eight alerts, in the order of the table above, and
+under **Spool running low** a switch **Only when it is the last spool of that filament**. Below them are **Running low
+under** (grams, 10 to 2000) and **Storage warning at** (% used; it must be lower than the 95 % at which storage counts as
+full). **Save alerts** saves all of it at once, asking for the setup code like the other settings, and the heading shows
+how many of the eight are on. The same settings are in `sudo spoolwarden config`, in its **Alerts** group.
 
 At a Terminal on the Hub:
 
@@ -680,7 +714,7 @@ sudo spoolwarden alerts set storage-warning 80
 under** 150 g (10 to 2000) and **Storage warning at** 85 % used (1 to 99). Storage counts as full at 95 % used, or with
 under 1 GB free, whatever the percentages say; that limit is not changed from the Terminal. The settings are in `alerts.xml`
 in `/var/lib/filament-kit`, which backups include. If it cannot be read or saved, `spoolwarden status` says so and the
-defaults apply meanwhile. The apps show and change none of these.
+defaults apply meanwhile. The apps show and change none of these; the Hub page and the Terminal do.
 
 ### Running low
 
@@ -690,12 +724,25 @@ changed it). `sudo spoolwarden spools low` lists them, least filament first: `Sp
 app has a **Running low (n)** button in the spool search; the app (Android) has a button on its home screen and a **Running
 low (n)** filter in **Search**; `status` has the note row. The alert is raised once, when a spool goes under the limit.
 
+On the Hub page, the Overview has a **Running low** card while any spool is running low; with none, there is no card.
+Its heading shows how many, and it lists up to five spools, each with its colour, filament, `Spool 41`, `180 g left`, its
+location and either `2 more in stock` or **Last one**. With more than five, **Show all <n>** (and the banner's **Show
+running low**) opens a **Running low** window with every spool and the line `Spools at or under 150 g that are opened.`
+and a link, **Change it in Settings**, to **Settings**, **Alerts**.
+
 ### Storage use
 
 The Hub measures the disk that holds its data and, when it is another disk, the one that holds the backups. The row in
 `status` shows the fullest. At the **Storage warning** limit (85 % used unless you changed it) the **Storage almost full**
 alert is raised and the row needs a look; at 95 % used, or under 1 GB free, the alert becomes **Storage on the Hub is
 full**. When the disk is fine again the Hub writes an event saying so.
+
+On the Hub page, a Storage row that needs a look has the button **Show storage use** on the Overview (the banner's
+**Show storage use** is the same). It opens the **Storage use** panel (a sheet on a phone): a bar for **The Hub's disk**
+and, when it is another disk, **The backups disk**, each with `41 GB free of 117 GB (65 % used)`, then what the Hub keeps
+and the space each takes: **Backups** (with a button, **Open Backups**), **Photos of recently added spools** (with how
+many records Recently added keeps), **Label Reader on this Hub** (a link to **Settings**, **Label Reader**), **Events**
+and **Logs**.
 
 ## Bambu Lab printers
 
@@ -1075,7 +1122,7 @@ hand: `sudo systemctl unmask sleep.target suspend.target hibernate.target hybrid
   `en_US-ljspeech-medium` voice instead, set `station.voice` to it in `/etc/filament-kit/config.json` and run
   `sudo spoolwarden features apply`.
 - With the panel, Hold and Discard also speak (`"speech"`), and Hold takes a picture with the webcam
-  (`"camera"`). `curl http://127.0.0.1:5003/state` then shows `"air"` (the BME280 reading) and `"photo"`, and the
+  (`"camera"`). `curl -k https://127.0.0.1:5003/state` then shows `"air"` (the BME280 reading) and `"photo"`, and the
   picture itself is at `/photo`. The Weigh Station only answers GET requests, and only the addresses it allows.
 - These settings are in `/etc/filament-kit/config.json` under `"station"`: `"nfc_device"` (`"auto"`, or a
   device such as `"tty:USB0:pn532"`), `"beep"` (`true` or `false`), `"beep_device"` (empty for automatic, or
@@ -1086,7 +1133,7 @@ hand: `sudo systemctl unmask sleep.target suspend.target hibernate.target hybrid
 - **Panel firmware updates itself.** The Weigh Station carries the display's firmware. When it finds a panel running
   another version, it writes the bundled one to it over USB (once per version) and then uses it. If that does
   not work, the panel keeps running as it is. Set `"panel_flash": false` to never touch the panel's firmware.
-  `curl http://127.0.0.1:5003/state` shows the panel's version as `"panel_version"`. A panel on older ESP8266
+  `curl -k https://127.0.0.1:5003/state` shows the panel's version as `"panel_version"`. A panel on older ESP8266
   firmware (9 or earlier) is used as it is and never reflashed.
 - **A blank display board.** A new ESP32-C3 has no firmware for the Weigh Station to find. Plug it in and run
   `sudo spoolwarden weigh-station flash-display`: it stops the Weigh Station, lists the C3 ports that give no answer, asks before
@@ -1104,10 +1151,20 @@ hand: `sudo systemctl unmask sleep.target suspend.target hibernate.target hybrid
   `sudo` even when you had), and on the Hub it shows `station answering at ...`. `station reader not seen` means no
   tag has been read yet; `station scale not seen` means the scale has sent nothing yet (switch it on and put
   something on it).
-- On the Weigh Station computer: `curl http://127.0.0.1:5003/state` shows the last tag and weight.
+- On the Weigh Station computer: `curl -k https://127.0.0.1:5003/state` shows the last tag and weight (`-k` because the
+  Weigh Station's certificate is its own; use its port if you changed it).
   `sudo journalctl -u filament-kit-station -n 30` shows what the Weigh Station is doing;
   `NFC reader ...; retrying in 5 s` means the reader is not plugged in or not found.
 - The Weigh Station answers only its own computer and the Hub's address. Anything else gets no answer.
+- **The Weigh Station serves HTTPS.** It makes a certificate of its own at its first start (self-signed, valid for 10
+  years) and answers only over HTTPS on its port. A paired Weigh Station tells the Hub its certificate's fingerprint, its
+  port and its version each time it starts, so you do nothing: from then on the Hub calls it over HTTPS and accepts only
+  that certificate. If the Weigh Station shows another certificate, the Hub refuses it and does not go back to plain HTTP;
+  `sudo spoolwarden status` then says `Weigh Station not answering at <address>`. Restart the Weigh Station
+  (`sudo systemctl restart filament-kit-station`) so that it tells the Hub its new certificate, or pair it again. A Weigh
+  Station that is not updated yet tells the Hub no certificate, and the Hub keeps calling it over plain HTTP as before;
+  update it to get HTTPS. A Weigh Station that cannot make its certificate also serves plain HTTP as before and says why
+  in `sudo journalctl -u filament-kit-station`.
 - The button flow talks to the Hub with its own pairing (v0.3.0 and newer). On the Hub run
   `sudo spoolwarden pair --weigh-station`, then within 10 minutes run `sudo spoolwarden weigh-station pair` on the Weigh Station
   computer and paste the link; it checks the link with the Hub and says "expired" if you were late. On a
@@ -1121,7 +1178,9 @@ hand: `sudo systemctl unmask sleep.target suspend.target hibernate.target hybrid
 - After the panel says "Saved #N / tag not linked", holding yellow again links the tag to that spool instead of
   saving a duplicate.
 - A Weigh Station on a second computer: on the **Hub**, put the Weigh Station's address in
-  `/etc/filament-kit/config.json` under `"station"`, for example `"url": "http://station.local:5003"`. If the
+  `/etc/filament-kit/config.json` under `"station"`, for example `"url": "http://station.local:5003"`. Once the Weigh
+  Station has told the Hub its certificate, the Hub keeps the name from that address but calls the Weigh Station over
+  HTTPS at the port it reported. If the
   Hub's address changes, run `sudo spoolwarden features apply` on the Weigh Station computer so it answers the new
   one.
 
@@ -1407,6 +1466,12 @@ day**; local reads are free.
   on your network). **Save Label Reader** keeps it; **Test** asks the reader how it is: its version, its API, which tiers are usable
   and whether it can revise readings.
 - **Tier**: **Auto** (the CPU first, then the GPU when unsure), **CPU only** or **GPU only**.
+
+**A reader on another computer: `http://` and `https://`.** The Hub accepts an `http://` address of a reader on another
+computer, saves it and uses it, as it does one on this computer (`127.0.0.1`). For an `https://` address the Hub notes the
+reader's certificate (its SHA-256 fingerprint) the first time it reaches the reader, and from then on accepts only that
+certificate from that address: if the reader shows another one, the Hub sends nothing and the read fails with `The Label
+Reader at <address> presents a different certificate than the one the Hub trusts.`
 
 At a terminal, `sudo spoolwarden config`, under **Label Reader**, asks the same three things.
 `spoolwarden label-reader status` shows whether the reader answers, its tiers, why it is degraded if it is, and the

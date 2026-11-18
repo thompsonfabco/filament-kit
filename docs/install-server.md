@@ -108,8 +108,9 @@ time. For a first install, pressing **Enter** at every question is fine.
    Press Enter for **no**. You then add spools by typing them in, which works fine. Type `y` only if you have an
    Anthropic API key.
 
-4. **Port for the Hub**: only when port 443 is not free, so most installs never see it. See
-   [The Hub's port](#the-hubs-port).
+4. **Port for the Hub** (for a Weigh Station only install: **Port for the Weigh Station**): only when port 443 is not
+   free, so most installs never see it. See [The Hub's port](#the-hubs-port) and
+   [The Weigh Station's port and HTTPS](#the-weigh-stations-port-and-https).
 
    The installer now installs packages and Spoolman. Several screens of text scroll past. Some lines look like
    errors but are not. Look at the status list at the end instead.
@@ -157,6 +158,25 @@ address), a first install does not take it:
 If a firewall (`ufw`) is on and has no rule for the Hub's port, the installer prints the line to open it, for example
 `sudo ufw allow 443/tcp`; it does not change the firewall itself. When you type the Hub's address without a port in the
 app (Android) or in Slicer Sync, they try 443 first and then 8710.
+
+### The Weigh Station's port and HTTPS
+
+A Weigh Station serves **HTTPS**, with a certificate it makes for itself at its first start. A paired Weigh Station tells
+the Hub its certificate, its port and its version each time it starts, so the Hub learns them by itself and from then on
+accepts only that certificate. How the Hub treats a Weigh Station that is not updated, or whose certificate changed, is in
+[Weigh Station: Is it working?](user-guide.md#is-it-working).
+
+A first install of a Weigh Station asks about its port the way the Hub does:
+
+- On a computer that also runs the Hub (**Hub with Weigh Station**), the Weigh Station takes port 5003 and nothing is
+  asked, because 443 is the Hub's.
+- On a computer of its own (**Weigh Station only**), it takes port 443 when that is free, and nothing is asked.
+- If 443 is in use, or cannot be checked, the installer at a Terminal says `Port 443 is already in use on this machine.`
+  (or that it could not be checked) and asks `Port for the Weigh Station [5003]:`. Press Enter for 5003 (or the next free
+  port above it, if 5003 is also in use), or type another port from 1024 to 65535 that is free. Without a Terminal it takes
+  the offered port and the installer prints a line saying so.
+
+An update never moves a Weigh Station: it keeps the port it has.
 
 ### Answers on the command line
 

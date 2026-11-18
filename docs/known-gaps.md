@@ -71,12 +71,13 @@ fixed.
 18. **Alerts reach a phone only where the phone reaches the Hub.** The app (Android) asks the Hub itself, so away from home
     (or on a guest network) no alert arrives until the phone reaches the Hub again. With the web app closed, an
     iPhone or other phone gets notifications only through Web Push, which is off by default and works only at the `web`
-    Feature's address; see [Alerts](user-guide.md#alerts).
-19. **Alerts are not on the Hub page.** The banner, the Alerts list and notifications are in the web app and the
-    app (Android). On the Hub page, the Overview's checks show the Hub's disk and the running-low note. The Terminal has `spoolwarden events` and `spoolwarden alerts`.
-20. **Which alerts are on is set at the Terminal.** `sudo spoolwarden alerts set` changes the switches, the running-low
-    limit and the storage warning; the apps show none of them. The limit at which storage counts as full (95 %), and the
-    switch that limits the running-low alert to the last spool of a filament, are not changeable there.
+    Feature's address; see [Alerts](user-guide.md#alerts). A browser that has the Hub page open notifies only while a
+    Hub page tab is open in it, and a tab in the background can be up to a minute late.
+19. ~~Alerts are not on the Hub page.~~ Fixed: the Hub page has the banner, the Alerts list, notifications in the
+    browser, the **Running low** card and the **Storage use** panel; see [Alerts](user-guide.md#alerts).
+20. **The apps cannot change which alerts are on.** The Hub page (**Settings**, **Alerts**) and `sudo spoolwarden alerts
+    set` change the switches, the running-low limit and the storage warning; the apps show none of them. The limit at
+    which storage counts as full (95 %) cannot be changed anywhere.
 21. **Remote access and a Hub on port 443 exclude each other.** A new install takes 443 when it is free, and Remote access
     needs 443 for itself, so switching it on is refused. Choose Remote access in the installer to give the Hub 8710.
     An existing Hub keeps its port.
