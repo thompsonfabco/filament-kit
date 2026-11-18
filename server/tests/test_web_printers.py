@@ -430,7 +430,7 @@ def pushapp(env, kit, monkeypatch):
     monkeypatch.setattr(push, "available", lambda: True)
     answer = {"code": 201}
 
-    def fake_sender(info, payload):                 # no network: the answer is whatever the test sets
+    def fake_sender(info, payload, **kw):                 # no network: the answer is whatever the test sets
         if isinstance(answer["code"], Exception):
             raise answer["code"]
         return answer["code"]
@@ -466,34 +466,21 @@ def test_push_subscribe_allow_list(pushapp):
 def test_push_store_unsubscribe_and_file_mode(pushapp, env):
     c = signed(pushapp)
     c.post(P + "/push/subscribe", json=good_sub(), headers=H)
-    f = config.paths().web / "push.json"
+    f = config.paths().web / "push.xml"
     assert f.exists() and "fcm.googleapis.com" in f.read_text()
     if sys.platform != "win32":
         assert (f.stat().st_mode & 0o777) == 0o600
     c.post(P + "/push/unsubscribe", json={"endpoint": good_sub()["subscription"]["endpoint"]}, headers=H)
-    assert json.loads(f.read_text())["subs"] == {}
-
-
-def test_push_transitions():
-    from filament_kit.web import push
-    t = push.transitions
-    assert t(None, {"gcode_state": "RUNNING", "hms": [], "job": "a", "percent": 5}) == []
-    base = {"gcode_state": "RUNNING", "hms": [], "job": "benchy", "percent": 50}
-    assert t(base, {**base, "gcode_state": "FINISH"})[0][0] == "Print finished"
-    assert t(base, {**base, "gcode_state": "FAILED"})[0][0] == "Print stopped"
-    assert t(base, {**base, "gcode_state": "PAUSE"})[0][0] == "Print paused"
-    assert t({**base, "gcode_state": "IDLE"}, {**base, "gcode_state": "FINISH"}) == []
-    assert t(base, {**base, "hms": [{"code": "0300_0100_0001_0001"}]})[0][0] == "Printer alert"
-    assert t({**base, "hms": [{"code": "x"}]}, {**base, "hms": [{"code": "x"}]}) == []
+    assert "<sub " not in f.read_text()
 
 
 def test_push_send_drops_dead_subscriptions(env):
     from filament_kit.web import push
-    sent, store = [], push.Store(config.paths().web / "push.json")
+    sent, store = [], push.Store(config.paths().web / "push.xml")
     store.add({"endpoint": "https://fcm.googleapis.com/a", "keys": {"p256dh": "k", "auth": "a"}})
     store.add({"endpoint": "https://fcm.googleapis.com/dead", "keys": {"p256dh": "k", "auth": "a"}})
 
-    def fake(info, payload):
+    def fake(info, payload, **kw):
         sent.append((info["endpoint"], json.loads(payload)["title"]))
         return 410 if info["endpoint"].endswith("dead") else 201
     push.send_all(store, "Print finished", "benchy", "job", sender=fake)
@@ -697,7 +684,7 @@ def _two_subs_and_a_clock(monkeypatch):
     """A store with two subscriptions and a fake clock (patched into push) that moves only when told to."""
     import types
     from filament_kit.web import push
-    store = push.Store(config.paths().web / "push.json")
+    store = push.Store(config.paths().web / "push.xml")
     for n in "ab":
         store.add({"endpoint": f"https://fcm.googleapis.com/{n}", "keys": {"p256dh": "k", "auth": "a"}})
     now = [100.0]
@@ -710,7 +697,7 @@ def test_push_send_all_stops_trying_after_its_budget(env, monkeypatch):
     store, now = _two_subs_and_a_clock(monkeypatch)
     tried = []
 
-    def slow(info, payload):
+    def slow(info, payload, **kw):
         tried.append(info["endpoint"])
         now[0] += 5.0
         return 201
@@ -723,7 +710,7 @@ def test_push_send_all_tries_one_subscription_even_when_the_budget_is_spent(env,
     store, now = _two_subs_and_a_clock(monkeypatch)
     tried = []
 
-    def sender(info, payload):
+    def sender(info, payload, **kw):
         tried.append(info["endpoint"])
         now[0] += 1.0
         return 201
@@ -742,7 +729,7 @@ def test_push_send_all_budget_starts_after_the_subscriptions_are_read(env, monke
         return subs
 
     monkeypatch.setattr(store, "subs", late_subs)
-    r = push.send_all(store, "t", "b", "x", sender=lambda info, payload: tried.append(1) or 201, budget=1.0)
+    r = push.send_all(store, "t", "b", "x", sender=lambda info, payload, **kw: tried.append(1) or 201, budget=1.0)
     assert len(tried) == 2 and r["sent"] == 2 and not r["failed"]
 
 
@@ -804,62 +791,6 @@ def test_service_worker_caches_the_shell_and_never_the_api():
     listed = re.search(r"const SHELL = \[(.*?)\];", src, re.S).group(1)
     assert "api" not in listed.replace("app.", "") and '"app.js"' in listed and "BASE" in listed
     assert "/api" not in re.sub(r"//[^\n]*", "", src)      # no API path anywhere in the code (comments aside)
-
-
-def test_push_mapping_jobs_do_not_alert_and_print_error_does():
-    from filament_kit.web import push
-    base = {"gcode_state": "RUNNING", "hms": [], "job": "h2d-calib", "percent": 50, "stage": "", "print_error": ""}
-    fin = {**base, "gcode_state": "FINISH"}
-    assert push.transitions(base, fin, mapping=True) == []
-    assert push.transitions(base, fin)[0][0] == "Print finished"
-    err = {**base, "print_error": "0300_4001", "stage": "Printing"}
-    assert push.transitions(base, err)[0][0] == "Print error"
-    assert push.transitions(err, err) == []
-    assert push.transitions(err, {**err, "print_error": ""}) == []
-    # a mapping run does not hide a new error
-    assert push.transitions(base, {**err, "gcode_state": "FINISH"}, mapping=True)[0][0] == "Print error"
-
-
-def test_push_watcher_reads_the_map_state(env, kit):
-    from filament_kit.web import push
-    store = push.Store(config.paths().web / "push.json")
-    store.add({"endpoint": "https://fcm.googleapis.com/a", "keys": {"p256dh": "k", "auth": "a"}})
-    sent = []
-    mapstate = {"v": "running"}
-    orig = kit.get
-
-    def get(path):
-        if path.endswith("/map"):
-            return {"state": mapstate["v"]}
-        return orig(path)
-    kit.get = get
-    w = push.Watcher(kit, store, lambda info, payload: sent.append(json.loads(payload)["title"]) or 201, "/x")
-    w.tick()                                              # first sight
-    kit.status["gcode_state"] = "FINISH"
-    w.tick()
-    assert sent == []                                     # calibration run: silent
-    kit.status["gcode_state"] = "RUNNING"
-    mapstate["v"] = "none"
-    w.tick()
-    kit.status["gcode_state"] = "FINISH"
-    w.tick()
-    assert sent == ["Print finished"]
-
-
-def test_push_watcher_keeps_the_last_live_state_while_the_printer_is_away(env, kit):
-    from filament_kit.web import push
-    store = push.Store(config.paths().web / "push.json")
-    store.add({"endpoint": "https://fcm.googleapis.com/a", "keys": {"p256dh": "k", "auth": "a"}})
-    sent = []
-    w = push.Watcher(kit, store, lambda info, payload: sent.append(json.loads(payload)["title"]) or 201, "/x")
-    kit.status["gcode_state"] = "RUNNING"
-    w.tick()
-    kit.status["gcode_state"] = "UNKNOWN"                 # Moonraker dropped; the print ends meanwhile
-    w.tick()
-    assert sent == [] and w.prev[next(iter(w.prev))]["gcode_state"] == "RUNNING"
-    kit.status["gcode_state"] = "FINISH"
-    w.tick()
-    assert sent == ["Print finished"]
 
 
 # ---------- load / unload (queue item 4: the Android app's slot actions, through the kit API) ----------

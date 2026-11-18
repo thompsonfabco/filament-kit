@@ -33,6 +33,7 @@ The web process never talks to a printer. Everything goes to the kit server's ow
     GET  printers/{id}/camera.mjpeg     the kit camera hub's MJPEG, relayed (img tag; LAN only like the rest)
     GET  printers/{id}/camera/{name}    the hub's HLS playlist / segments, relayed
     push/key, push/subscribe, push/unsubscribe, push/test   only with config `web.push` true (see push.py)
+    POST api/alerts/test                the same test (outside printers/, the twin of the Hub's route); same condition
 
 A camera viewer is counted by the kit hub while its response is open; closing the relay's upstream when the phone
 goes away is what stops the camera (the hub's own idle stop covers HLS).
@@ -114,9 +115,9 @@ class PrintersApp:
         if push_on:
             from . import push   # the only import of push.py: with web.push off none of it runs
             self.push = push
-            self.push_store = push.Store(push.state_dir() / "push.json")
+            self.push_store = push.Store(push.state_dir() / "push.xml", legacy=push.state_dir() / "push.json")
             self.sender = push.webpush_sender(intake.origin)
-            self.watcher = push.Watcher(self.kit, self.push_store, self.sender, intake.base + "/")
+            self.watcher = push.Feed(self.kit, self.push_store, self.sender, intake.base + "/")   # the Hub's alert events
             self.watcher.start()
 
     @property
@@ -155,6 +156,8 @@ class PrintersApp:
                       ("/push/unsubscribe", g(self.push_unsubscribe), ["POST"]),
                       ("/push/test", g(self.push_test), ["POST"])]
         routes = [Route("/intake/api/printers" + p, fn, methods=m) for p, fn, m in table]
+        if self.push_on:   # the twin of POST api/alerts/test: a test notification to the phones of this web app only
+            routes.append(Route("/intake/api/alerts/test", g(self.push_test), methods=["POST"]))
         return routes
 
     def guard(self, fn):

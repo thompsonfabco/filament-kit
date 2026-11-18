@@ -23,7 +23,7 @@ import re
 import struct
 import zlib
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 import anyio
 from pydantic import ValidationError
@@ -39,6 +39,7 @@ from ..station_client import StationClient
 from . import mcp_tools, pages, printers_app
 from .errors import Problem, TapChanged
 from .mcp_tools import SpoolItem, Tools
+from .slots import SlotError
 
 log = logging.getLogger(__name__)
 
@@ -257,6 +258,11 @@ class IntakeApp:
             ("/intake/api/spools/{id:int}", self.api(self.spool_get), ["GET"]),
             ("/intake/api/spools/{id:int}", self.api(self.spool_edit), ["POST"]),
             ("/intake/api/storage", self.api(self.storage_get), ["GET"]),
+            # the twins of the Hub's events and alerts routes (R80 section 8): answered by the Hub, through this app's channel
+            ("/intake/api/events", self.api(self.events_twin), ["GET"]),
+            ("/intake/api/alerts", self.api(self.alerts_twin), ["GET"]),
+            ("/intake/api/spools/low", self.api(self.spools_low_twin), ["GET"]),
+            ("/intake/api/storage-use", self.api(self.storage_use_twin), ["GET"]),
             ("/intake/api/presets", self.api(self.presets), ["GET"]),
             ("/intake/api/parents", self.api(self.parents), ["GET"]),
             ("/intake/api/line_add", self.api(self.line_add), ["POST"]),
@@ -703,6 +709,37 @@ class IntakeApp:
         def run() -> dict:
             return storage_api.view(self.tools.storage_list(), inventory._used_locations(self.tools.sm))
         return await anyio.to_thread.run_sync(run)
+
+    EVENT_PARAMS = ("since", "since_at", "kinds", "limit", "alert", "client")
+    EVENT_WAIT_MAX = 20.0       # the channel to the Hub gives up after 30 s: a longer wait cannot be passed on
+
+    async def _hub_get(self, path: str):
+        """GET `path` from the Hub with this app's pairing; the Hub's refusal or its silence as the JSON error it is."""
+        try:
+            return await anyio.to_thread.run_sync(self.kit.get, path)
+        except SlotError as e:
+            st = e.http
+            return JSONResponse({"error": str(e), **({"code": e.code} if e.code else {})},
+                                st if isinstance(st, int) and 400 <= st < 600 and st != 401 else 502)
+
+    async def events_twin(self, request: Request):
+        """The twin of GET api/events: the Hub's answer, for the parameters the Hub's route has."""
+        q = {k: request.query_params[k] for k in self.EVENT_PARAMS if k in request.query_params}
+        try:
+            wait = min(max(float(request.query_params["wait"]), 0.0), self.EVENT_WAIT_MAX)
+            q["wait"] = f"{wait:g}"
+        except (KeyError, ValueError):
+            pass
+        return await self._hub_get("/api/events" + ("?" + urlencode(q) if q else ""))
+
+    async def alerts_twin(self, request: Request):
+        return await self._hub_get("/api/alerts")
+
+    async def spools_low_twin(self, request: Request):
+        return await self._hub_get("/api/spools/low")
+
+    async def storage_use_twin(self, request: Request):
+        return await self._hub_get("/api/storage-use")
 
     async def presets(self, request: Request):
         return await anyio.to_thread.run_sync(self.tools.preset_status)
