@@ -3,9 +3,8 @@ revoked by `spoolwarden reader token | tokens | revoke` and the server's /setup 
 reader API (web/reader.py, which re-exports these). No `mcp` import here: the kit server uses it too.
 
 What a reader tells us (R83 s9.2): the build number in its `X-Reader-Build` header and when it last called. The web
-unit (the only one a reader talks to) keeps both per token id in `SeenStore`, its own file (`reader-seen`, XML, in
-the web unit's own folder: nothing of the kit's state is writable by it). `offered_build` is the firmware the kit
-serves to readers (reader-fw/manifest.json)."""
+unit (the only one a reader talks to) hands both to the Hub (`SeenBuffer`, `flush`; the Hub's `record_seen` and
+`SeenStore`, see below). `offered_build` is the firmware the kit serves to readers (reader-fw/manifest.json)."""
 from __future__ import annotations
 
 import datetime
@@ -205,34 +204,120 @@ class TokenStore:
 
 
 # ---------- what each reader tells us: its build and when it last called ----------
+#
+# A reader calls the web unit, which cannot write the Hub's state. So the web unit keeps the newest value per reader in
+# memory (`SeenBuffer`) and hands it to the Hub on a web-only kit route, POST /api/readers/web/seen
+# {readers: [{id, build?, seen_at}]} (`post_seen`, `flush`); the Hub's handler is `record_seen`, which keeps the newest in
+# `SeenStore`, the Hub's own file (`reader-seen`, XML, in the state folder).
 
 SEEN_FILE = "reader-seen"
-SEEN_EVERY = 60.0            # seconds: a reader that calls often is written at most this often (unless its build changes)
+SEEN_ROUTE = "/api/readers/web/seen"
+SEEN_EVERY = 60.0            # seconds: a reader is handed over at most this often (at once when its build changes)
 BUILD = re.compile(r"[0-9]{1,12}")
 
 
 def seen_file() -> Path:
-    return config.paths().web / SEEN_FILE
+    return config.paths().state / SEEN_FILE
 
 
 def parse_build(value) -> int | None:
-    """The reader's build from `X-Reader-Build`: digits only, as the firmware's build stamp (a Unix time)."""
+    """The reader's build from `X-Reader-Build` (digits only, as the firmware's build stamp, a Unix time); an int of
+    that size is accepted too."""
+    if isinstance(value, int) and not isinstance(value, bool):
+        value = str(value)
     if not isinstance(value, str) or not BUILD.fullmatch(value.strip()):
         return None
     n = int(value.strip())
     return n if n > 0 else None
 
 
-class SeenStore:
-    """{token id: {build, last_seen}} of the readers, XML in one file. `record` is the web unit's (the reader API);
-    `read` is any reader of the file (the Hub shows it in Devices). Never raises for a file that is missing, unreadable
-    or damaged: nothing is known then (a reader's build is "not known" and nothing breaks)."""
+def _utc(t: float) -> str:
+    return datetime.datetime.fromtimestamp(t, datetime.timezone.utc).isoformat(timespec="seconds")
 
-    def __init__(self, path: Path | None = None, clock=time.time):
-        self.path = Path(path) if path else seen_file()
+
+def parse_time(text) -> datetime.datetime | None:
+    """An ISO 8601 time with an offset (UTC when it has none) as an aware datetime, else None."""
+    if not isinstance(text, str) or not text.strip():
+        return None
+    try:
+        d = datetime.datetime.fromisoformat(text.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return d if d.tzinfo else d.replace(tzinfo=datetime.timezone.utc)
+
+
+class SeenBuffer:
+    """The web unit's side, in memory only: the newest {build, seen_at} per reader and what was last handed over.
+    `note` after each reader call; `due` is what to send now (a changed build at once, otherwise a reader at most every
+    SEEN_EVERY seconds); `sent` after the Hub answered. A call that failed leaves everything due for the next try."""
+
+    def __init__(self, clock=time.time):
         self.clock = clock
         self._lock = threading.Lock()
-        self._written: dict[str, tuple[int | None, float]] = {}
+        self._rows: dict[str, dict] = {}
+
+    def note(self, token_id: str, build: int | None) -> None:
+        if not TOKEN_ID.fullmatch(token_id or ""):
+            return
+        now = self.clock()
+        with self._lock:
+            r = self._rows.setdefault(token_id, {"build": None, "at": now, "sent_build": None, "sent_at": None,
+                                                 "dirty": True, "due_at": None})
+            if build is not None:
+                r["build"] = build
+            r["at"], r["dirty"] = now, True
+
+    def due(self) -> list[dict]:
+        now = self.clock()
+        with self._lock:
+            out = []
+            for tid, r in sorted(self._rows.items()):
+                changed = r["build"] is not None and r["build"] != r["sent_build"]
+                if r["dirty"] and (changed or r["sent_at"] is None or now - r["sent_at"] >= SEEN_EVERY):
+                    r["due_at"] = r["at"]
+                    out.append({"id": tid, **({"build": r["build"]} if r["build"] is not None else {}),
+                                "seen_at": _utc(r["at"])})
+            return out
+
+    def sent(self, batch: list[dict]) -> None:
+        now = self.clock()
+        with self._lock:
+            for b in batch:
+                r = self._rows.get(b["id"])
+                if r is None:
+                    continue
+                r["sent_build"], r["sent_at"] = b.get("build"), now
+                r["dirty"] = r["at"] > (r["due_at"] or 0)        # a call that came after the batch was made is still due
+
+
+def post_seen(kit, readers: list[dict]) -> dict:
+    """Hand the readers' {id, build?, seen_at} to the Hub (`kit`: the web unit's KitApi). Raises what the client raises."""
+    return kit.post(SEEN_ROUTE, {"readers": readers})
+
+
+def flush(buffer: SeenBuffer, kit) -> bool:
+    """Send what is due. True when something was handed over. Never raises: a Hub that does not answer leaves the
+    newest values in `buffer` for the next reader call."""
+    batch = buffer.due()
+    if not batch:
+        return False
+    try:
+        post_seen(kit, batch)
+    except Exception as e:  # noqa: BLE001 - the reader's own request must not fail for this
+        log.info("reader-seen: the Hub did not take it (%s); kept for the next call", type(e).__name__)
+        return False
+    buffer.sent(batch)
+    return True
+
+
+class SeenStore:
+    """{token id: {build, last_seen}} of the readers: the Hub's own file, XML. `merge` is the Hub's (`record_seen`);
+    `read` is any reader of the file. Never raises for a file that is missing, unreadable or damaged: nothing is
+    known then (a reader's build is "not known" and nothing breaks)."""
+
+    def __init__(self, path: Path | None = None):
+        self.path = Path(path) if path else seen_file()
+        self._lock = threading.Lock()
 
     def read(self) -> dict[str, dict]:
         try:
@@ -257,7 +342,7 @@ class SeenStore:
     @staticmethod
     def _render(rows: dict[str, dict]) -> bytes:
         lines = ['<?xml version="1.0" encoding="utf-8"?>',
-                 "<!-- filament-kit: the build and last call of each Printer Station reader (kept by the web unit) -->",
+                 "<!-- filament-kit: the build and last call of each Tag Reader (handed over by the web unit) -->",
                  '<reader-seen version="1">']
         for tid in sorted(rows, key=lambda t: int(t[1:])):
             r = rows[tid]
@@ -266,31 +351,61 @@ class SeenStore:
         lines.append("</reader-seen>")
         return ("\n".join(lines) + "\n").encode("utf-8")
 
-    def record(self, token_id: str, build: int | None, known: set[str] | None = None) -> bool:
-        """Note that reader `token_id` called now, with `build` when it told (an earlier build is kept when it did
-        not). Ids not in `known` (revoked tokens) are dropped from the file. Skipped (False) when this reader was
-        written under SEEN_EVERY seconds ago with the same build. A write that fails is logged and returns False."""
-        if not TOKEN_ID.fullmatch(token_id or ""):
-            return False
-        now = self.clock()
+    def merge(self, updates: dict[str, dict], known: set[str] | None = None) -> None:
+        """Keep the newest `last_seen` per id (and its build; an update with no build keeps the one known). Ids not in
+        `known` (revoked tokens) are dropped. OSError when the file cannot be written."""
         with self._lock:
-            last = self._written.get(token_id)
-            if last is not None and now - last[1] < SEEN_EVERY and (build is None or build == last[0]):
-                return False
             rows = self.read()
-            old = rows.get(token_id, {"build": None})
-            at = datetime.datetime.fromtimestamp(now, datetime.timezone.utc).isoformat(timespec="seconds")
-            rows[token_id] = {"build": build if build is not None else old["build"], "last_seen": at}
+            for tid, u in updates.items():
+                old = rows.get(tid)
+                new_t = parse_time(u["last_seen"])
+                old_t = parse_time(old["last_seen"]) if old else None
+                if old is None or old_t is None or new_t >= old_t:
+                    rows[tid] = {"build": u["build"] if u["build"] is not None else (old or {}).get("build"),
+                                 "last_seen": u["last_seen"]}
+                elif old["build"] is None and u["build"] is not None:
+                    rows[tid]["build"] = u["build"]
             if known is not None:
                 rows = {t: r for t, r in rows.items() if t in known}
-            try:
-                pairing.make_state_dir(self.path.parent)
-                pairing._write_atomic(self.path, self._render(rows), 0o644, state_owned=True)
-            except OSError as e:
-                log.warning("reader-seen: cannot write %s (%s)", self.path, e.strerror or e)
-                return False
-            self._written[token_id] = (rows[token_id]["build"], now)
-            return True
+            pairing.make_state_dir(self.path.parent)
+            pairing._write_atomic(self.path, self._render(rows), 0o644, state_owned=True)
+
+
+class SeenError(ValueError):
+    """The body of the seen route is not {readers: [{id, build?, seen_at}]} (the route answers 400 with the text)."""
+
+
+def record_seen(readers, store: "TokenStore | None" = None, seen: "SeenStore | None" = None,
+                now: float | None = None) -> dict:
+    """The Hub's handler of POST /api/readers/web/seen: keep the newest build and last seen of each reader named.
+    {"ok": True}, plus `ignored` (the ids that are no reader token of this Hub) when there are any. SeenError for a
+    body that is not a list of {id, build?, seen_at} (at most MAX_TOKENS), or a time more than a day ahead; nothing is
+    kept then. Ids are checked against the token list, so a revoked reader is ignored."""
+    if not isinstance(readers, list) or len(readers) > MAX_TOKENS:
+        raise SeenError(f"readers must be a list of at most {MAX_TOKENS} entries")
+    horizon = (now if now is not None else time.time()) + 86400
+    updates, ignored = {}, []
+    for r in readers:
+        if not isinstance(r, dict) or not isinstance(r.get("id"), str) or not TOKEN_ID.fullmatch(r["id"]):
+            raise SeenError("each reader needs an id like r1")
+        at = parse_time(r.get("seen_at"))
+        if at is None or at.timestamp() > horizon:
+            raise SeenError(f"{r['id']}: seen_at must be a time with an offset, not in the future")
+        build = parse_build(r["build"]) if r.get("build") is not None else None
+        if r.get("build") is not None and build is None:
+            raise SeenError(f"{r['id']}: build must be a whole number")
+        prev = updates.get(r["id"])
+        if prev is None or at >= parse_time(prev["last_seen"]):
+            updates[r["id"]] = {"build": build if build is not None else (prev or {}).get("build"),
+                                "last_seen": at.isoformat(timespec="seconds")}
+    ids = {t["id"] for t in (store or TokenStore()).list()}
+    for tid in list(updates):
+        if tid not in ids:
+            ignored.append(tid)
+            del updates[tid]
+    if updates:
+        (seen or SeenStore()).merge(updates, known=ids)
+    return {"ok": True, **({"ignored": ignored} if ignored else {})}
 
 
 def offered_build() -> int | None:
