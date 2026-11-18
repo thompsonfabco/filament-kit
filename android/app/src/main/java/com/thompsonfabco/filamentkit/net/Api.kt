@@ -1,5 +1,6 @@
 package com.thompsonfabco.filamentkit.net
 
+import com.thompsonfabco.filamentkit.BuildConfig
 import com.thompsonfabco.filamentkit.alerts.AlertParsing
 import com.thompsonfabco.filamentkit.alerts.AlertsConfig
 import com.thompsonfabco.filamentkit.alerts.EventsAnswer
@@ -56,6 +57,8 @@ class Api(
     private val baseUrl: () -> String,
     private val token: () -> String?,
     private val localNetworkMissing: () -> Boolean = { LocalNetwork.missing() },
+    /** The app's version, sent on every call as `X-Spoolwarden-Client: android/<version>` so the Hub can list it in Devices. */
+    private val clientVersion: String = BuildConfig.VERSION_NAME,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -408,6 +411,15 @@ class Api(
         return decode(call(request("api", "printers", id, "slots", label, "unload").post(body.toBody())))
     }
 
+    /**
+     * Clears a slot: the Hub forgets which spool is in it (R83 section 3). [dryRun] says what would happen and changes
+     * nothing. Offered on every slot, whether a spool is recorded there or not.
+     */
+    suspend fun clearSlot(printerId: String, label: String, dryRun: Boolean): ClearResult {
+        val body = buildJsonObject { put("dry_run", dryRun) }
+        return KitWire.clear(call(request("api", "printers", printerId, "slots", label, "clear").post(body.toBody())))
+    }
+
     /** Newest first (the server's order). */
     suspend fun usage(id: String, days: Int = 7): List<UsageEntry> {
         val req = request("api", "printers", id, "usage") { addQueryParameter("days", days.toString()) }
@@ -515,6 +527,43 @@ class Api(
     suspend fun addLocalProfile(entry: JsonObject): LocalEntryResult =
         decode(call(request("api", "library", "local").post(entry.toBody())))
 
+    // ---- phase 3: the Hub at a glance, the owner's own catalog entries, spools (R83 section 10.1) ----
+
+    /** `GET api/hub`; null when the Hub has no such call (an older Hub, 404), so the feature is hidden. */
+    suspend fun hub(): HubAnswer? = try {
+        KitWire.hub(call(request("api", "hub").get()))
+    } catch (e: ApiError) {
+        if (e.status == 404) null else throw e
+    }
+
+    /** `GET api/library/local`: the owner's own entries; 404 `not_found` from an older Hub. */
+    suspend fun localLibrary(): List<LocalEntry> = KitWire.localEntries(call(request("api", "library", "local").get()))
+
+    /**
+     * `POST api/library/local/form`: the Hub builds the entry from the form's [values] (brand, name, material and the
+     * optional ones); the app sends values, never an entry's text. 400 `invalid_entry` carries `problems`
+     * ([KitWire.problems]).
+     */
+    suspend fun addLocalEntryForm(values: JsonObject): LocalEntry {
+        val entry = call(request("api", "library", "local", "form").post(values.toBody())).jsonObject["entry"]
+        return KitWire.localEntry(entry ?: JsonNull)
+            ?: throw ApiError(200, ApiError.BAD_RESPONSE, "The Hub did not return the entry")
+    }
+
+    /** `DELETE api/library/local/{id}`; 404 `not_found` when the Hub has no such entry. */
+    suspend fun removeLocalEntry(id: String) {
+        call(request("api", "library", "local", id).delete())
+    }
+
+    /** `GET api/spools`: [filter] is one of [SpoolFilter] (null: every spool that is not empty). */
+    suspend fun spools(q: String, filter: String?): SpoolsAnswer {
+        val req = request("api", "spools") {
+            if (q.isNotBlank()) addQueryParameter("q", q.trim())
+            filter?.let { addQueryParameter("filter", it) }
+        }
+        return KitWire.spools(call(req.get()))
+    }
+
     // ---- end printers --------------------------------------------------------------------------------------
 
     // --- plumbing ---
@@ -528,7 +577,7 @@ class Api(
             segments.forEach { addPathSegment(it) }
             query?.invoke(this)
         }.build()
-        val b = Request.Builder().url(url)
+        val b = Request.Builder().url(url).header(CLIENT_HEADER, "android/$clientVersion")
         if (auth) token()?.let { b.header("Authorization", "Bearer $it") }
         return b
     }
@@ -633,5 +682,6 @@ class Api(
         const val SLOW_READ_S = 120L
         const val DOWNLOAD_S = 600L
         const val EVENTS_EXTRA_S = 10L
+        const val CLIENT_HEADER = "X-Spoolwarden-Client"
     }
 }
