@@ -467,9 +467,9 @@ else:
         cfg["modules"]["ai_intake"] = True  # the first install question
 if os.environ["FK_SERVER"]:
     cfg.setdefault("station", {})["allow"] = [os.environ["FK_SERVER"]]
-if os.environ["FK_HUB_PORT"]:
+if os.environ.get("FK_HUB_PORT"):
     cfg["port"] = int(os.environ["FK_HUB_PORT"])      # a first install only: the file then holds the port
-if os.environ["FK_STATION_PORT"]:
+if os.environ.get("FK_STATION_PORT"):
     cfg.setdefault("station", {})["port"] = int(os.environ["FK_STATION_PORT"])
 try:
     modules.validate(cfg)

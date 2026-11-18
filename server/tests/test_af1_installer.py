@@ -333,3 +333,15 @@ def test_the_terminal_questions_mark_the_first_run_steps(env, monkeypatch):
     ex = apply._Exec(lambda cmd: None, env / "opt" / "resources", env)
     apply._server_setup(ex, "")
     assert firstrun.load().answered == {"features", "name", "storage"} and config.load()["server_name"] == "My Hub"
+
+
+def test_the_config_block_runs_with_the_port_variables_unset(env):
+    """An older caller (the release-files tests, a script that sets only the variables it knew) leaves FK_HUB_PORT and
+    FK_STATION_PORT unset: no port is written, and nothing fails."""
+    import json
+    e = {k: v for k, v in os.environ.items() if k not in ("FK_HUB_PORT", "FK_STATION_PORT")}
+    e.update({"FK_MODE": "server", "FK_MODULES": "", "FK_AI": "", "FK_SETS": "", "FK_SERVER": "",
+              "FK_ETC": str(env / "etc"), "PYTHONPATH": str(ROOT / "server")})
+    r = subprocess.run([sys.executable, "-c", config_block()], env=e, capture_output=True, text=True, timeout=120)
+    assert r.returncode == 0, r.stderr
+    assert "port" not in json.loads((env / "etc" / "config.json").read_text())
