@@ -419,3 +419,14 @@ main.standalone { width: min(calc(var(--s7) * 10), calc(100vw - 2 * var(--s4)));
 .add__bar:has(> .btn__reason) { flex-wrap: wrap; }
 .add__bar > .btn__reason { flex: 1 1 100%; }
 .btn__reason[hidden] { display: none; }
+
+/* EV6a (R83): the Hub page link in the top bar, the Hub screen, the catalog entries */
+.more__row[hidden] { display: none; }
+.more__row--off { padding: var(--s3); }
+.topbar__hubpage { display: inline-flex; align-items: center; min-height: var(--s7); padding: 0 var(--s3); color: var(--accent-text); text-decoration: none; font-size: var(--fs-s); }
+.topbar__hubpage:hover { text-decoration: underline; }
+.hubglance__list, .catalog__entries { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--s2); }
+.hubglance__change { font-size: var(--fs-s); margin: var(--s1) 0 0; }
+.hubglance__links { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s4); }
+.catalog__entry { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); }
+.spools__spoolman { margin: 0 0 var(--s2); }

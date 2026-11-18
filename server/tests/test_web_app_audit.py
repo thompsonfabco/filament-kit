@@ -492,6 +492,88 @@ const reading = async (answer) => { stub('read', answer); await give(2); button(
 """
 
 READY = {
+    "hub_glance": r"""
+  await waitPage();
+  need('this address has a Hub page link', !!HUB_PAGE);
+  need('the top bar links to the Hub page on every screen', !!$('.topbar__hubpage') && $('.topbar__hubpage').getAttribute('href') === HUB_PAGE);
+  const hub = { name: 'Workshop hub', version: '0.6.2', newest: { version: '0.6.3', checked_at: 1700000000 }, update_available: true,
+    checks: [{ group: 'storage', state: 'look', text: 'Storage is almost full', fix: 'Free some space.' }, { group: 'backup', state: 'ok', text: 'Backups are fine' }],
+    getting_started: { done: 4, total: 8, hidden: false, finished: false }, features: [{ id: 'web', name: 'Web app', on: true }, { id: 'printers', name: 'Printers', on: false }],
+    catalog: { version: '2026.11', checked_at: 1700000000 }, backup: { last_at: 1700000000, nightly: true }, reader: { engine: 'cloud', key_set: true },
+    devices: [{ name: 'Pat phone', kind: 'phone', version: '0.6.2', last_seen: 1700000000, out_of_date: false, this: true }, { name: 'Shop PC', kind: 'slicer-sync', out_of_date: true, this: false }],
+    records_kept: 12, spoolman_url: 'http://hub.local:7912', hub_page: 'https://hub.local/setup' };
+  let asked = 0; stub('hub', () => { asked++; return reply(hub); });
+  hubCache = null; moreBtn.click();
+  const rows = () => $$('dialog[open] .more__row').filter((r) => !r.hidden);
+  await until('the Getting started line', () => rows().some((r) => r.textContent.includes('Getting started on the Hub: 4 of 8 done')));
+  const sp = rows().find((r) => r.textContent.includes('Open Spoolman'));
+  need('Open Spoolman opens Spoolman in a new tab', !!sp && sp.getAttribute('href') === 'http://hub.local:7912' && sp.target === '_blank');
+  need('the Hub is asked once for the sheet', asked === 1);
+  rows().find((r) => r.querySelector('.more__name').textContent === 'Hub').click();
+  await until('the Hub screen', () => $('dialog[open] .hubglance') && $('dialog[open] .hubglance').textContent.includes('Records kept: 12'));
+  const t = text('dialog[open] .hubglance');
+  for (const want of ['Status', 'Storage is almost full', 'Free some space.', 'Getting started on the Hub: 4 of 8 done', 'Installed: 0.6.2', 'Newest: 0.6.3', 'Update available', 'Web app · On', 'Printers · Off',
+    'Filament Catalog', 'Backups', 'nightly backup on', 'Label Reader', 'cloud · key set', 'Pat phone', 'this device', 'Shop PC', 'out of date', 'Recently added'])
+    need('the Hub screen shows: ' + want, t.includes(want));
+  need('each group says where to change it', $$('dialog[open] .hubglance__change').length === 9 && t.includes('Change this on the Hub page.'));
+  need('no address or key of the Hub is listed but the links', !t.includes('192.168') && !/sk-/.test(t));
+  need('Open the Hub page and Open Spoolman are at the end', $$('dialog[open] .hubglance__links a').length === 2 && $('dialog[open] .hubglance__links a').getAttribute('href') === HUB_PAGE);
+""",
+    "hub_glance_old_hub": r"""
+  await waitPage();
+  stub('hub', () => reply({ error: 'not found' }, 404));
+  hubCache = null; moreBtn.click();
+  await sleep(400);
+  need('a Hub without the overview route shows no Getting started line and no Open Spoolman', $$('dialog[open] .more__row').filter((r) => !r.hidden).every((r) => !r.textContent.includes('Getting started') && !r.textContent.includes('Spoolman')));
+  $$('dialog[open] .more__row').find((r) => r.querySelector('.more__name').textContent === 'Hub').click();
+  await until('the Hub screen says so', () => $('dialog[open] .hubglance') && text('dialog[open] .hubglance').includes('does not show its overview'));
+""",
+    "hub_glance_finished": r"""
+  await waitPage();
+  stub('hub', () => reply({ name: 'Workshop hub', version: '0.6.2', checks: [], features: [], devices: [], getting_started: { done: 8, total: 8, hidden: false, finished: true }, spoolman_url: null }));
+  hubCache = null; moreBtn.click();
+  await sleep(400);
+  need('a finished or hidden Getting started shows no line, and no Spoolman address shows no link', $$('dialog[open] .more__row').filter((r) => !r.hidden).every((r) => !r.textContent.includes('Getting started') && !r.textContent.includes('Spoolman')));
+""",
+    "catalog_form": r"""
+  await waitPage();
+  const posted = [], gone = [];
+  let list = [{ id: 'e1', brand: 'Acme', name: 'Red', material: 'PLA', added: 1700000000 }];
+  stub('library/local', (u, i) => {
+    if (String(u).endsWith('/remove')) { gone.push(String(u).split('/').slice(-2)[0]); list = list.filter((e) => e.id !== gone[gone.length - 1]); return reply({ removed: true }); }
+    if (i && i.method === 'POST') {
+      const b = JSON.parse(i.body); posted.push(b);
+      if (b.material === 'Nylonish') return reply({ error: 'That entry is not valid.', problems: [{ field: 'material', text: 'Material is not one the catalog can use.' }] }, 400);
+      list.push({ id: 'e' + (list.length + 1), brand: b.brand, name: b.name, material: b.material, added: 1700000100 }); return reply({ entry: list[list.length - 1] }, 201);
+    }
+    return reply({ entries: list });
+  });
+  const g = catalogGroup(); document.body.append(g);
+  const f = (label) => $$('.field', g).find((x) => x.textContent.includes(label));
+  const addBtn = button('Add', g);
+  need('the form is Brand, Name, Material and Add, the rest closed under More (optional)', !!f('Brand') && !!f('Name') && !!f('Material') && !!addBtn && !$('details[open]', g) && $('details summary', g).textContent.includes('More (optional)'));
+  addBtn.click();
+  await until('the required errors', () => g.textContent.includes('Brand is required.') && g.textContent.includes('Name is required.'));
+  need('nothing was posted', posted.length === 0);
+  typeIn(f('Brand').querySelector('input'), 'Acme'); typeIn(f('Name').querySelector('input'), 'Blue');
+  typeIn(f('Material').querySelector('select'), ''); await until('the Other text', () => !$$('.field', g).find((x) => x.textContent.includes('Material (other)')).hidden);
+  typeIn($$('.field', g).find((x) => x.textContent.includes('Material (other)')).querySelector('input'), 'Nylonish');
+  $('details', g).open = true; typeIn(f('Nozzle temperature from').querySelector('input'), '240');
+  addBtn.click();
+  await until('the Hub\'s refusal on the field', () => g.textContent.includes('Material is not one the catalog can use.'));
+  need('the form posted the three values and the number it was given', posted.length === 1 && posted[0].brand === 'Acme' && posted[0].name === 'Blue' && posted[0].material === 'Nylonish' && posted[0].nozzle_min === 240 && !('density' in posted[0]));
+  typeIn(f('Material').querySelector('select'), 'PETG'); addBtn.click();
+  await until('Added', () => g.textContent.includes('Added. Slicer presets are rebuilt in a minute.'));
+  need('the second request names PETG and the form is empty again', posted[1].material === 'PETG' && f('Brand').querySelector('input').value === '');
+  $$('summary', g).find((s) => s.textContent.includes('See custom entries')).click();
+  await until('the list with the two entries', () => $$('.catalog__entry', g).length === 2);
+  const mine = $$('.catalog__entry', g).find((e) => e.textContent.includes('Acme · Red'));
+  button('Remove', mine).click();
+  await until('the question', () => $('dialog[open]') && $('dialog[open]').textContent.includes('Remove Acme Red from your own entries? Slicer presets are rebuilt.'));
+  button('Remove', $('dialog[open]')).click();
+  await until('the entry is gone', () => gone.length === 1 && gone[0] === 'e1' && !$$('.catalog__entry', g).some((e) => e.textContent.includes('Acme · Red')));
+  g.remove();
+""",
     "alerts_banner": r"""
   await waitPage();
   const now = Date.now(), at = (m) => new Date(now - m * 60000).toISOString().replace(/\.\d+Z$/, 'Z');
@@ -1298,6 +1380,14 @@ const FRESH = () => localStorage.removeItem('spoolwarden.sealedOnly');
 """
 
 SP_READY = {
+    "open_spoolman": r"""
+  await waitPage();
+  need('no link while the Hub has not told the address', $('.spools__spoolman').hidden);
+  stub(/^hub$/, () => reply({ name: 'Workshop hub', version: '0.6.2', spoolman_url: 'http://hub.local:7912', getting_started: { done: 8, total: 8, hidden: false, finished: true } }));
+  hubCache = null; tabs.spools.enter();
+  const a = await until('the link', () => $('.spools__spoolman a'));
+  need('Open Spoolman opens Spoolman in a new tab', a.textContent === 'Open Spoolman' && a.getAttribute('href') === 'http://hub.local:7912' && a.target === '_blank' && !$('.spools__spoolman').hidden);
+""",
     "running_low": r"""
   await waitPage();
   need('no chip while the Hub has no list', !$$('.spools__low').some((b) => !b.classList.contains('hidden')));

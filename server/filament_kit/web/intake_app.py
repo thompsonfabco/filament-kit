@@ -23,7 +23,7 @@ import re
 import struct
 import zlib
 from pathlib import Path
-from urllib.parse import urlencode, urlparse
+from urllib.parse import quote, urlencode, urlparse
 
 import anyio
 from pydantic import ValidationError
@@ -270,7 +270,12 @@ class IntakeApp:
             ("/intake/api/generate", self.api(self.generate), ["POST"]),
             ("/intake/api/updates", self.api(self.updates), ["GET"]),
             ("/intake/api/updates_accept", self.api(self.updates_accept), ["POST"]),
-            ("/intake/api/restore_deleted", self.api(self.restore_deleted), ["POST"]))] + (
+            ("/intake/api/restore_deleted", self.api(self.restore_deleted), ["POST"]),
+            # the Hub at a glance and the owner's own catalog entries (R83 10.3): each passes the kit route on unchanged
+            ("/intake/api/hub", self.api(self.hub_get), ["GET"]),
+            ("/intake/api/library/local", self.api(self.library_list), ["GET"]),
+            ("/intake/api/library/local", self.api(self.library_add), ["POST"]),
+            ("/intake/api/library/local/{id}/remove", self.api(self.library_remove), ["POST"]))] + (
                 self.printers.routes() if self.printers else []) + (self._history_routes() if self.history else [])
 
     # ---------- the intake history (intake_history.py; the kit's own page only, see __init__) ----------
@@ -740,6 +745,20 @@ class IntakeApp:
 
     async def storage_use_twin(self, request: Request):
         return await self._hub_get("/api/storage-use")
+
+    async def hub_get(self, request: Request):
+        return await self._hub_get("/api/hub")
+
+    async def library_list(self, request: Request):
+        return await self._hub_get("/api/library/local")
+
+    async def library_add(self, request: Request):
+        b = await self._body(request)
+        return await anyio.to_thread.run_sync(self.kit.post, "/api/library/local/form", b)
+
+    async def library_remove(self, request: Request):
+        await self._body(request)
+        return await anyio.to_thread.run_sync(self.kit.delete, "/api/library/local/" + quote(request.path_params["id"], safe=""))
 
     async def presets(self, request: Request):
         return await anyio.to_thread.run_sync(self.tools.preset_status)
