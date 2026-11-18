@@ -36,7 +36,7 @@ import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 
 /** The intake history routes (2026-11-12-1031 handoff); [of] adapts the Api, tests pass a fake. */
-interface HistoryBackend {
+interface HistoryBackend : ActivityBackend {
     suspend fun list(): IntakeHistory
     suspend fun record(id: String): HistoryRecord
     suspend fun photo(id: String, n: Int): ByteArray
@@ -55,6 +55,8 @@ interface HistoryBackend {
             override suspend fun applyProposal(id: String, proposal: String) = current().applyProposal(id, proposal)
             override suspend fun applyValues(id: String, item: Int, values: JsonObject) = current().applyValues(id, item, values)
             override suspend fun undo(id: String, revision: Int) = current().undoIntake(id, revision)
+            override suspend fun exportCsv(set: String, to: java.io.File, days: Int?, printer: String?) =
+                current().exportCsv(set, to, days, printer)
         }
     }
 }
@@ -356,6 +358,10 @@ data class HistoryListState(
     val mismatch: Pair<String, String>? = null,
     /** When [history] was loaded (epoch milliseconds), for the offline notice. */
     val loadedAt: Long? = null,
+    val csvBusy: Boolean = false,
+    /** The downloaded file, waiting for the screen to open the share sheet ([HistoryListViewModel.csvShown]). */
+    val csvFile: java.io.File? = null,
+    val csvProblem: RecentFailure? = null,
 ) {
     val offline: Boolean get() = error == RecentFailure.Offline
 
@@ -391,6 +397,27 @@ class HistoryListViewModel(
             _state.update { it.copy(loading = false) }
         }
     }
+
+    /** Downloads the intake records as CSV (`recent`) into [target]; the screen then opens the share sheet on [csvFile]. */
+    fun downloadCsv(target: java.io.File) {
+        if (_state.value.csvBusy) return
+        _state.update { it.copy(csvBusy = true, csvProblem = null, csvFile = null) }
+        viewModelScope.launch {
+            guard(_state, { f -> _state.update { it.copy(csvProblem = f) } }, { u, m -> copy(unauthorized = u || unauthorized, mismatch = m ?: mismatch) }) {
+                try {
+                    backend.exportCsv("recent", target)
+                    _state.update { it.copy(csvFile = target) }
+                } catch (e: ApiError) {
+                    val words = csvProblemText(e) ?: throw e
+                    _state.update { it.copy(csvProblem = RecentFailure.Hub(words)) }
+                }
+            }
+            _state.update { it.copy(csvBusy = false) }
+        }
+    }
+
+    /** The screen opened the share sheet (or could not): the file is not offered again; [problem] says why not, if it did not open. */
+    fun csvShown(problem: RecentFailure?) = _state.update { it.copy(csvFile = null, csvProblem = problem) }
 
     private var client: Any? = null
     private var clientKnown = false

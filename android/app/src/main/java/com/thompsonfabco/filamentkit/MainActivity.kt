@@ -1193,6 +1193,7 @@ internal fun FilamentKitApp(
                                 SearchViewModel(
                                     loadLow = { currentApi().lowSpools().spools },
                                     loadSpoolmanUrl = { currentApi().spools("", null).spoolmanUrl },
+                                    exportCsv = { file -> currentApi().exportCsv("spoolman-spools", file) },
                                 ) { q, sealedOnly ->
                                     currentApi().search(q, sealedOnly)
                                 }

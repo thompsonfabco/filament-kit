@@ -49,7 +49,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.alerts.LowSpool
+import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.ui.components.DetailPresentation
+import com.thompsonfabco.filamentkit.ui.components.NoticeCard
+import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 import com.thompsonfabco.filamentkit.ui.components.SwButton
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
 import com.thompsonfabco.filamentkit.ui.components.SwCardDetail
@@ -64,6 +67,12 @@ import com.thompsonfabco.filamentkit.ui.components.SwSheetDetail
 import com.thompsonfabco.filamentkit.ui.components.ScreenState
 import com.thompsonfabco.filamentkit.ui.components.rememberDetailPresentation
 import com.thompsonfabco.filamentkit.ui.components.requestDetailFocus
+import com.thompsonfabco.filamentkit.ui.history.CsvOutcome
+import com.thompsonfabco.filamentkit.ui.history.HistoryTexts
+import com.thompsonfabco.filamentkit.ui.history.csvFileName
+import com.thompsonfabco.filamentkit.ui.history.csvProblemText
+import com.thompsonfabco.filamentkit.ui.history.csvTarget
+import com.thompsonfabco.filamentkit.ui.history.shareCsv
 import com.thompsonfabco.filamentkit.ui.spool.HubFailure
 import com.thompsonfabco.filamentkit.ui.spool.HubNoticeOf
 import com.thompsonfabco.filamentkit.ui.spool.hubFailureText
@@ -82,6 +91,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
+import java.io.File
 import com.thompsonfabco.filamentkit.ui.spool.SpoolTile
 
 /**
@@ -103,6 +113,12 @@ data class SearchUi(
     val lowLoaded: Boolean = false,
     /** Where Spoolman's own page is, as the Hub gave it; null: the Hub gave none (or is older), so there is no item. */
     val spoolmanUrl: String? = null,
+    val csvBusy: Boolean = false,
+    /** The downloaded file, waiting for the screen to open the share sheet ([SearchViewModel.csvShown]). */
+    val csvFile: File? = null,
+    /** Why the download did not happen: the words for an older Hub or a full phone, or a failure the usual notices say. */
+    val csvProblem: String? = null,
+    val csvFailure: HubFailure? = null,
 )
 
 /** Spool search; [search] is `api.search(q, sealedOnly)`, asked of the session's current client at each call. */
@@ -112,6 +128,8 @@ class SearchViewModel(
     private val loadLow: (suspend () -> List<LowSpool>)? = null,
     /** `api.spools(...).spoolmanUrl`; null: the Hub gives none, so there is no Open Spoolman item. */
     private val loadSpoolmanUrl: (suspend () -> String?)? = null,
+    /** `api.exportCsv("spoolman-spools", file)` (R84 6.5); null: no Download as CSV item. */
+    private val exportCsv: (suspend (File) -> Unit)? = null,
     private val search: suspend (q: String, sealedOnly: Boolean) -> List<JsonObject>,
 ) : ViewModel() {
     private val _state = MutableStateFlow(SearchUi())
@@ -177,6 +195,30 @@ class SearchViewModel(
             }
         }
     }
+
+    /** Whether the screen offers Download as CSV. */
+    val canExport: Boolean get() = exportCsv != null
+
+    /** Downloads every spool as CSV (`spoolman-spools`) into [target]; the screen then opens the share sheet on [csvFile]. */
+    fun downloadCsv(target: File) {
+        val export = exportCsv ?: return
+        if (_state.value.csvBusy) return
+        _state.update { it.copy(csvBusy = true, csvProblem = null, csvFailure = null, csvFile = null) }
+        viewModelScope.launch {
+            try {
+                export(target)
+                _state.update { it.copy(csvBusy = false, csvFile = target) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                val words = (e as? ApiError)?.let(::csvProblemText)
+                _state.update { it.copy(csvBusy = false, csvProblem = words, csvFailure = if (words == null) hubFailure(e) else null) }
+            }
+        }
+    }
+
+    /** The screen opened the share sheet (or could not): the file is not offered again; [problem] says why not, if it did not open. */
+    fun csvShown(problem: String?) = _state.update { it.copy(csvFile = null, csvProblem = problem) }
 
     /** The "Running low" chip: shows the list of low spools (least first, as the Hub gives it) instead of the search. */
     fun setLowOnly(on: Boolean) {
@@ -265,14 +307,37 @@ fun SearchScreen(
     val space = SpoolwardenTheme.space
     val colors = SpoolwardenTheme.colors
     LaunchedEffect(vm) { vm.loadSpoolmanLink() }
-    // Open Spoolman (R83 section 7): in the screen's menu, only when the Hub gave the address
-    ui.spoolmanUrl?.let { url ->
+    // Download as CSV (R84 6.5): the file goes to the system share sheet
+    val csv = ui.csvFile
+    val csvSubject = stringResource(R.string.nav_spools)
+    LaunchedEffect(csv) {
+        if (csv != null) {
+            vm.csvShown(
+                when (shareCsv(context, csv, csvSubject)) {
+                    CsvOutcome.Opened -> null
+                    CsvOutcome.NoApp -> context.getString(R.string.printer_report_no_app)
+                },
+            )
+        }
+    }
+    // Open Spoolman (R83 section 7) and Download as CSV: in the screen's menu; Open Spoolman only when the Hub gave the address
+    val spoolmanUrl = ui.spoolmanUrl
+    if (spoolmanUrl != null || vm.canExport) {
         ScreenTopBarActions {
             var open by remember { mutableStateOf(false) }
             Box {
                 SwIconButton(R.drawable.sw_ic_more, stringResource(R.string.common_more_actions), { open = true })
                 SwMenu(open, { open = false }) {
-                    SwMenuItem(SearchTexts.OPEN_SPOOLMAN, { open = false; openInBrowser(context, url) })
+                    if (spoolmanUrl != null) SwMenuItem(SearchTexts.OPEN_SPOOLMAN, { open = false; openInBrowser(context, spoolmanUrl) })
+                    if (vm.canExport) SwMenuItem(
+                        if (ui.csvBusy) HistoryTexts.DOWNLOADING else HistoryTexts.DOWNLOAD_CSV,
+                        {
+                            open = false
+                            csvTarget(context, csvFileName("spoolman-spools", null))?.let(vm::downloadCsv)
+                                ?: vm.csvShown(HistoryTexts.CSV_NOT_SAVED)
+                        },
+                        enabled = !ui.csvBusy,
+                    )
                 }
             }
         }
@@ -359,6 +424,8 @@ fun SearchScreen(
                     }
                     if (ui.query.isBlank() && !ui.lowOnly) TagHint(nfc, onNfcSettings ?: { openNfcSettings(context) })
                     HubNoticeOf(ui.failure, onPairAgain)
+                    HubNoticeOf(ui.csvFailure, onPairAgain)
+                    (ui.csvProblem ?: ui.csvFailure?.let { hubFailureText(it) })?.let { NoticeCard(NoticeKind.Bad, it) }
                     if (ui.lowOnly) LowSpoolsList(ui, openOrToggle, online, onTryAgain = vm::loadLowSpools)
                     val searched = ui.searched
                     // the states every Hub screen has (05 3.2): the progress line, the error card, offline

@@ -40,6 +40,13 @@ internal fun shareCsv(context: Context, file: File, subject: String): CsvOutcome
     }
 }
 
+/** The words for a download the Hub or the phone could not do (404: an older Hub; `storage`: the phone); null for any other failure. */
+internal fun csvProblemText(e: com.thompsonfabco.filamentkit.net.ApiError): String? = when {
+    e.status == 404 -> HistoryTexts.CSV_UPDATE_HUB
+    e.code == "storage" -> HistoryTexts.CSV_NOT_SAVED
+    else -> null
+}
+
 /** A file name the Hub's set and a printer give: `usage-0948AB.csv`; anything that is not a letter, digit, dot or dash becomes a dash. */
 internal fun csvFileName(set: String, subject: String?): String =
     (listOfNotNull(set, subject).joinToString("-").replace(Regex("[^A-Za-z0-9.-]"), "-")) + ".csv"

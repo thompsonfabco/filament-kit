@@ -29,6 +29,7 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | phone | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | price_per_kg | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | rate_limited | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | recent | not text: a Hub export set name of history and data (HD9b)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | record | key of a view model in its back stack entry; not a text
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | refused | wire name or value of the Hub's reply, matched as given; not a text
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | revised_ai | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)

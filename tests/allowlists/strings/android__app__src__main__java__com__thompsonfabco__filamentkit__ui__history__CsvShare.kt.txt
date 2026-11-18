@@ -3,4 +3,5 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/CsvShare.kt |
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/CsvShare.kt | [^A-Za-z0-9.-] | not text: a route, JSON field or wire value of history and data (HD9)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/CsvShare.kt | csv | not text: a route, JSON field or wire value of history and data (HD9)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/CsvShare.kt | reports | not text: a route, JSON field or wire value of history and data (HD9)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/CsvShare.kt | storage | not text: an error code of the Hub's answers (HD9b)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/CsvShare.kt | text/csv | not text: a route, JSON field or wire value of history and data (HD9)
