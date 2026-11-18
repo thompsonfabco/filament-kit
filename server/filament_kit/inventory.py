@@ -746,12 +746,34 @@ def _report_update(sm: Spoolman, before: dict, after: dict, patch: dict, empty: 
         event_sink.weight_changed(sm)
 
 
-def edit_spool(sm: Spoolman, spool_id: int, **kw) -> dict:
+def auto_place(sm: Spoolman, spool: dict, rules) -> tuple[str, str]:
+    """(location, why) the placement rule gives `spool` as an add without a location does: a sealed spool goes
+    where sealed spools go, an opened one to the first place for its material with room (`PLACED_BY` words)."""
+    if rules is None:
+        raise SpoolEditError("there is no storage rule to place it by", "location")
+    f = spool.get("filament") or {}
+    used = Counter(x["location"] for x in sm.get("spool") if x.get("location") and x["id"] != spool.get("id"))
+    item = {"material": f.get("material") or "", "sealed": state_of(spool) == "sealed"}
+    try:
+        (got,) = placement.place([item], used, rules)
+    except placement.NoFreeContainer as e:
+        raise SpoolEditError(str(e), "location") from None
+    return got["location"], got["placed_by"]
+
+
+def edit_spool(sm: Spoolman, spool_id: int, *, auto_location: bool = False, **kw) -> dict:
     """`update_spool`, answered with what the phones show: `spool` (Spoolman's spool after the change, or as it would be
-    after it when `dry`), `view` (the same in spool_view's shape), `before` (spool_view of it as it was) and `dry`."""
+    after it when `dry`), `view` (the same in spool_view's shape), `before` (spool_view of it as it was) and `dry`.
+    `auto_location` true with no `location` places the spool by the storage rule (`rules`), and the answer says
+    `placed_by` and `placed_text` as an add without a location does; a given location wins, false is ignored."""
     before = sm.get(f"spool/{spool_id}")
+    placed = None
+    if auto_location is True and kw.get("location") is None:
+        loc, why = auto_place(sm, before, kw.get("rules"))
+        kw["location"] = loc
+        placed = {"placed_by": why, "placed_text": PLACED_BY.get(why, why).format(material=(before.get("filament") or {}).get("material") or "")}
     spool = update_spool(sm, spool_id, **kw)
-    return {"spool": spool, "view": spool_view(spool), "before": spool_view(before), "dry": kw["dry"]}
+    return {"spool": spool, "view": spool_view(spool), "before": spool_view(before), "dry": kw["dry"], **(placed or {})}
 
 
 def with_spools(entries: list[dict], sm: Spoolman) -> list[dict]:
