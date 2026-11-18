@@ -1,5 +1,5 @@
-// Service worker: keeps the page shell for offline start (04 10.2) and handles Printers tab alerts when the server has
-// web.push on. Served whether or not print alerts are on. Never caches <app path>/api/ replies.
+// Service worker: keeps the page shell for offline start (04 10.2) and shows the Hub's alerts (every alert type, R80 section 4)
+// when the server has web.push on. Served whether or not alerts are on. Never caches <app path>/api/ replies.
 "use strict";
 const VERSION = "__VERSION__";   // the server writes its version here when it serves this file
 const CACHE = "fk-shell-" + VERSION;
@@ -7,7 +7,7 @@ const CACHE = "fk-shell-" + VERSION;
 const BASE = new URL(self.registration.scope).pathname.replace(/\/+$/, "");
 const SHELL = [BASE, ...["app.css", "app.js", "printers.js", "icon.png", "icon-512.png", "manifest-light.webmanifest",
   "manifest-dark.webmanifest", "shared/theme-init.js", "shared/tokens.css", "shared/components.css", "shared/strings.js",
-  "shared/components.js", "shared/sprite.svg"].map((f) => BASE + "/" + f)];
+  "shared/components.js", "shared/alerts.js", "shared/alerts.css", "shared/sprite.svg"].map((f) => BASE + "/" + f)];
 self.addEventListener("install", (event) => {
   // a file the Hub does not serve (printers.js without the Printers tab) is skipped, not fatal; so is an answer that was
   // redirected (to the sign-in page): it is not the shell
@@ -30,13 +30,19 @@ self.addEventListener("fetch", (event) => {
 self.addEventListener("push", (event) => {
   let d = {};
   try { d = event.data ? event.data.json() : {}; } catch (e) { d = {}; }
-  event.waitUntil(self.registration.showNotification(d.title || "Printer", { body: d.body || "", tag: d.tag || "printer", data: { url: d.url || "./" } }));
+  // one notification per alert (R80 section 4): the Hub builds the title and the line, names the place that fixes it in `url`, and tags a
+  // lasting condition by its key so it is shown once; an older Hub's print alert has the same fields
+  event.waitUntil(self.registration.showNotification(d.title || "Alert", { body: d.body || "", tag: d.tag || d.kind || "alert", data: { url: d.url || "./" } }));
 });
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const url = new URL((event.notification.data && event.notification.data.url) || "./", self.location.origin).href;
+  // an open window is taken to the place that fixes the alert (the page's own address, so a window of another site is never moved), else one opens
   event.waitUntil(self.clients.matchAll({ type: "window" }).then((all) => {
-    for (const c of all) if ("focus" in c) return c.focus();
+    for (const c of all) {
+      if (!("focus" in c) || new URL(c.url).origin !== self.location.origin) continue;
+      return url.startsWith(self.location.origin + BASE) && c.navigate ? c.navigate(url).catch(() => c).then((w) => (w || c).focus()) : c.focus();
+    }
     return self.clients.openWindow(url);
   }));
 });
