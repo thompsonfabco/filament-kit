@@ -20,8 +20,8 @@ import time
 import urllib.parse
 import xml.etree.ElementTree as ET
 
-from ... import config, pairing
-from .. import xmlfile
+from ... import config, event_sink, pairing
+from .. import registry, xmlfile
 from ..family import KLIPPER_ENTRY
 from .moonraker import MoonrakerError, NotFound, _host_part
 
@@ -107,6 +107,12 @@ def record(pid: str, job: dict, spool_id) -> dict:
         _write(pid, entries)
     log.info("klipper usage %s: job %s %s, %.0f mm (Moonraker deducted it in Spoolman)", pid, jid, e["status"],
              e["filament_mm"] or 0)
+    if e["grams"]:                                                  # a new entry with a weight: usage.recorded
+        p = registry.load().get(pid)
+        event_sink.emit("usage.recorded", {"type": "printer", "id": pid, "name": registry.display_name(p) if p else pid},
+                        {"printer": pid, "job": e["file"], "spool": e["spool_id"],
+                         "material": meta.get("filament_type") or None, "grams": e["grams"],
+                         "printer_job": jid or None, "run": event_sink.runs.last(pid, e["file"]) or None})
     return e
 
 

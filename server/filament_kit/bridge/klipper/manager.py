@@ -37,6 +37,7 @@ from .moonraker import Moonraker, MoonrakerError, Offline, Subscriber, Unauthori
 
 log = logging.getLogger(__name__)
 COMMON = ("print_stats", "toolhead", "virtual_sdcard", "heater_bed", "webhooks", "display_status")
+SENSORS = ("filament_switch_sensor ", "filament_motion_sensor ")    # Klipper's runout sensors: `filament_detected`
 GCODE_STATE = {"printing": "RUNNING", "paused": "PAUSE", "complete": "FINISH", "cancelled": "FAILED",
                "error": "FAILED", "standby": "IDLE"}
 SPOOL_CACHE = 30.0
@@ -154,6 +155,7 @@ class _Conn:
             nozzle = None
         wanted = {o: None for o in COMMON if o in objs}
         wanted.update({o: None for o in objs if o.startswith("extruder") or o.startswith("temperature_sensor")})
+        wanted.update({o: None for o in objs if o.startswith(SENSORS)})     # a pause with no filament: print.runout
         wanted.update({o: None for o in adapter.objects(model, system) if o in objs or o.startswith("gcode_macro")})
         wanted.update(adapter.objects_from(objs))
         with self.lock:
@@ -522,6 +524,34 @@ class KlipperFamily(LoadsMixin):
         return {"gcode_state": GCODE_STATE.get(ps.get("state"), "UNKNOWN") if c.effective_state() in ONLINE
                 else "UNKNOWN",
                 "percent": _percent(st), "remaining_min": _remaining(st), "job": ps.get("filename") or None}
+
+    def live(self, pid: str, slot: bool = True) -> dict | None:
+        """What the event watcher reads (None for a printer with no connection): `state` (the connection's), `print`
+        (print_stats.state), `job`, `percent`, `message` (print_stats.message, Klipper's own error text), `sensors`
+        ({object: filament_detected} for the runout sensors that are switched on) and `slot` ({label, present} of the
+        filament system's active slot, None when it has none or does not say; left out when `slot` is False, which
+        saves reading the filament system on every temperature update)."""
+        c = self._conn(pid)
+        if c is None:
+            return None
+        with c.lock:
+            st = dict(c.status)
+        ps = st.get("print_stats") or {}
+        sensors = {k: v["filament_detected"] for k, v in st.items()
+                   if k.startswith(SENSORS) and isinstance(v, dict) and isinstance(v.get("filament_detected"), bool)
+                   and v.get("enabled", True) is not False}
+        active = None
+        try:
+            units = self.slots(pid) if slot else []
+        except Exception:  # noqa: BLE001 - an odd status must not stop the watcher
+            units = []
+        for u in units:
+            for sl in u.slots:
+                if sl.active and sl.present is not None:
+                    active = {"label": sl.label, "present": sl.present}
+        return {"state": c.effective_state(), "print": ps.get("state"), "job": ps.get("filename") or "",
+                "percent": _percent(st), "message": clean_text(ps.get("message") or ""), "sensors": sensors,
+                "slot": active}
 
     def status(self, pid: str) -> dict | None:
         c = self._conn(pid)

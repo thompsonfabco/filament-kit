@@ -57,7 +57,7 @@ import logging
 import threading
 import time
 
-from .. import inventory, profiles
+from .. import event_sink, inventory, profiles
 from ..spoolman import SpoolmanError
 from . import ams, hardware, layout, mapping, registry, slottest, snapshot, status
 from .connection import PrinterOffline, UnknownPrinter
@@ -347,6 +347,8 @@ def _send_back(sm, spools: list[dict], sealed: str, dry: bool) -> list[dict]:
         if not dry:
             sm.patch(f"spool/{s['id']}", {"location": dest,
                                           "extra": {**(s.get("extra") or {}), "prev_location": json.dumps("")}})
+            event_sink.emit_spool("spool.unloaded", s, s["id"], before_location=s.get("location"),
+                                  after_location=dest)
         out.append({"id": s["id"], "location": dest})
     return out
 
@@ -355,6 +357,13 @@ def _occupants(sm, loc: str, except_id=None, also: str | None = None) -> list[di
     """Spools at `loc` (or at `also`, the slot's location under its older label) other than `except_id`."""
     locs = {loc, also} - {None}
     return [s for s in (sm.get("spool") or []) if s.get("location") in locs and s.get("id") != except_id]
+
+
+def report_loaded(before: dict, patch: dict, label: str) -> None:
+    """spool.loaded for a spool a load just moved into slot `label` (`patch` is `_target_patch`'s; empty: no move)."""
+    if patch:
+        event_sink.emit_spool("spool.loaded", before, before.get("id"), before_location=before.get("location"),
+                              after_location=patch["location"], after_slot=label)
 
 
 def _target_patch(s: dict, loc: str) -> dict:
@@ -430,12 +439,13 @@ def load(manager, sm, serial: str, label: str, spool_id, dry: bool, *, preset_fo
             result["problems"].append(f"{label}: not confirmed (no report showed the new setting within "
                                       f"{CONFIRM_TIMEOUT:g} s)")
             log.warning("load on %s: %s not confirmed", serial, label)
-        with inventory._LOCK:
+        with inventory._LOCK, event_sink.batch_scope():       # what leaves and what enters: one batch
             moved = _send_back(sm, _occupants(sm, loc, spool["id"], old_loc), sealed_location, dry=False)
             fresh = sm.get(f"spool/{spool['id']}")
             patch = _target_patch(fresh, loc)
             if patch:
                 sm.patch(f"spool/{spool['id']}", patch)
+                report_loaded(fresh, patch, label)
             final = sm.get(f"spool/{spool['id']}")
     return {**result, "spool": final, "confirmed": confirmed, "moved_back": moved}
 
@@ -458,7 +468,7 @@ def unload(manager, sm, serial: str, label: str, dry: bool, *, sealed_location: 
     if why:
         raise SlotInUse(f"{why}; unload it once the print is done")
     guard = mapping.load_guard(serial) if not dry else contextlib.nullcontext()
-    with guard, _slot_lock(serial, label), inventory._LOCK:
+    with guard, _slot_lock(serial, label), inventory._LOCK, event_sink.batch_scope():
         here = _occupants(sm, loc, also=old_loc)
         if not here:
             raise NotFound(f"no spool is in {name} slot {label}")

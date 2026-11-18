@@ -86,7 +86,7 @@ from pathlib import Path
 from typing import Any
 from defusedxml import ElementTree as SafeET
 
-from .. import config
+from .. import config, event_sink
 from ..pairing import give_to_state_owner, make_state_dir
 from ..spoolman import SpoolmanError
 from . import ams, ftps, hardware, layout, mapping, registry, status, tlspin
@@ -676,7 +676,7 @@ def settle(serial: str, job: dict, pct: float, spoolman) -> list[dict]:
             mapping.request_remap(serial)
     observe = not smap.calibrated or smap.observe
 
-    out = []
+    out, deducted = [], False
     for f, grams, g, label, how, ok in plan:
         here = []
         if label:
@@ -708,6 +708,14 @@ def settle(serial: str, job: dict, pct: float, spoolman) -> list[dict]:
                  'would deduct' if observe else 'deducted', grams, f['id'], g, how, label, entry['spool_id'],
                  f" [{entry['error']}]" if entry.get('error') else '')
         out.append(append(serial, entry))
+        if spool and not observe and not entry.get('error'):      # taken off a spool: that is what usage.recorded says
+            deducted = True
+            event_sink.emit("usage.recorded", {"type": "printer", "id": serial, "name": registry.display_name(p)},
+                            {"printer": serial, "job": name, "spool": spool.get('id'),
+                             "material": (spool.get("filament") or {}).get("material"), "grams": grams,
+                             "run": event_sink.runs.last(serial, name) or None})
     log.info("usage: printer %s: job %r settled from %s (%d entries%s)", serial, name, path, len(out),
              ', observe mode' if observe else '')
+    if deducted:
+        event_sink.weight_changed(spoolman)       # running low is checked right after the Hub changes a weight
     return out

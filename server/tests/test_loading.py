@@ -672,3 +672,47 @@ def test_calibrated_external_missing_from_the_report_keeps_kind_ext(rig):
     assert loading._address(SERIAL, {"ams": {"ams": []}}, "Ext-R") == (255, 0, "ext", None)
     ams.save_map(SERIAL, ams.SlotMap(slots={"A9": {"ams_id": 9, "tray_id": 0, "global_id": 36}}, calibrated=True))
     assert loading._address(SERIAL, {"ams": {"ams": []}}, "A9") == (9, 0, None, None)
+
+
+# ---------------------------------------------------------------- events (R80 section 2, E5)
+
+@pytest.fixture
+def evstore(tmp_path):
+    from filament_kit import event_sink
+    from filament_kit.events import EventStore
+    s = EventStore(tmp_path / "state" / "events")
+    event_sink.set_sink(event_sink.StoreSink(s))
+    yield s
+    event_sink.set_sink(None)
+
+
+def test_a_load_writes_spool_loaded_and_the_spool_it_displaced_spool_unloaded_in_one_batch(rig, sm, fil, evstore):
+    m, printer, client = rig
+    old = spool(sm, fil, LOC_A2, prev="Rack 1")
+    new = spool(sm, fil, "Rack 1")
+    loading.load(m, sm, SERIAL, "A2", new["id"], False, preset_for=FakePresets())
+    es = evstore.read()["events"]
+    assert [(e["kind"], e["subject"]["id"]) for e in es] == [("spool.unloaded", str(old["id"])),
+                                                              ("spool.loaded", str(new["id"]))]
+    assert es[0]["data"]["before_location"] == LOC_A2 and es[0]["data"]["after_location"] == "Rack 1"
+    assert es[1]["data"]["before_location"] == "Rack 1" and es[1]["data"]["after_location"] == LOC_A2
+    assert es[1]["data"]["after_slot"] == "A2"
+    assert es[0]["data"]["batch"] == es[1]["data"]["batch"] and es[0]["data"]["batch"]
+
+
+def test_a_dry_load_and_an_unload_preview_write_no_event(rig, sm, fil, evstore):
+    m, printer, client = rig
+    s = spool(sm, fil, "Rack 1")
+    loading.load(m, sm, SERIAL, "A2", s["id"], True, preset_for=FakePresets())
+    spool(sm, fil, LOC_A2, prev="Rack 1")
+    loading.unload(m, sm, SERIAL, "A2", True)
+    assert evstore.read()["events"] == []
+
+
+def test_an_unload_writes_spool_unloaded(rig, sm, fil, evstore):
+    m, printer, client = rig
+    s = spool(sm, fil, LOC_A2, prev="Rack 1")
+    loading.unload(m, sm, SERIAL, "A2", False)
+    (e,) = evstore.read()["events"]
+    assert e["kind"] == "spool.unloaded" and e["subject"]["id"] == str(s["id"])
+    assert e["data"]["before_location"] == LOC_A2 and e["data"]["after_location"] == "Rack 1" and e["data"]["batch"]

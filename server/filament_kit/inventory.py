@@ -23,7 +23,7 @@ import re
 from collections import Counter
 from dataclasses import dataclass, field
 
-from . import config, library, locks, placement, storage, tags
+from . import config, event_sink, library, locks, placement, storage, tags
 from .profiles import builds, lines as lines_mod
 from .profiles.errors import ProfileError
 from .spoolman import Spoolman, SpoolmanError
@@ -244,7 +244,8 @@ def add_spools(sm: Spoolman, items: list[dict], rules: dict, dry: bool, *, paren
                        f"weight {tare} g used for this filament")
                 raise ItemsInvalid(msg, [{"item": it.get("_i"), "field": "gross", "message": msg}])
         try:
-            _write_items(sm, placed, vendors, fils, result, dry)
+            with event_sink.batch_scope():          # the spool.added events of this request share one batch
+                _write_items(sm, placed, vendors, fils, result, dry)
         except (SpoolmanError, RuntimeError) as e:  # RuntimeError: a written spool did not read back
             raise AddFailed(f"spoolman failed part-way: {e}", result) from e
     return result
@@ -296,7 +297,8 @@ def _write_items(sm, placed, vendors, fils, result, dry) -> None:
             result.spool_ids.append(sid)
             if not ids:
                 result.added.append(it)
-            _read_back(sm, sid)
+            added = _read_back(sm, sid)
+            event_sink.emit_spool("spool.added", added, sid, after_location=it["location"], after_grams=remaining)
             ids.append(sid)
         if not dry and any(ids):
             result.saved.append({"values": dict(it), "spool_ids": [i for i in ids if i is not None],
@@ -404,9 +406,11 @@ def by_tag(sm: Spoolman, uid: str) -> dict | None:
     return next((s for s in _all_spools(sm) if tags.stored(s) == uid), None)
 
 
-def link_tag(sm: Spoolman, spool_id: int, uid: str, force: bool, dry: bool, keep_sealed: bool = False) -> LinkResult:
+def link_tag(sm: Spoolman, spool_id: int, uid: str, force: bool, dry: bool, keep_sealed: bool = False,
+             _events: bool = True) -> LinkResult:
     """Link the tag to the spool. Linking opens a spool (first_used set, the sealed note dropped) unless
-    `keep_sealed` (the intake station's sealed spool with its tag already on the bag)."""
+    `keep_sealed` (the intake station's sealed spool with its tag already on the bag). A spool that was sealed and is
+    opened by it is reported as spool.opened (`_events` False: the caller, open_spool, reports its own)."""
     uid = tags.normalize_uid(uid)
     with _LOCK:
         target = sm.get(f"spool/{spool_id}")
@@ -434,6 +438,12 @@ def link_tag(sm: Spoolman, spool_id: int, uid: str, force: bool, dry: bool, keep
                  {**patch, "extra": {**(target.get("extra") or {}), "nfc_id": json.dumps(uid)}})
         if tags.stored(sm.get(f"spool/{spool_id}")) != uid:
             raise RuntimeError("tag did not land")
+        if _events and patch:                        # sealed before, opened now
+            with event_sink.batch_scope():
+                event_sink.emit_spool("spool.opened", target, spool_id, before_location=target.get("location"),
+                                      after_location=target.get("location"),
+                                      before_grams=target.get("remaining_weight"),
+                                      after_grams=target.get("remaining_weight"))
         return result
 
 
@@ -541,7 +551,7 @@ def open_spool(sm: Spoolman, spool_id: int, uid: str, rules: dict, *, gross: flo
         elif remaining is not None:
             patch["remaining_weight"] = remaining
         _cap_remaining(spool, patch)
-        link = link_tag(sm, spool_id, uid, force=force, dry=dry)  # raises TagConflict before any other write
+        link = link_tag(sm, spool_id, uid, force=force, dry=dry, _events=False)   # raises TagConflict first
         if location is None and spool.get("location") in (None, "", placement.sealed_name(rules)):
             used = Counter(s["location"] for s in sm.get("spool") if s.get("location") and s["id"] != spool_id)
             material = (spool.get("filament") or {}).get("material") or ""
@@ -567,7 +577,14 @@ def open_spool(sm: Spoolman, spool_id: int, uid: str, rules: dict, *, gross: flo
             patch["extra"] = {**(fresh.get("extra") or {}), **moist}
         if patch:
             sm.patch(f"spool/{spool_id}", patch)
-        return sm.get(f"spool/{spool_id}")
+        final = sm.get(f"spool/{spool_id}")
+        with event_sink.batch_scope():
+            event_sink.emit_spool("spool.opened", final, spool_id, before_location=spool.get("location"),
+                                  after_location=final.get("location"), before_grams=spool.get("remaining_weight"),
+                                  after_grams=final.get("remaining_weight"))
+        if "remaining_weight" in patch:
+            event_sink.weight_changed(sm)
+        return final
 
 
 def pick_sealed(sm: Spoolman, filament_id: int) -> int | None:
@@ -667,7 +684,26 @@ def update_spool(sm: Spoolman, spool_id: int, *, gross: float | None = None, rem
         return spool
     if dry:
         return {**spool, **patch}
-    return sm.patch(f"spool/{spool_id}", patch)
+    result = sm.patch(f"spool/{spool_id}", patch)
+    _report_update(sm, spool, result, patch, empty)
+    return result
+
+
+def _report_update(sm: Spoolman, before: dict, after: dict, patch: dict, empty: bool) -> None:
+    """The events of an edit: spool.emptied, or spool.weighed when the weight changed, and spool.moved when the
+    location did (R80 section 2); then the running-low check right after a weight change."""
+    sid = before.get("id")
+    grams = {"before_grams": before.get("remaining_weight"), "after_grams": patch.get("remaining_weight")}
+    with event_sink.batch_scope():
+        if empty:
+            event_sink.emit_spool("spool.emptied", before, sid, **grams)
+        elif "remaining_weight" in patch:
+            event_sink.emit_spool("spool.weighed", before, sid, **grams)
+        if "location" in patch and patch["location"] != before.get("location"):
+            event_sink.emit_spool("spool.moved", before, sid, before_location=before.get("location"),
+                                  after_location=patch["location"])
+    if "remaining_weight" in patch:
+        event_sink.weight_changed(sm)
 
 
 def edit_spool(sm: Spoolman, spool_id: int, **kw) -> dict:
@@ -844,4 +880,8 @@ def _run_plan(sm: Spoolman, plan: dict, step) -> dict:
             sm.patch(f"spool/{sid}", {"location": new})
     items = [storage.Rename(o, n, c) for o, n, c in plan["renames"]]
     storage.set_rename_plan(None)
+    for r in items:                          # one event per rename, not one spool.moved per spool (R80 E5)
+        n = sum(1 for _sid, old, new in plan["spools"] if _renamed(old or "", [r]) == new)
+        event_sink.emit("location.renamed", {"type": "location", "id": r.new, "name": r.new},
+                        {"from": r.old, "to": r.new, "spools": n})
     return {"updated": updated, "text": storage.rename_text(items, updated)}

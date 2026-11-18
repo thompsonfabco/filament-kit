@@ -850,3 +850,49 @@ def test_usage_map_save_is_dropped_when_the_map_changed_meanwhile(env):
     assert m.scheme == "shift8" and m.learned == {} and set(m.slots) == {"A1"}
     assert ams.save_map_if(SERIAL, mine, m.updated) is True     # the current stamp: saved
     assert ams.load_map(SERIAL).learned == {"4000": "HT-A"}
+
+
+# ---------------------------------------------------------------- events (R80 section 2, E5)
+
+@pytest.fixture
+def collected():
+    from filament_kit import event_sink
+
+    class Collect(event_sink.NullSink):
+        def __init__(self):
+            self.events = []
+
+        def write(self, kind, subject, actor=None, data=None, **kw):
+            self.events.append({"kind": kind, "subject": subject, "data": data})
+
+    c = Collect()
+    event_sink.set_sink(c)
+    event_sink.set_weight_hook(lambda sm: c.events.append({"kind": "weight-hook"}))
+    yield c
+    event_sink.set_sink(None)
+    event_sink.set_weight_hook(None)
+
+
+def test_a_settled_print_writes_usage_recorded_per_spool_and_checks_running_low_once(rig, sd, spoolman_fake_store,
+                                                                                   collected):
+    from filament_kit import event_sink
+    calibrate()
+    put(sd, "/cache/bracket_v3_plate_1.gcode.3mf", build_3mf(TWO_COLOUR))
+    event_sink.runs.begin(SERIAL, "bracket_v3")                    # the watcher made the print's run
+    r = rig()
+    r.print_job()
+    got = [e for e in collected.events if e["kind"] == "usage.recorded"]
+    assert sorted((e["data"]["spool"], e["data"]["grams"]) for e in got) == [(A2, 21.92), (HTA, 9.6)]
+    d = got[0]["data"]
+    assert d["printer"] == SERIAL and d["job"] == "bracket_v3" and d["run"].startswith("r-")
+    assert d["material"] and got[0]["subject"] == {"type": "printer", "id": SERIAL, "name": NAME}
+    assert [e["kind"] for e in collected.events].count("weight-hook") == 1
+
+
+def test_observe_mode_and_a_failed_settle_write_no_usage_recorded(rig, sd, spoolman_fake_store, collected):
+    calibrate(observe=True)
+    put(sd, "/cache/bracket_v3_plate_1.gcode.3mf", build_3mf(TWO_COLOUR))
+    r = rig()
+    r.print_job()
+    assert [e for e in collected.events if e["kind"] == "usage.recorded"] == []
+    assert "weight-hook" not in [e["kind"] for e in collected.events]

@@ -110,7 +110,19 @@ DEFAULTS: dict = {
     "local_intake": {"url": "http://127.0.0.1:7915", "tier": "auto"},
     "web_instructions": None,
     "appearance": {"theme": "console"},     # the theme for devices that have not chosen one (design 01 6.2)
+    "events": {"keep_days": 400},           # how long the event store keeps its month files (R80 section 1)
 }
+
+KEEP_DAYS_MIN, KEEP_DAYS_MAX = 30, 3650
+
+
+def keep_days(cfg: dict) -> int:
+    """`events.keep_days`: whole days, 30 to 3650; 400 when it is missing or not a number in that range."""
+    e = cfg.get("events")
+    v = e.get("keep_days") if isinstance(e, dict) else None
+    if isinstance(v, bool) or not isinstance(v, int) or not KEEP_DAYS_MIN <= v <= KEEP_DAYS_MAX:
+        return DEFAULTS["events"]["keep_days"]
+    return v
 
 LOOKS = ("console", "workbench", "palette", "panes")    # the four themes, Console first (design 01 section 6)
 

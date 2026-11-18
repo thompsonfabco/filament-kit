@@ -8,7 +8,7 @@ import anyio.to_thread
 import uvicorn
 from uvicorn.main import STARTUP_FAILURE
 
-from . import config, modules
+from . import config, event_sink, modules, watch
 from .api import create_app
 from .bridge import camera, discovery, family, mapping, registry, usage
 from .bridge.connection import Manager
@@ -45,13 +45,14 @@ def discovery_callback(manager):
 
 
 def printer_lifespan(manager, listener_factory=discovery.Listener, camera_hub=None, tracker=None, mapper=None,
-                     klipper=None):
+                     klipper=None, watcher=None, loop=None):
     """Starlette lifespan: the printer connection manager and the SSDP listener live as long as the app.
     A listener that cannot bind (port in use) is logged and skipped; printers already set up still work.
     The slot mapper (if given) restores, once its printer is connected and idle, any slot snapshot a killed job
     left; on the way out it stops a running mapping job and waits for its restore BEFORE the printer connections
     close (a restore needs them). Then the usage tracker (if given) stops taking new jobs, and the camera hub (if
-    given) stops every camera source, so no ffmpeg outlives the app."""
+    given) stops every camera source, so no ffmpeg outlives the app. The event watcher and the 5-minute loop (if
+    given) start with the printers and stop first."""
     @asynccontextmanager
     async def lifespan(app):
         listener = None
@@ -64,6 +65,10 @@ def printer_lifespan(manager, listener_factory=discovery.Listener, camera_hub=No
                 manager.start()
             if klipper is not None:
                 klipper.start()
+            if watcher is not None:
+                watcher.start()
+            if loop is not None:
+                loop.start()
             if mapper is not None:
                 try:
                     mapper.recover_pending()
@@ -72,6 +77,9 @@ def printer_lifespan(manager, listener_factory=discovery.Listener, camera_hub=No
             yield
         finally:
             try:
+                for events_part in (loop, watcher):
+                    if events_part is not None:
+                        await anyio.to_thread.run_sync(events_part.stop)
                 if mapper is not None:
                     try:
                         await anyio.to_thread.run_sync(mapper.shutdown)
@@ -96,11 +104,6 @@ class _NoHub:
 
     def begin_stop(self) -> None:
         pass
-
-
-@asynccontextmanager
-async def _idle_lifespan(app):
-    yield
 
 
 GRACEFUL_SHUTDOWN = 5  # seconds uvicorn waits for open connections (camera streams) before the lifespan exit
@@ -145,6 +148,20 @@ def _log_to_journal() -> None:
     app_log.setLevel(logging.INFO)
 
 
+def event_parts(sm, manager=None, klipper=None, mapper=None):
+    """The event store as the sink in force, the printer watcher (listening to both families) and the 5-minute loop.
+    A spool's weight changed by the Hub is checked for running low at once (R80 section 7)."""
+    event_sink.set_sink(event_sink.StoreSink())
+    event_sink.set_weight_hook(lambda spoolman: watch.check_low(spoolman))
+    busy = (lambda pid: bool(mapper.running(pid))) if hasattr(mapper, "running") else None
+    watcher = watch.Watcher(mapping_busy=busy).attach(bambu=manager, klipper=klipper)
+
+    def check_rows():
+        from . import status
+        return status.collect()
+    return watcher, watch.Loop(spoolman=sm, watcher=watcher, rows=check_rows)
+
+
 def main() -> None:
     _log_to_journal()
     cfg = config.load()
@@ -161,19 +178,22 @@ def main() -> None:
         manager.add_listener(mapping.LayoutWatch(manager, mapper))   # stale map on a layout change, idle re-map
         app = create_app(sm, printers=family.Printers(bambu=manager, klipper=klipper), camera_hub=hub, mapper=mapper,
                          enabled_modules=on)
+        watcher, loop = event_parts(sm, manager, klipper, mapper)
         app.router.lifespan_context = printer_lifespan(manager, camera_hub=hub, tracker=tracker, mapper=mapper,
-                                                       klipper=klipper)
+                                                       klipper=klipper, watcher=watcher, loop=loop)
     elif klipper is not None:
         # Klipper printers only: no Bambu Manager, SSDP listener, usage tracker or slot mapper
         printers = family.Printers(bambu=None, klipper=klipper)
         hub = camera.Hub(printer_state=printers.state, klipper_url=klipper.camera_url)
         app = create_app(sm, printers=printers, camera_hub=hub, mapper=object(), enabled_modules=on)
-        app.router.lifespan_context = printer_lifespan(None, camera_hub=hub, klipper=klipper)
+        watcher, loop = event_parts(sm, None, klipper)
+        app.router.lifespan_context = printer_lifespan(None, camera_hub=hub, klipper=klipper, watcher=watcher,
+                                                       loop=loop)
     else:
         # no bridge at all: the printer routes answer 409 module_off and never reach these stand-ins
         hub = _NoHub()
         app = create_app(sm, printers=object(), camera_hub=hub, mapper=object(), enabled_modules=on)
-        app.router.lifespan_context = _idle_lifespan
+        app.router.lifespan_context = printer_lifespan(None, loop=event_parts(sm)[1])
     serve(app, hub, **serve_options(cfg, etc))
 
 

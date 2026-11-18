@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import io
+import logging
 import os
 import re
 import shutil
@@ -37,7 +38,9 @@ from typing import Callable, Iterable
 
 from defusedxml import ElementTree as SafeET
 
-from . import API_VERSION, __version__, config, modules, output, release
+from . import API_VERSION, __version__, config, events, modules, output, release
+
+log = logging.getLogger(__name__)
 
 FORMAT = "1"
 WRAPPER = "/usr/local/bin/spoolwarden"
@@ -641,6 +644,25 @@ def restore_steps() -> int:
     return 6 if _has_data() else 5
 
 
+def _last_event_id() -> int:
+    """The last event id the present store gave (0 when there is none or it cannot be read)."""
+    try:
+        return events.last_id()
+    except (events.EventError, OSError) as e:
+        log.warning("restore: the last event id could not be read (%s)", e)
+        return 0
+
+
+def _carry_event_ids(last: int) -> None:
+    """After the state folder is replaced: tell the store to go on above `last`, so no id is ever given twice."""
+    if last <= 0:
+        return
+    try:
+        events.carry(last)
+    except (events.EventError, OSError) as e:
+        log.warning("restore: the event counter could not be carried over (%s)", e)
+
+
 def restore(zip_path: Path, *, yes: bool = False, ask: Callable[[str], str] = input,
             run: Callable[[list[str]], int] | None = None, out=print,
             step: Callable[[str], None] | None = None) -> int:
@@ -686,6 +708,7 @@ def restore(zip_path: Path, *, yes: bool = False, ask: Callable[[str], str] = in
     step("Stopping the services")
     _stop_kit(run)
     step("Putting the backup in place")
+    last_event = _last_event_id()       # the ids this Hub has given: the restored store must go on above them (R80 E6)
     here = dict(roots())
     folders = {}            # each root folder's owner and mode on this install: the restored one keeps them
     for name, target in here.items():
@@ -735,6 +758,7 @@ def restore(zip_path: Path, *, yes: bool = False, ask: Callable[[str], str] = in
             out(f"error: the restore stopped ({why}); what was here is back in place. Start the kit again with: "
                 "sudo spoolwarden modules apply")
         return 1
+    _carry_event_ids(last_event)
     if other_host:
         for n in ("cert.pem", "key.pem"):
             (config.paths().etc / n).unlink(missing_ok=True)
