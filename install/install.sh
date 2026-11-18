@@ -275,7 +275,8 @@ fi
 # questions, the modules stay as they are (a config without modules is the server mode).
 AI_INTAKE=""
 # The first question (R82 section 3): finish in the browser. Yes: the Hub with the usual choices and nothing more asked.
-if [ -z "$MODE" ] && [ -z "$CUSTOM" ] && [ "$FIRST_INSTALL" -eq 1 ] && [ -t 0 ]; then
+# An explicit flag (--mode, --modules, --set, --server, --restore) already says what to install: the flags win, nothing is asked.
+if [ -z "$MODE" ] && [ -z "$CUSTOM" ] && [ -z "$SETS" ] && [ -z "$SERVER_ADDR" ] && [ "$FIRST_INSTALL" -eq 1 ] && [ -t 0 ]; then
     if [ "$GUIDED_DEFAULT" = y ]; then guided_hint="[Y/n]"; else guided_hint="[y/N]"; fi
     echo "  y: the Hub is installed with the usual choices; its page takes you through the rest."
     echo "  n: answer the questions here. Also the way to install only a Weigh Station."

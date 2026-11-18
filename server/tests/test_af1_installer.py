@@ -83,8 +83,9 @@ def test_install_sh_is_valid_bash():
 GUIDED_BLOCK = between("# The first question (R82 section 3)", '    ASKED="features"').rsplit("\nif [ -z", 1)[0] + "\n"
 
 
-def guided(answers: str, default: str = "y", first=1) -> tuple[str, str]:
-    script = (f'MODE=""; CUSTOM=""; FIRST_INSTALL={first}; GUIDED=0; GUIDED_DEFAULT={default}; AGAIN=again\n'
+def guided(answers: str, default: str = "y", first=1, pre: str = "") -> tuple[str, str]:
+    script = (f'MODE=""; CUSTOM=""; SETS=""; SERVER_ADDR=""; FIRST_INSTALL={first}; GUIDED=0; GUIDED_DEFAULT={default}; '
+              f'AGAIN=again\n{pre}\n'
               'die() { echo "die: $*"; exit 1; }\n' + GUIDED_BLOCK + 'echo "RESULT MODE=$MODE GUIDED=$GUIDED"\n')
     rc, out = run_tty(script, answers)
     return out, (re.search(r"RESULT (.*)", out) or [None, "none"])[1]
@@ -109,6 +110,19 @@ def test_the_first_question_no_goes_on_to_the_mode_question():
 def test_open_point_5_changes_the_default_in_one_place():
     out, result = guided("\n", default="n")
     assert "[y/N]" in out and result == "MODE= GUIDED=0"
+
+
+@linux
+def test_an_explicit_flag_skips_the_question_and_keeps_its_value():
+    for pre in ('SERVER_ADDR=hub.example.lan', 'SETS="set station.allow=x"', 'MODE=server', 'CUSTOM=,server'):
+        out, result = guided("y\n", pre=pre)
+        assert "Guided Setup" not in out, pre
+        assert "GUIDED=0" in result
+    out, result = guided("y\n", pre="SERVER_ADDR=hub.example.lan")
+    assert "SERVER_ADDR" not in result            # the block never touches it
+    script = ('MODE=""; CUSTOM=""; SETS=""; SERVER_ADDR=hub.example.lan; FIRST_INSTALL=1; GUIDED=0; GUIDED_DEFAULT=y\n'
+              + GUIDED_BLOCK + 'echo "RESULT $SERVER_ADDR $MODE"\n')
+    assert run_tty(script, "y\n")[1].strip().endswith("RESULT hub.example.lan")
 
 
 @linux
