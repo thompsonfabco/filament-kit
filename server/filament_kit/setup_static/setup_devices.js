@@ -28,7 +28,10 @@ const DEV_EN = {
   devices_ood_pc: "Out of date ({version}). Install the current Slicer Sync on that PC.",
   devices_ood_phone: "Out of date. The app offers the update when it is opened.",
   devices_ood_reader: "Out of date. Hold the knob for 4 seconds to update.",
-  devices_open: "Open", devices_open_named: "Open {name}", devices_settings: "Settings", devices_settings_named: "Settings of {name}",
+  devices_open: "Open", devices_open_named: "Open {name}",
+  devices_own_page: "Its own page: {address}", devices_open_station: "Open this station's page",
+  devices_open_hint: "Your browser asks once whether to trust this station's certificate.",
+  devices_settings_dropped: "Some of this station's settings could not be shown.", devices_photo_alt: "The last photo of the Weigh Station",
   devices_detail_kind: "Kind", devices_detail_version: "Version", devices_detail_paired: "Paired", devices_detail_last_seen: "Last seen",
   devices_detail_build: "Build", devices_detail_error: "Could not read the device. {reason}",
   devices_reader_settings: "Its settings are changed in {link}.",
@@ -293,11 +296,8 @@ function devRowFor(d) {
   const unpair = d.built_in || isReader ? null : SW.btn(SW.t("devices_unpair"), { cls: "btn--ghost", name: SW.t("devices_unpair_named", { name: d.name }), action: "unpair",
     run: () => asking(at, `devices/${encodeURIComponent(d.id)}/revoke`, destroy("devices_unpair_title", "devices_unpair_body", "devices_unpair", { name: d.name }),
       undefined, () => say(at, SW.t("devices_unpaired", { name: d.name }), true)) });
-  // Open: a Weigh Station's page is the Hub's pass-through of it in a new tab; every other row shows its detail here (9.6, 9.7)
-  const open = d.page ? h("a", { class: "btn", href: `/setup/device/${encodeURIComponent(d.id)}/`, target: "_blank", rel: "noopener",
-    "aria-label": devT("devices_open_named", { name: d.name }), "data-action": "open", textContent: devT("devices_open") })
-    : SW.btn(devT("devices_open"), { name: devT("devices_open_named", { name: d.name }), action: "open", run: () => devDetail(d) });
-  const settings = d.page ? SW.btn(devT("devices_settings"), { cls: "btn--ghost", name: devT("devices_settings_named", { name: d.name }), action: "settings", run: () => devDetail(d) }) : null;
+  // Open: the detail the Hub page draws itself, at #devices/<id> (R83 9.6, 9.7, ruling of 21:18); a station's page is never served by the Hub
+  const open = SW.btn(devT("devices_open"), { name: devT("devices_open_named", { name: d.name }), action: "open", run: () => devDetail(d) });
   const kindLine = devKindLine(d), ood = devOod(d);
   return devRow(d.id, at, 4,
     devCell("title", 1, null, h("span", { class: "devices__name", textContent: d.name }),
@@ -309,7 +309,7 @@ function devRowFor(d) {
     devCell("last_seen", 1, SW.t("devices_col_last_seen"), d.last_seen || SW.t("common_never"),
       d.reachable === true ? SW.status("ok", { text: SW.t("devices_reach_ok"), small: true })
         : d.reachable === false ? SW.status("offline", { text: SW.t("devices_reach_down"), small: true }) : null),
-    devCell("actions", 1, null, h("div", { class: "actions" }, open, settings, unpair)));
+    devCell("actions", 1, null, h("div", { class: "actions" }, open, unpair)));
 }
 function devPairedTable(list) {
   return list.length
@@ -323,7 +323,7 @@ function pairCard() {
   const read = () => {
     const L = SW.loading(body, { thing: SW.t("devices_paired_title"), items: 3, onTry: devRetry(() => read()), title: SW.t("devices_paired_title") });
     // a Hub that cannot say kinds and versions still lists the pairings, as before
-    return api("devices").then((r) => { L.done(); fill(body, devPairedTable(devMerge(r.devices))); },
+    return api("devices").then((r) => { L.done(); const list = devMerge(r.devices); fill(body, devPairedTable(list)); devByAddress(list); },
       (e) => { L.done(); if (e.locked) throw e; fill(body, devPairedTable(devMerge(null))); });
   };
   later(read());
@@ -416,9 +416,36 @@ function devResetSettings(row, redo) {
     } });
 }
 
+// the detail has its own address while it is open: #devices/<id>; a page loaded on that address opens it
+const devAddress = (d) => "#" + DEVICES + "/" + encodeURIComponent(d.id);
+function devByAddress(list) {
+  const m = location.hash.match(/^#devices\/([^/]+)$/), id = m && decodeURIComponent(m[1]);
+  const d = id && id !== "pair" ? list.find((x) => x.id === id) : null;
+  if (d && !document.querySelector("dialog[open]")) devDetail(d);
+}
+// The station's own page (ruling R83 21:22): its address as text and Open this station's page. The Hub asks the station for a
+// one-time ticket (the page must be unlocked) and opens the answer in a new tab; it never fetches, frames or passes that page.
+function devOwnPage(d, address) {
+  const res = h("p", { class: "result", role: "status" });
+  const go = SW.btn(devT("devices_open_station"), { action: "open-station-page", run: () => coded(res, async () => {
+    SW.result(res, null);
+    const r = await api(`device/${encodeURIComponent(d.id)}/open`, { code: theCode() });
+    if (new URL(r.address).origin !== new URL(address).origin || !r.address.startsWith(address + "#ticket=")) { say(res, SW.t("common_hub_no_answer"), false); return; }
+    const a = h("a", { href: r.address, target: "_blank", rel: "noopener noreferrer" });
+    document.body.append(a);
+    a.click();
+    a.remove();
+  }) });
+  return h("div", { class: "devdetail__page" }, h("p", { class: "mono", textContent: devT("devices_own_page", { address }) }),
+    h("div", { class: "actions" }, go), h("p", { class: "muted", textContent: devT("devices_open_hint") }), res);
+}
+
 function devDetail(d) {
   const body = h("div", { class: "devdetail" }), id = encodeURIComponent(d.id);
-  SW.ask({ kind: "info", title: d.name, body, confirm: SW.t("common_close"), wide: true });
+  history.replaceState(null, "", devAddress(d));
+  SW.ask({ kind: "info", title: d.name, body, confirm: SW.t("common_close"), wide: true }).then(() => {
+    if (location.hash === devAddress(d)) history.replaceState(null, "", "#" + DEVICES);
+  });
   const read = () => {
     const L = SW.loading(body, { thing: d.name, items: 2, onTry: devRetry(() => read()), title: devT("devices_detail_error", { reason: "" }).trim() });
     return api("device/" + id).then((r) => {
@@ -427,6 +454,12 @@ function devDetail(d) {
       const kids = [...devFacts(row)];
       if (row.kind === "reader") kids.push(devReaderLine());
       if (row.page && !r.status && !r.settings) kids.push(SW.banner({ kind: "warn", inline: true, text: devT("devices_down") }));
+      if (r.own_page) kids.push(devOwnPage(row, r.own_page));
+      if (r.photo) {
+        const img = h("img", { class: "qr", alt: devT("devices_photo_alt"), src: `/setup/api/device/${id}/photo?t=${Date.now()}` });
+        img.addEventListener("error", () => img.remove());
+        kids.push(img);
+      }
       if (r.status) kids.push(h("h3", { class: "detail__heading", textContent: devT("devices_status_title") }),
         h("dl", { class: "kv" }, Object.entries(r.status).map(([k, v]) => devFact(devLabel(k), devSay(v)))));
       if (r.settings) {
@@ -434,6 +467,7 @@ function devDetail(d) {
         const draw = (list) => slot.replaceChildren(devSettingsForm(row, list, draw));
         draw(r.settings);
         kids.push(h("h3", { class: "detail__heading", textContent: devT("devices_settings_title") }), slot);
+        if (r.settings_dropped) kids.push(SW.banner({ kind: "warn", inline: true, text: devT("devices_settings_dropped") }));
       }
       fill(body, ...kids);
     }, (e) => {

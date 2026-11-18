@@ -4,8 +4,6 @@ takes the code or a trusted computer, as does each answer.
     POST stations/requests {code}                 the waiting requests, each with its comparison code
     POST stations/requests/{id}/pair {code}       pair it: the station picks its token up at its next poll
     POST stations/requests/{id}/refuse {code}
-
-A paired station's own page is the Open button's address, /setup/device/<id>/ (page_address); device_tab.py passes it through.
 """
 from __future__ import annotations
 
@@ -16,11 +14,6 @@ import anyio
 from .. import station_requests
 
 log = logging.getLogger(__name__)
-
-
-def page_address(device_id: str) -> str:
-    """Where the Devices row's Open sends the browser for a Weigh Station: the Hub's pass-through of the station's page."""
-    return f"/setup/device/{device_id}/"
 
 
 def routes(page) -> list[tuple]:
